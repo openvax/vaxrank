@@ -3,8 +3,8 @@
 from dataclasses import replace
 import hashlib
 
-from mhcgnomes import parse
 from mhctools import PeptideInput, assess_vaccine_windows
+from topiary import canonical_allele_name, parse_allele
 
 from .core_logic import SOURCE_AGNOSTIC_RANKING_RULES
 from .epitope_logic import slice_epitopes
@@ -91,7 +91,7 @@ def window_exposure_request(windows, profile, *, n_term='free', c_term='free', s
     ids = set()
     core_intervals = {}
     for item in profile.get('core_intervals', []):
-        key = item['prediction_id'], parse(item['allele']).to_string()
+        key = item['prediction_id'], canonical_allele_name(item['allele'])
         if key in core_intervals:
             raise ValueError('Duplicate supplied binding-core interval')
         if not isinstance(item.get('source'), str) or not item['source'].strip():
@@ -107,7 +107,7 @@ def window_exposure_request(windows, profile, *, n_term='free', c_term='free', s
         cores = []
         for epitope in vaccine.target_epitopes:
             for allele, score in epitope.per_allele_scores.items():
-                identity = parse(allele)
+                identity = parse_allele(allele)
                 interval_key = epitope.prediction_group_source, identity.to_string()
                 interval = core_intervals.get(interval_key)
                 core_start, core_end = 0, len(epitope.sequence)

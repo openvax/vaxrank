@@ -1017,7 +1017,7 @@ def test_filtered_cache_is_keyed_by_protein_content_and_policy():
 
 def test_from_genome_with_exclude_fasta(tmp_path):
     fasta_path = tmp_path / "exclude.fasta"
-    fasta_path.write_text(">EXCLUDE1\nABCDEFGHIJ\n")
+    fasta_path.write_text(">EXCLUDE1 description\nABCDE\n; FASTA comment\n\nFGHIJ\n")
 
     t1 = create_mock_transcript("T1", "ABCDEFGHIJ", gene_id="G1")
     t2 = create_mock_transcript("T2", "KLMNOPQRST", gene_id="G2")
@@ -1028,6 +1028,19 @@ def test_from_genome_with_exclude_fasta(tmp_path):
         min_kmer_length=8, max_kmer_length=8)
     assert not ref.contains("ABCDEFGH")  # excluded via FASTA
     assert ref.contains("KLMNOPQR")
+
+
+def test_fasta_reader_retains_identifier_and_duplicate_semantics(tmp_path):
+    from vaxrank.reference_proteome import _read_fasta
+
+    fasta_path = tmp_path / 'proteins.fasta'
+    fasta_path.write_text(
+        '; file comment\n>first description\nACDE\nFGHI\n\n'
+        '>second\nKLMN\n; sequence comment\nPQRS\n'
+        '>first replacement\nTVWY\n')
+    assert _read_fasta(fasta_path) == {'first': 'TVWY', 'second': 'KLMNPQRS'}
+    fasta_path.write_text('')
+    assert _read_fasta(fasta_path) == {}
 
 
 def test_from_genome_with_epitope_lengths():

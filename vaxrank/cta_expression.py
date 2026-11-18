@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 from serializable import DataclassSerializable
+from topiary import representative_transcript
 from topiary.rna import load_expression
 
 from .cta_admission import (
@@ -314,13 +315,12 @@ def admit_cta_expression(path, *, input_contract, admission_policy, genome=None,
         selection = "measured_transcript" if transcript else "oncoref_canonical"
         transcript_id = (feature_id if transcript else cta.evidence.canonical_transcript_id)
         if transcript is None and gene_id != cta.evidence.gene_id:
-            proteins = [t for t in genome.gene_by_id(gene_id).transcripts if t.protein_sequence]
-            if not proteins:
+            transcript = representative_transcript(genome.gene_by_id(gene_id).transcripts)
+            if transcript is None:
                 decisions.append(replace(decision, status="no_protein_sequence"))
                 continue
-            transcript = min(proteins, key=lambda t: (-len(t.protein_sequence), t.transcript_id))
             transcript_id = transcript.transcript_id
-            selection = "annotation_longest_protein"
+            selection = "annotation_representative_transcript"
         if not transcript_id:
             decisions.append(replace(decision, status="missing_canonical_transcript"))
             continue

@@ -1,4 +1,6 @@
 numpy>=2.0.0,<3.0.0
+# Streaming FASTA parsing; 1.6 also supports our Python 3.11 floor.
+biotite>=1.6.0,<3.0.0
 # Shared test-data downloads use verified cache hits, explicit roots and bounded
 # HTTP retries via datacache's public API, without fetching during normal tests.
 # The 1.11.1 floor is what inspect_files/Cache.inspect need: download_test_data
@@ -61,7 +63,9 @@ mhctools>=4.8.1,<5.0.0
 # for patient-background comparisons (topiary#561/#562; vaxrank#716).
 # 5.111.0 supplies the shared exact/expressed patient-allele boundary used by
 # MS attribution and all prediction input validation (topiary#578, vaxrank#789).
-topiary>=5.111.0,<6.0.0
+# 5.113.0 exposes the representative-transcript rule shared by CTA and risk
+# protein resolution (vaxrank#836).
+topiary>=5.113.0,<6.0.0
 roman
 jinja2>=3.1
 weasyprint>=62.0

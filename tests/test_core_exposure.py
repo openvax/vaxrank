@@ -6,7 +6,7 @@ import json
 import pytest
 from mhctools import vaccine_route_steps
 
-from vaxrank.core_exposure import enumerate_exposure_windows, assess_dataset_windows
+from vaxrank.core_exposure import enumerate_exposure_windows, assess_dataset_windows, window_exposure_request
 from vaxrank.epitope_dataset import EpitopeDataset
 from vaxrank.cli.window_exposure import main
 from .test_window_selection import vaccine
@@ -21,6 +21,44 @@ def dataset():
 
 def profile():
     return {'scenario': 'Synthetic sensitivity test, not human IM kinetics', 'times_hours': [0, 1, 48]}
+
+
+def windows_with_allele(allele):
+    windows, _ = enumerate_exposure_windows(dataset(), 20, 20)
+    return [(identifier, replace(vp, epitopes=[
+        replace(e, per_allele_scores={allele: sum(e.per_allele_scores.values())})
+        for e in vp.epitopes]), start, source) for identifier, vp, start, source in windows]
+
+
+@pytest.mark.parametrize("boundary", ["score", "interval"])
+@pytest.mark.parametrize("allele", ["A2", "HLA-A", "HLA-A*02", "HLA-A*02:01N",
+                                   "HLA-A*02:01/HLA-B*07:02"])
+def test_exposure_rejects_non_prediction_alleles(boundary, allele):
+    from topiary import AlleleError
+
+    windows = windows_with_allele(allele if boundary == 'score' else 'HLA-A*02:01')
+    scenario = profile()
+    if boundary == 'interval':
+        scenario['core_intervals'] = [{'prediction_id': 'core-0', 'allele': allele,
+                                      'start': 1, 'end': 7, 'source': 'Synthetic annotation'}]
+    with pytest.raises(AlleleError):
+        window_exposure_request(windows, scenario)
+
+
+@pytest.mark.parametrize("allele,canonical,mhc_class", [
+    ('A*02:01', 'HLA-A*02:01', 'I'), ('H-2-Kb', 'H2-K*b', 'I'),
+    ('DLA-88*001:01', 'DLA-88*001:01', 'I'),
+    ('HLA-DPA1*01:03-DPB1*04:01', 'HLA-DPA1*01:03/DPB1*04:01', 'II'),
+])
+def test_exposure_matches_allele_aliases_and_retains_mhc_class(allele, canonical, mhc_class):
+    scenario = profile()
+    scenario['core_intervals'] = [{'prediction_id': 'core-0', 'allele': canonical,
+                                  'start': 1, 'end': 7, 'source': 'Synthetic annotation'}]
+    request = window_exposure_request(windows_with_allele(allele), scenario)
+    for window in request['candidates']:
+        assert {core['allele'] for core in window['cores']} == {canonical}
+        assert {core['mhc_class'] for core in window['cores']} == {mhc_class}
+        assert next(core for core in window['cores'] if core['prediction_id'] == 'core-0')['sequence'] == 'IINFEK'
 
 
 def test_all_windows_keep_multiple_scored_occurrences_and_source_coordinates():

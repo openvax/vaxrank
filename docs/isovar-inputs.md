@@ -10,6 +10,12 @@ Results are interpreted by their exact schema, not by guessing from columns.
 Unknown schemas and contradictory sequences, coordinates or declarations fail.
 The existing `--vcf`/`--bam` workflow remains available; it does not automatically
 search ncORF catalogues or reconstruct structural events.
+
+For annotation, `--genome GRCh38:93` pins release 93. If `--ensembl-release`
+is also supplied, it must agree with that pin; conflicting values fail before
+inputs are read. Use an unpinned assembly, such as `--genome GRCh38`, when
+selecting the annotation release with `--ensembl-release`. This rule is shared
+by direct variant inputs and imported reports.
 For mRNA linker optimization, select `--mrna-junction-predictor` explicitly,
 as with other native sequence inputs; the candidate predictor alone does not
 request new junction predictions.

@@ -10,6 +10,7 @@ from topiary import TopiaryPredictor
 from vaxrank.risk_ligand import (
     PROTEIN_RESOLUTION_ALL_ISOFORMS,
     PROTEIN_RESOLUTION_LONGEST_ISOFORM,
+    PROTEIN_RESOLUTION_REPRESENTATIVE,
     RISK_COMBINATION_INTERSECTION,
     PatientHLARiskLigandIndex,
     RiskLigandError,
@@ -83,6 +84,8 @@ class _Transcript:
         self.protein_sequence = sequence
         self.protein_id = protein_id or f"P_{transcript_id}"
         self.is_protein_coding = coding
+        self.biotype = "protein_coding" if coding else "lncRNA"
+        self.complete = True
 
 
 class _Genome:
@@ -178,6 +181,7 @@ def test_resolve_all_isoforms_deduplicates_sequences_and_exposes_gaps():
 
 def test_longest_isoform_policy_is_explicit_performance_tradeoff():
     result = _protein_sequences(PROTEIN_RESOLUTION_LONGEST_ISOFORM)
+    assert result.resolution_policy == PROTEIN_RESOLUTION_REPRESENTATIVE
     assert len(result.proteins) == 2
     assert {protein.gene_id for protein in result.proteins} == {"ENSG1", "ENSG2"}
 
@@ -398,7 +402,7 @@ def test_high_level_predictor_error_is_not_empty_success():
 
 
 def test_invalid_allele_uses_mhcgnomes_and_fails_closed():
-    with pytest.raises(RiskLigandError, match="Invalid MHC allele"):
+    with pytest.raises(RiskLigandError, match="not-an-allele"):
         risk_ligand_index_from_prediction_frame(
             pd.DataFrame(),
             protein_sequences=_protein_sequences(),

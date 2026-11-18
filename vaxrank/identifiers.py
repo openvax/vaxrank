@@ -5,7 +5,7 @@
 
 from typing import Optional
 
-from mhcgnomes import parse as parse_mhc
+from topiary import canonical_allele_name
 
 
 def normalize_ensembl_gene_id(value: Optional[str]) -> str:
@@ -16,11 +16,9 @@ def normalize_ensembl_gene_id(value: Optional[str]) -> str:
 
 
 def normalize_mhc_allele(value: str) -> str:
-    """Return the mhcgnomes canonical representation of an MHC allele."""
-    try:
-        allele = parse_mhc(str(value), raise_on_error=True)
-    except Exception as error:
-        raise ValueError(f"Invalid MHC allele {value!r}") from error
-    if allele is None:
-        raise ValueError(f"Invalid MHC allele {value!r}")
-    return allele.to_string()
+    """Compatibility alias for Topiary's expressed-allele canonicalizer.
+
+    Uses mhcgnomes through Topiary, matching prediction and exposure inputs.
+    Genes, serotypes, allele groups and null alleles are not prediction alleles.
+    """
+    return canonical_allele_name(value)

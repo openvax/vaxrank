@@ -126,6 +126,61 @@ def test_release_selection_rejects_an_incompatible_assembly():
         resolve_ensembl_release(args)
 
 
+@pytest.mark.parametrize('genome', ['GRCh38:93', 'hg38:93', 'GRCh38.93', 'GRCh38_93',
+                                  'GRCh38-93', 'GRCh38 93', 'GRCm38:93', 'CanFam3.1:93', 93])
+def test_release_selection_respects_explicit_pins(genome):
+    from vaxrank.input_scope import resolve_input_genome
+
+    reference = resolve_input_genome(genome)
+    args = SimpleNamespace(genome=genome, ensembl_release=93)
+    resolve_ensembl_release(args)
+    assert args.genome is reference
+    args = SimpleNamespace(genome=genome, ensembl_release=94)
+    with pytest.raises(ValueError, match='--ensembl-release 94 conflicts with --genome annotation release 93'):
+        resolve_ensembl_release(args)
+    assert args.genome == genome
+
+
+def test_release_selection_preserves_explicit_genome_object():
+    from pyensembl import EnsemblRelease
+
+    reference = EnsemblRelease(93)
+    args = SimpleNamespace(genome=reference, ensembl_release=93)
+    resolve_ensembl_release(args)
+    assert args.genome is reference
+    args.ensembl_release = 94
+    with pytest.raises(ValueError, match='conflicts with --genome annotation release 93'):
+        resolve_ensembl_release(args)
+
+
+def test_release_selection_rejects_overriding_a_dated_pin():
+    args = SimpleNamespace(genome='GRCh38:2026_04', ensembl_release=102)
+    with patch('vaxrank.input_scope.resolve_input_genome', return_value=SimpleNamespace(release='2026_04')):
+        with pytest.raises(ValueError, match='conflicts with --genome annotation release 2026_04'):
+            resolve_ensembl_release(args)
+
+
+@pytest.mark.parametrize('assembly', ['GRCh38', 'hg38', 'Felis_catus_9.0'])
+def test_unpinned_assembly_still_allows_explicit_release_selection(assembly):
+    args = SimpleNamespace(genome=assembly, ensembl_release=102)
+    resolve_ensembl_release(args)
+    assert args.genome.release == 102
+
+
+@pytest.mark.parametrize('input_args', [
+    ['--vcf', 'missing.vcf', '--bam', 'missing.bam', '--mhc-alleles', 'HLA-A*02:01',
+     '--mhc-predictor', 'random'],
+    ['--input-lens', 'missing.tsv'],
+])
+def test_cli_rejects_conflicting_release_before_loading_any_inputs(input_args, tmp_path):
+    from vaxrank.cli.entry_point import run_cli
+
+    with pytest.raises(ValueError, match='conflicts with --genome annotation release 93'):
+        run_cli(input_args + ['--genome', 'GRCh38:93', '--ensembl-release', '102',
+                             '--output-dir', str(tmp_path / 'output')])
+    assert not (tmp_path / 'output').exists()
+
+
 # ---- --verbose (#62) --------------------------------------------------------
 
 def test_verbose_arg_parsed():

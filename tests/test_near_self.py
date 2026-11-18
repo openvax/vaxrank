@@ -227,7 +227,7 @@ def test_invalid_target_peptides_fail(peptide):
 
 
 def test_invalid_allele_fails_through_mhcgnomes():
-    with pytest.raises(NearSelfError, match="Invalid MHC allele"):
+    with pytest.raises(NearSelfError, match="not-an-allele"):
         assess_near_self("AAAAAAAAI", "not-an-allele", _index())
 
 

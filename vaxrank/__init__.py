@@ -115,6 +115,7 @@ from .tissue_risk import (
 from .risk_ligand import (
     PROTEIN_RESOLUTION_ALL_ISOFORMS,
     PROTEIN_RESOLUTION_LONGEST_ISOFORM,
+    PROTEIN_RESOLUTION_REPRESENTATIVE,
     PatientHLARiskLigandIndex,
     ProteinResolutionCoverage,
     ResolvedRiskProtein,
@@ -229,6 +230,7 @@ __all__ = [
     "Peptide",
     "PROTEIN_RESOLUTION_ALL_ISOFORMS",
     "PROTEIN_RESOLUTION_LONGEST_ISOFORM",
+    "PROTEIN_RESOLUTION_REPRESENTATIVE",
     "PatientHLARiskLigandIndex",
     "PatientTumorExpressionEvidence",
     "ProteinResolutionCoverage",
