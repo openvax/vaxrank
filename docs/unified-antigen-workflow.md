@@ -90,7 +90,7 @@ direct input needs no manifest. Adding a report output does not change candidate
 selection; CSV-only runs use the same path. Native exports retain the variant
 and RNA content identities, including inline alleles, for offline replay.
 
-Use a patient-scoped manifest when combining direct VCF/BAM with other sources.
+Use a patient-scoped manifest when combining direct variants/RNA with other sources.
 The reference annotation and patient genotype must agree across the inputs.
 
 ```yaml

@@ -1164,7 +1164,7 @@ def add_external_rescoring_args(arg_parser):
              "reference_assembly and mhc_alleles, with sample/library details per input. "
              "Experimental antigens and cta_expression entries can mix new sequences and expression with saved evidence. "
              "Required when combined reports do not declare their own scope. "
-             "Required with VCF/BAM plus tables; shared declarations also apply to "
+             "Required with direct variants plus other sources; shared declarations also apply to "
              "direct inputs, with optional direct sample/library scope. "
              "Not needed for VCF + BAM alone or a single report.")
     arg_parser.add_argument(

@@ -978,7 +978,7 @@ def load_unified_external(args, epitope_config, options, genome):
     antigens = any(fmt in ('antigens', 'isovar') for fmt, _, _ in specs)
     if not direct:
         if getattr(args, 'rna_sample_id', None) or getattr(args, 'rna_source', None):
-            raise ValueError('--rna-sample-id and --rna-source require direct VCF/BAM inputs')
+            raise ValueError('--rna-sample-id and --rna-source require direct variant/RNA inputs')
         if getattr(args, 'patient_background_pairs', None) and not antigens:
             raise ValueError('Patient-background pairs require new Isovar antigen inputs; '
                              'saved comparisons already contain their source evidence')

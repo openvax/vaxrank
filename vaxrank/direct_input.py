@@ -1,4 +1,4 @@
-"""Adapt the existing VCF/BAM pipeline to shared, reloadable input evidence."""
+"""Adapt direct variant/RNA prediction to shared, reloadable input evidence."""
 from dataclasses import replace
 from pathlib import Path
 
@@ -41,7 +41,7 @@ def direct_content_identity(args, variants):
 
 
 def direct_input_scope(args, epitope_config, *, pooled=False):
-    """Resolve actual VCF/RNA scope before any source starts prediction."""
+    """Resolve actual variant/RNA scope before any source starts prediction."""
     from .epitope_config import EpitopeConfig
     epitope_config = epitope_config or EpitopeConfig()
     from mhctools.cli import mhc_alleles_from_args
@@ -49,18 +49,18 @@ def direct_input_scope(args, epitope_config, *, pooled=False):
 
     manifest = getattr(args, 'input_manifest', None)
     if pooled and not manifest:
-        raise ValueError('Combining VCF/BAM with tables requires --input-manifest '
+        raise ValueError('Combining direct variants/RNA with other sources requires --input-manifest '
                          'to declare their shared patient, reference_assembly and mhc_alleles')
     declarations = read_input_manifest(manifest, include_direct=True)[1] if manifest else {
         'patient_id': getattr(args, 'output_patient_id', None) or None}
-    declarations = with_species_declarations(declarations, species_scope_from_args(args), 'Direct VCF/BAM input')
-    scope = scope_from_mapping(declarations, 'Direct VCF/BAM input')
+    declarations = with_species_declarations(declarations, species_scope_from_args(args), 'Direct variant/RNA input')
+    scope = scope_from_mapping(declarations, 'Direct variant/RNA input')
     from .patient_background import direct_patient_background, direct_rna_scope
     background = direct_patient_background(args, epitope_config)
     scope = combine_scopes(scope, direct_rna_scope(args, background), 'Direct RNA')
     alleles = normalize_alleles(mhc_alleles_from_args(args), 'Direct prediction')
     if not alleles:
-        raise ValueError('Direct VCF/BAM predictions require explicit MHC alleles')
+        raise ValueError('Direct variant/RNA predictions require explicit MHC alleles')
     if scope.mhc_alleles is None and not manifest:
         scope = combine_scopes(scope, scope_from_mapping({'mhc_alleles': alleles}, 'Direct alleles'), 'Direct alleles')
     variants = variant_collection_from_args(args)
@@ -70,13 +70,13 @@ def direct_input_scope(args, epitope_config, *, pooled=False):
             'host_taxon_id': context.taxon_id, 'reference_assembly': context.genome_build,
             'annotation': f'{context.annotation_name}:{context.annotation_version}',
         }, 'Direct reference_context'), 'Direct reference_context')
-    # Validate actual VCF reference resolution as well as explicit CLI options.
+    # Validate actual variant reference resolution as well as explicit CLI options.
     for variant in variants:
         genome = variant.genome
         scope = combine_scopes(scope, scope_from_mapping({
             'reference_assembly': resolved_reference_assembly(genome),
             'annotation': 'ensembl:' + str(genome.release) if hasattr(genome, 'release') else None,
-        }, 'Direct VCF reference'), 'Direct VCF reference')
+        }, 'Direct variant reference'), 'Direct variant reference')
     paths = direct_input_paths(args)
     # Check scope before hashing large BAMs, instantiating predictors, or outputs.
     provisional = InputProvenance(
@@ -89,7 +89,7 @@ def direct_input_scope(args, epitope_config, *, pooled=False):
 
 
 def prepare_direct_report(args, reports, epitope_config, *, prepared_input=None):
-    """Validate pooled scope, then predict only the direct candidates."""
+    """Validate input scope, then predict only the direct candidates."""
     from .cli.entry_point import run_vaxrank_from_parsed_args
     from .vaf import extract_dna_vaf_by_variant
     provisional, variants, context, declarations, paths, alleles = (
