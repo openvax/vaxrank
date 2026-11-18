@@ -21,7 +21,6 @@ import sys
 from importlib.resources import files
 
 
-import pandas as pd
 import serializable
 
 
@@ -59,7 +58,6 @@ from ..epitope_io import (
     save_predictions,
     write_neoepitope_report,
 )
-from ..gene_pathway_check import GenePathwayCheck
 from ..report import (
     make_ascii_report,
     make_html_report,
@@ -69,7 +67,6 @@ from ..report import (
     TemplateDataCreator,
 )
 from ..report_display import run_provenance_arguments
-from ..patient_info import PatientInfo
 from ..mrna import RNAConstructConfig, assemble_mrna_constructs, write_mrna_outputs
 from ..peptide import (
     PeptideConstructConfig,
@@ -863,8 +860,9 @@ def emit_outputs(args, ranked, source):
     """Single fan-out point for everything downstream of ranking.
 
     ``ranked`` is the shared ``[(Variant, [VaccinePeptide])]``
-    intermediate; ``source`` is 'pipeline' (VCF/BAM) or 'external'
-    (LENS/pVACseq).
+    intermediate; ``source='pipeline'`` retains the minimal report writer
+    for historical JSON without full prediction evidence. Current producers
+    all supply the common per-allele report before this dispatch.
 
     Active vaccine types come from :func:`resolve_vaccine_types`
     (``--vaccine-type`` is multi-valued). Each writer fires when
@@ -936,8 +934,10 @@ def emit_outputs(args, ranked, source):
         fired.append(vtype)
 
     if source == 'external':
+        from ..direct_input import has_direct_input
         source_label = (
-            'LENS import' if getattr(args, 'input_lens', None)
+            'direct variant evidence' if has_direct_input(args)
+            else 'LENS import' if getattr(args, 'input_lens', None)
             else 'pVACseq import' if getattr(args, 'input_pvacseq', None)
             else 'external import')
     else:
@@ -1148,7 +1148,12 @@ def write_run_summary(args, patient_info, source, products=None):
             input_labels = patient_info.inputs
         for label, path in input_labels:
             lines.append("Input: %s — %s" % (label, path))
-        lines.append("Prediction evidence: %s" % getattr(args, 'external_predictions', 'input'))
+        from ..direct_input import has_direct_input
+        if has_direct_input(args):
+            lines.append("Prediction evidence: direct variant predictions; imported evidence policy: %s"
+                         % getattr(args, 'external_predictions', 'input'))
+        else:
+            lines.append("Prediction evidence: %s" % getattr(args, 'external_predictions', 'input'))
         prefix = getattr(args, 'external_prediction_prefix', None)
         if prefix:
             lines.append("Added prediction namespace: %s" % prefix)
@@ -1429,15 +1434,58 @@ def print_outputs_written(args):
         print("\n" + block, end="", file=sys.stderr)
 
 
+def _load_ranked_input_data(args):
+    """Resolve one policy and rank all direct, imported or saved evidence."""
+    from ..external_input import load_ranked_inputs
+    merged_config = load_vaxrank_config(args)
+    epitope_config = epitope_config_from_args(
+        args, merged_config=merged_config)
+    if not has_epitope_config_overrides(args, merged_config):
+        epitope_config = None  # Use a saved input policy, or the ordinary defaults.
+    vaccine_config = vaccine_config_from_args(
+        args, merged_config=merged_config)
+    # Keep actual CLI choices before resolved defaults are materialized on
+    # args. Native replay restores its construct defaults underneath them.
+    from argparse import Namespace
+    args._external_vaccine_args = Namespace(**vars(args))
+    if 'peptide' in resolve_vaccine_types(args):
+        manufacturability_config = manufacturability_config_from_args(
+            args, merged_config=merged_config)
+    else:
+        manufacturability_config = None
+    args.vaccine_peptide_length = vaccine_config.preferred_peptide_length
+    args.num_epitopes_per_vaccine_peptide = (
+        vaccine_config.num_target_epitopes_to_keep)
+    args.max_vaccine_peptides_per_variant = (
+        vaccine_config.max_vaccine_peptides_per_variant)
+    args.included_lens_sources = list(
+        vaccine_config.included_lens_sources
+    )
+    loaded = load_ranked_inputs(
+        args,
+        epitope_config=epitope_config,
+        vaccine_config=vaccine_config,
+        manufacturability_config=manufacturability_config)
+    ranked, report_df, predictions, patient_info, dna_vaf = loaded
+    data = dict(variants=ranked, patient_info=patient_info,
+                args={key: value for key, value in vars(args).items() if key != '_design_dataset'},
+                dna_vaf_by_variant=dna_vaf)
+    if getattr(args, 'output_json_file', None):
+        ensure_parent_dir(args.output_json_file)
+        with open(args.output_json_file, 'w') as stream:
+            stream.write(serialize_json_nan_tolerant(data))
+        logger.info('Wrote JSON report data to %s', args.output_json_file)
+    return data, report_df, predictions, epitope_config
+
+
 def _run_parsed_cli(args, args_list):
     if getattr(args, 'reference_context', None):
         direct = any(getattr(args, name, None) for name in ('vcf', 'maf', 'variant', 'json_variants'))
         external = any(getattr(args, name, None) for name in (
             'input_pvacseq', 'input_lens', 'input_epitopes', 'input_topiary',
             'input_cta_expression', 'input_antigens', 'input_isovar', 'external_input', 'input_manifest'))
-        if not direct or (external and not (getattr(args, 'input_manifest', None)
-                                            and getattr(args, 'vcf', None))):
-            raise ValueError('--reference-context requires a direct variant input or a manifest with direct VCF')
+        if not direct or (external and not getattr(args, 'input_manifest', None)):
+            raise ValueError('--reference-context requires direct variants; pooled inputs also require --input-manifest')
     configure_logging(args)
     resolve_ensembl_release(args)
     # Manufacturability default depends on whether peptide is one of
@@ -1478,92 +1526,24 @@ def _run_parsed_cli(args, args_list):
     require_pepsickle_if_requested(args_list)
     confirm_output_dir_overwrite(args)
 
-    # Architecture (post-#252):
-    #
-    #   INPUT
-    #     ├── --vcf + --bam  →  ranked_vaccine_peptides_with_metadata_from_parsed_args
-    #     └── --input-lens / --input-pvacseq  →  external_input.load_external_ranked
-    #                                            └── synthesize ranked from the report
-    #
-    #   SHARED:  ranked_variants_with_vaccine_peptides
-    #
-    #   DOWNSTREAM (modality-agnostic reports + peptide / mRNA construct dispatch)
-    #     emit_outputs(args, ranked, source)
-    #
-    # The external-input path no longer hard-short-circuits — it
-    # produces the same shape as the VCF/BAM path so peptide and mRNA
-    # vaccine designs work end-to-end from LENS / pVACseq files.
-    from ..external_input import load_external_ranked
-
+    # Every producer enters the same evidence scoring, selection and output
+    # path. Historical report JSON remains an explicit compatibility reader.
     patient_info = None
     args_for_report = args
     report_df = None
     predictions = None
-    # ``data`` is the pipeline path's intermediate metadata bundle
-    # (variants + patient_info + dna_vaf_by_variant). The external
-    # path doesn't produce one, so default to an empty dict so the
-    # shared template-report block can ``data.get(...)`` either way.
     data = {}
 
-    if (
-            getattr(args, 'input_pvacseq', None)
-            or getattr(args, 'input_lens', None)
-            or getattr(args, 'input_epitopes', None)
-            or getattr(args, 'input_topiary', None)
-            or getattr(args, 'input_cta_expression', None)
-            or getattr(args, 'input_antigens', None)
-            or getattr(args, 'input_isovar', None)
-            or getattr(args, 'external_input', None)
-            or getattr(args, 'input_manifest', None)):
-        merged_config = load_vaxrank_config(args)
-        epitope_config = epitope_config_from_args(
-            args, merged_config=merged_config)
-        if not has_epitope_config_overrides(args, merged_config):
-            epitope_config = None  # Use a saved input policy, or the ordinary defaults.
-        # ``vaccine_peptides:`` config used to be resolved only inside
-        # ``run_vaxrank_from_parsed_args`` — the pipeline-only entry point —
-        # so peptide length, epitope retention, the combined-score
-        # expression, and manufacturability thresholds silently did nothing
-        # on LENS / pVACseq runs. Resolve them here too and hand them to the
-        # loader, which passes them to construct assembly.
-        vaccine_config = vaccine_config_from_args(
-            args, merged_config=merged_config)
-        # Keep actual CLI choices before resolved defaults are materialized on
-        # args. Native replay restores its construct defaults underneath them.
-        from argparse import Namespace
-        args._external_vaccine_args = Namespace(**vars(args))
-        if 'peptide' in resolve_vaccine_types(args):
-            manufacturability_config = manufacturability_config_from_args(
-                args, merged_config=merged_config)
-        else:
-            manufacturability_config = None
-        args.vaccine_peptide_length = vaccine_config.preferred_peptide_length
-        args.num_epitopes_per_vaccine_peptide = (
-            vaccine_config.num_target_epitopes_to_keep)
-        args.max_vaccine_peptides_per_variant = (
-            vaccine_config.max_vaccine_peptides_per_variant)
-        args.included_lens_sources = list(
-            vaccine_config.included_lens_sources
-        )
-        loaded = load_external_ranked(
-            args,
-            epitope_config=epitope_config,
-            vaccine_config=vaccine_config,
-            manufacturability_config=manufacturability_config)
-        if loaded is None:
-            ranked_variants_with_vaccine_peptides = []
-        else:
-            (ranked_variants_with_vaccine_peptides, report_df,
-             predictions, patient_info, external_dna_vaf) = loaded
-            if (report_df.attrs.get('saved_evidence_input')
-                    and '--processing-aware-annotation' not in args_list):
-                args.processing_aware_annotation = False
-            # Mirror the pipeline path's ``data['dna_vaf_by_variant']``
-            # so the shared template-report block picks it up.
-            data['dna_vaf_by_variant'] = external_dna_vaf
+    if not getattr(args, 'input_json_file', None):
+        data, report_df, predictions, epitope_config = _load_ranked_input_data(args)
+        ranked_variants_with_vaccine_peptides = data['variants']
+        patient_info = data['patient_info']
+        if (report_df.attrs.get('saved_evidence_input')
+                and '--processing-aware-annotation' not in args_list):
+            args.processing_aware_annotation = False
         if not ranked_variants_with_vaccine_peptides:
             logger.warning(
-                "External input produced no ranked vaccine peptides; "
+                "No input candidates produced ranked vaccine peptides; "
                 "writing only the per-(peptide, allele) neoepitope "
                 "report (if requested).")
         # Input flags do not describe annotation needs: native antigens carry
@@ -1591,8 +1571,7 @@ def _run_parsed_cli(args, args_list):
                     else "Configured" if getattr(args, 'external_predictions', 'input') in ('fresh', 'additive')
                     else "Inferred from the report",
                     len(alleles), ", ".join(alleles))
-        # Per-(peptide, allele) CSV / XLSX report is unique to the
-        # external-input path; emit it before the shared dispatch.
+        # Emit the same per-(peptide, allele) report for every input producer.
         emit_external_neoepitope_report(
             args, report_df, predictions, epitope_config)
         # Template reports want a dict here, not a Namespace —
@@ -1601,12 +1580,6 @@ def _run_parsed_cli(args, args_list):
         args_for_report = {key: value for key, value in vars(args).items()
                            if key != '_design_dataset'}
         source = 'external'
-        if getattr(args, 'output_json_file', None):
-            data.update(variants=ranked_variants_with_vaccine_peptides,
-                        patient_info=patient_info, args=args_for_report)
-            ensure_parent_dir(args.output_json_file)
-            with open(args.output_json_file, 'w') as stream:
-                stream.write(serialize_json_nan_tolerant(data))
     else:
         data = ranked_vaccine_peptides_with_metadata_from_parsed_args(args)
         ranked_variants_with_vaccine_peptides = data['variants']
@@ -1721,7 +1694,7 @@ def main(args_list=None):
         exit_with_user_error(error, args_list)
 
 
-def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_override=None):
+def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_override=None, loaded_variants=None):
     from .isovar_config_args import resolve_isovar_args
 
     merged_config = load_vaxrank_config(args)
@@ -1771,7 +1744,8 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
     # ``prediction_method_name`` ends up on every flat record.
     # Resolve actual VCF references before models or RNA processing. An explicit
     # MHC repertoire permits HLA mice without changing the host reference.
-    loaded_variants = variant_collection_from_args(args)
+    if loaded_variants is None:
+        loaded_variants = variant_collection_from_args(args)
     variants = filter_unannotatable_variants(loaded_variants)
     if getattr(args, 'host_reference', None):
         raise ValueError('Use --host-reference with native antigen inputs or saved --input-epitopes')
@@ -1898,7 +1872,7 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
     - patient info object
     """
 
-    if hasattr(args, 'input_json_file'):
+    if getattr(args, 'input_json_file', None):
         with open(args.input_json_file) as f:
 
             data = serializable.from_json(f.read())
@@ -1919,105 +1893,4 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
             data['patient_info'].num_variants_with_vaccine_peptides = sum(
                 bool(peptides) for _, peptides in data['variants'])
             return data
-    # get various things from user args
-    mhc_alleles = mhc_alleles_from_args(args)
-    logger.info("MHC alleles: %s", mhc_alleles)
-
-    all_variants = variant_collection_from_args(args)
-    variants = filter_unannotatable_variants(all_variants)
-    logger.info("Variants: %d loaded, %d after filtering invalid contigs",
-                len(all_variants), len(variants))
-
-    dna_vaf_by_variant = extract_dna_vaf_by_variant(
-        all_variants, tumor_sample_name=getattr(args, 'tumor_sample_name', None))
-
-    vaxrank_results = run_vaxrank_from_parsed_args(args)
-
-    variants_count_dict = vaxrank_results.variant_counts()
-    assert len(variants) == variants_count_dict['num_total_variants'], \
-        "Len(variants) is %d but variants_count_dict came back with %d" % (
-            len(variants), variants_count_dict['num_total_variants'])
-
-    ranked_variants_with_vaccine_peptides = vaxrank_results.ranked_vaccine_peptides
-    from ..antigen_allocation import select_ranked_sources
-    design_dataset = getattr(args, '_design_dataset', None)
-    ranked_variants_with_vaccine_peptides_for_report = select_ranked_sources(
-        ranked_variants_with_vaccine_peptides, vaccine_config_from_args(args).antigen_allocation,
-        args.max_sources, source_evidence=(design_dataset.selection.get('source_evidence')
-            if design_dataset is not None else None),
-        audit=design_dataset.selection if design_dataset is not None else None)
-    variants_count_dict['num_variants_with_vaccine_peptides'] = sum(
-        bool(peptides) for _, peptides in ranked_variants_with_vaccine_peptides_for_report)
-    if args.output_passing_variants_csv:
-        if design_dataset is not None and design_dataset.direct_sources:
-            variant_metadata_dicts = [dict(source['properties']) for source in design_dataset.direct_sources]
-        else:
-            variant_metadata_dicts = vaxrank_results.variant_properties(
-                gene_pathway_check=GenePathwayCheck(),
-                dna_vaf_by_variant=dna_vaf_by_variant)
-        if variant_metadata_dicts:
-            from ..vaxrank_results import selected_variant_properties
-            variant_metadata_dicts = selected_variant_properties(variant_metadata_dicts,
-                vaxrank_results.variants, ranked_variants_with_vaccine_peptides_for_report)
-        df = pd.DataFrame(variant_metadata_dicts)
-        ensure_parent_dir(args.output_passing_variants_csv)
-        df.to_csv(args.output_passing_variants_csv, index=False)
-
-    pipeline_inputs = [
-        ('VCF (somatic variants)', '; '.join(variants.sources))
-    ] if variants.sources else []
-    if args.bam:
-        pipeline_inputs.append(('BAM (RNAseq reads)', args.bam))
-    patient_info = PatientInfo(
-        patient_id=args.output_patient_id,
-        # Legacy fields kept for any downstream JSON consumers that
-        # haven't migrated to ``inputs``; new code should read
-        # ``inputs`` exclusively. Both paths now populate ``inputs``.
-        vcf_paths=list(variants.sources),
-        bam_path=args.bam,
-        mhc_alleles=mhc_alleles,
-        num_somatic_variants=variants_count_dict['num_total_variants'],
-        num_coding_effect_variants=variants_count_dict['num_coding_effect_variants'],
-        num_variants_with_rna_support=variants_count_dict['num_variants_with_rna_support'],
-        num_variants_with_vaccine_peptides=variants_count_dict['num_variants_with_vaccine_peptides'],
-        inputs=pipeline_inputs,
-    )
-    if getattr(args, '_design_dataset', None) is not None:
-        from ..input_coverage import direct_ranking_coverage
-        patient_info.input_coverage = direct_ranking_coverage(
-            args._design_dataset, vaxrank_results, ranked_variants_with_vaccine_peptides_for_report)
-    # return variants, patient info, and command-line args
-    data = {
-        # TODO:
-        #  change this field to 'ranked_variants_with_vaccine_peptides'
-        #  but figure out how to do it in a backwards compatible way
-        'variants': ranked_variants_with_vaccine_peptides_for_report,
-        'patient_info': patient_info,
-        'args': {key: value for key, value in vars(args).items()
-                 if key != '_design_dataset'},
-        'dna_vaf_by_variant': dna_vaf_by_variant,
-    }
-    # Console-level summary of the resolved arguments already went out
-    # through ``log_args_summary``; keep the raw namespace at DEBUG so
-    # it lands in --log-path for provenance without dumping a ~110-key
-    # dict (including the internal ``_parser_defaults`` snapshot) into
-    # the operator's terminal.
-    logger.debug('Saving args: %s', data['args'])
-
-    # save JSON data if necessary. as of time of writing, vaxrank takes ~25 min to run,
-    # most of which is core logic. the formatting is super fast, and it can
-    # be useful to save the data to be able to iterate just on the formatting
-    if args.output_json_file:
-        ensure_parent_dir(args.output_json_file)
-        with open(args.output_json_file, 'w') as f:
-            # Writer-side normalization is defense in depth — producers should
-            # be coercing NaN/Inf to None before reaching the writer
-            # (see vaxrank.finite_prediction_value), but if any
-            # slips through (e.g. a future predictor adapter, or a
-            # custom score expression), render it as JSON null instead
-            # of crashing the whole report. Note: strict JSON doesn't
-            # have a NaN literal; the writer converts non-finite floats to null.
-            f.write(serialize_json_nan_tolerant(data))
-            logger.info('Wrote JSON report data to %s', args.output_json_file)
-
-    return data
+    return _load_ranked_input_data(args)[0]

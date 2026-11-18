@@ -767,7 +767,8 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
     # count. A successful empty analysis is replayable without invented rows.
     if not original and not any(r.dataset is not None and (
             r.source_format == 'epitopes' or not r.dataset.result.df.empty
-            or r.dataset.selection.get('source_evidence')) for r in reports):
+            or r.dataset.selection.get('source_evidence')
+            or r.dataset.selection.get('input_coverage')) for r in reports):
         raise ValueError("External inputs contain no candidate peptides to score")
     if input_predictions_path:
         Path(input_predictions_path).parent.mkdir(parents=True, exist_ok=True)
@@ -971,7 +972,8 @@ def load_unified_external(args, epitope_config, options, genome):
     if mode == 'input' and getattr(args, 'external_peptide_only', False):
         raise ValueError('--external-peptide-only requires fresh or additive prediction mode')
     model_factory, alleles = None, []
-    direct = bool(getattr(args, 'vcf', None) or getattr(args, 'bam', None))
+    from .direct_input import has_direct_input
+    direct = has_direct_input(args)
     specs = external_input_specs(args)
     cta = any(fmt == 'cta_expression' for fmt, _, _ in specs)
     antigens = any(fmt in ('antigens', 'isovar') for fmt, _, _ in specs)
@@ -1023,9 +1025,11 @@ def load_unified_external(args, epitope_config, options, genome):
     from .cta_input import write_cta_admissions
     from .config.loader import load_vaxrank_config
     validation_provenance = ()
+    prepared_direct = None
     if direct:
         from .direct_input import direct_input_scope
-        validation_provenance = (direct_input_scope(args, epitope_config)[0],)
+        prepared_direct = direct_input_scope(args, epitope_config, pooled=bool(specs))
+        validation_provenance = (prepared_direct[0],)
     loaded_reports = read_reports(
         [(fmt, path) for fmt, path, _ in specs],
         scopes=[scope for _, _, scope in specs],
@@ -1093,7 +1097,8 @@ def load_unified_external(args, epitope_config, options, genome):
     epitope_config = report_config(loaded_reports, epitope_config)
     if direct:
         from .direct_input import prepare_direct_report
-        loaded_reports.insert(0, prepare_direct_report(args, loaded_reports, epitope_config))
+        loaded_reports.insert(0, prepare_direct_report(
+            args, loaded_reports, epitope_config, prepared_input=prepared_direct))
     reports, frame, predictions = prepare_reports(
         [], epitope_config, mode=mode, prepared_reports=loaded_reports,
         model_factory=model_factory, alleles=alleles,

@@ -544,76 +544,6 @@ def test_tabular_writers_create_their_parent_directory(tmp_path, filename, write
     assert target.exists()
 
 
-def _pipeline_args(tmp_path, monkeypatch, **overrides):
-    """Parsed args plus stubs for everything upstream of the writers, so
-    ``ranked_vaccine_peptides_with_metadata_from_parsed_args`` runs the
-    output block without a genome, a BAM or a predictor."""
-    from vaxrank.cli import entry_point
-    from vaxrank.cli.arg_parser import parse_vaxrank_args
-
-    class _EmptyVariantCollection(list):
-        sources = []
-
-    variants = _EmptyVariantCollection()
-    results = SimpleNamespace(
-        variant_counts=lambda: {
-            'num_total_variants': 0, 'num_coding_effect_variants': 0,
-            'num_variants_with_rna_support': 0,
-            'num_variants_with_vaccine_peptides': 0},
-        variant_properties=lambda **kwargs: [],
-        ranked_vaccine_peptides=[])
-    monkeypatch.setattr(entry_point, "mhc_alleles_from_args", lambda args: [])
-    monkeypatch.setattr(entry_point, "variant_collection_from_args", lambda args: [])
-    monkeypatch.setattr(entry_point, "filter_unannotatable_variants", lambda v: variants)
-    monkeypatch.setattr(
-        entry_point, "extract_dna_vaf_by_variant", lambda v, **kwargs: {})
-    monkeypatch.setattr(
-        entry_point, "run_vaxrank_from_parsed_args", lambda args: results)
-    monkeypatch.setattr(entry_point, "GenePathwayCheck", lambda: None)
-
-    args = parse_vaxrank_args([
-        "--vcf", "unused.vcf", "--bam", "unused.bam",
-        "--mhc-predictor", "random", "--mhc-alleles", "HLA-A*02:01",
-        "--output-csv", str(tmp_path / "ranked.csv"),
-    ])
-    for key, value in overrides.items():
-        setattr(args, key, value)
-    return entry_point, args
-
-
-def test_json_dump_creates_its_parent_directory(tmp_path, monkeypatch):
-    """The reported crash: ``--output-json-file`` is written straight from
-    ``open(path, 'w')`` before any construct writer has run, so a path in a
-    missing directory raised FileNotFoundError after the full pipeline."""
-    entry_point, args = _pipeline_args(
-        tmp_path, monkeypatch,
-        output_json_file=str(tmp_path / "js" / "ranked_vaccine_peptides.json"),
-        output_passing_variants_csv=str(tmp_path / "pv" / "passing.csv"))
-
-    entry_point.ranked_vaccine_peptides_with_metadata_from_parsed_args(args)
-
-    assert (tmp_path / "js" / "ranked_vaccine_peptides.json").exists()
-    assert (tmp_path / "pv" / "passing.csv").exists()
-
-
-def test_explicit_legacy_json_is_written_into_a_missing_directory(
-        tmp_path, monkeypatch):
-    """Explicit legacy JSON export still creates its parent directory."""
-    entry_point, args = _pipeline_args(tmp_path, monkeypatch)
-    out_dir = tmp_path / "brand" / "new" / "dir"
-    args.output_dir = str(out_dir)
-    args.output_csv = ''
-    args.output_json_file = str(out_dir / 'ranked_vaccine_peptides.json')
-    args.input_lens = None
-    args.input_pvacseq = None
-    entry_point.populate_default_output_paths(args)
-    assert args.output_json_file == str(out_dir / "ranked_vaccine_peptides.json")
-
-    entry_point.ranked_vaccine_peptides_with_metadata_from_parsed_args(args)
-
-    assert (out_dir / "ranked_vaccine_peptides.json").exists()
-
-
 def test_isovar_csv_creates_its_parent_directory(tmp_path, monkeypatch):
     """``--output-isovar-csv`` is written from ``run_vaxrank_from_parsed_args``,
     the earliest of the output writers."""
@@ -655,30 +585,3 @@ def test_native_export_can_be_explicitly_disabled_without_disabling_reports():
         parse_vaxrank_args(['--output-epitopes', '/tmp/export.tsv', '--no-output-epitopes'])
 
 
-@pytest.mark.parametrize('exclude,limit,expected', [(True, None, False), (False, 0, False), (False, 1, True)])
-def test_direct_selected_variant_csv_and_patient_count(tmp_path, monkeypatch, exclude, limit, expected):
-    from varcode import VariantCollection, Variant
-    from pyensembl import EnsemblRelease
-    from vaxrank.vaxrank_results import VaxrankResults, selected_variant_properties
-    from .test_assembly_antigens import candidate
-    from dataclasses import replace
-    import pandas as pd
-    entry, args = _pipeline_args(tmp_path, monkeypatch,
-        output_passing_variants_csv=str(tmp_path / 'passing.csv'), max_sources=limit,
-        excluded_antigen_types=['mutation'] if exclude else None)
-    variant = Variant('1', 100, 'A', 'T', genome=EnsemblRelease(110))
-    antigen, peptides = candidate(0)
-    antigen = replace(antigen, kind='mutation')
-    peptides = [replace(peptides[0], antigen=antigen)]
-    observation = SimpleNamespace(variant=variant, top_gene_name='TEST',
-        predicted_effect_modifies_protein_sequence=True, has_mutant_protein_sequence_from_rna=True)
-    results = VaxrankResults([observation], {variant: peptides}, [(variant, peptides)])
-    monkeypatch.setattr(entry, 'run_vaxrank_from_parsed_args', lambda args: results)
-    monkeypatch.setattr(entry, 'filter_unannotatable_variants', lambda values: VariantCollection([variant]))
-    data = entry.ranked_vaccine_peptides_with_metadata_from_parsed_args(args)
-    assert data['patient_info'].num_variants_with_vaccine_peptides == int(expected)
-    rows = pd.read_csv(args.output_passing_variants_csv)
-    assert bool(rows.has_vaccine_peptide.iloc[0]) is expected
-    replay_rows = selected_variant_properties(results.variant_properties(), [variant], data['variants'])
-    assert replay_rows[0]['has_vaccine_peptide'] is expected
-    assert rows.rna_support.iloc[0] and len(rows) == 1
