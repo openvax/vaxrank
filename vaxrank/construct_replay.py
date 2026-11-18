@@ -15,7 +15,7 @@ def pipeline_native_dataset(args, variants, epitope_config, *, patient_backgroun
     from .epitope_dataset import EpitopeDataset
     from .input_scope import (
         InputProvenance, InputScope, normalize_alleles, scope_dict,
-        combine_scopes, host_scope_from_args,
+        combine_scopes, host_scope_from_args, load_reference_context,
     )
     from .selection_policy import canonical_digest
     from mhctools.cli import mhc_alleles_from_args
@@ -31,10 +31,14 @@ def pipeline_native_dataset(args, variants, epitope_config, *, patient_backgroun
     scope = combine_scopes(scope, host_scope_from_args(args), 'Direct prediction')
     from .patient_background import direct_rna_scope
     scope = combine_scopes(scope, direct_rna_scope(args, patient_background), 'Direct RNA')
+    context = load_reference_context(getattr(args, 'reference_context', None))
+    declarations = dict(file_sha256=hashes)
+    if context is not None:
+        declarations['reference_context'] = context.to_dict()
     provenance = InputProvenance(
         input_id='vcf_bam:' + content_hash + ':' + canonical_digest(scope_dict(scope)),
         source_format='vcf_bam', path='; '.join(paths), content_sha256=content_hash,
-        scope=scope, report_declarations=dict(file_sha256=hashes))
+        scope=scope, report_declarations=declarations)
     dataset = EpitopeDataset.from_predictions((), config=epitope_config)
     dataset.provenance = (provenance,)
     return dataset

@@ -362,3 +362,17 @@ def test_run_summary_creates_directory_before_writing_provenance(tmp_path):
     write_run_summary(args, patient, 'external')
     assert not (destination / 'input_provenance.json').exists()
     assert (destination / 'run_summary.txt').is_file()
+
+
+
+def test_retained_reference_context_uses_owner_identity_and_rejects_conflicts():
+    from dataclasses import replace
+    from orfdata import ReferenceContext
+    from vaxrank.input_scope import InputProvenance, InputScope, reference_context_from_provenance
+    context = ReferenceContext(9615, 'dog', 'CanFam3.1', 'Ensembl', '98')
+    source = InputProvenance('direct', 'vcf_bam', 'variants.json', 'test', InputScope(),
+        report_declarations={'reference_context': context.to_dict()})
+    alias = replace(context, species='canis familiaris')
+    assert reference_context_from_provenance([source], alias).key == context.key
+    with pytest.raises(ValueError, match='conflicting reference_context'):
+        reference_context_from_provenance([source], replace(context, annotation_version='99'))

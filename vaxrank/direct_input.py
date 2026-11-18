@@ -81,7 +81,7 @@ def direct_input_scope(args, epitope_config, *, pooled=False):
     # Check scope before hashing large BAMs, instantiating predictors, or outputs.
     provisional = InputProvenance(
         input_id='direct', source_format='vcf_bam', path='; '.join(paths) or 'inline variants', scope=scope,
-        content_sha256='')
+        content_sha256='', report_declarations={'reference_context': context.to_dict()} if context else {})
     validate_input_scopes([provisional], prediction_alleles=alleles,
         retained_genomes={'direct': tuple({id(v.genome): v.genome for v in variants}.values())},
         reference_context=context)
@@ -106,7 +106,8 @@ def prepare_direct_report(args, reports, epitope_config, *, prepared_input=None)
     provenance = replace(
         provisional, input_id='vcf_bam:' + content_hash + ':' + canonical_digest(scope_dict(scope)),
         content_sha256=content_hash, manifest_path=str(Path(manifest).resolve()) if manifest else None,
-        manifest_declarations=declarations, report_declarations={'file_sha256': hashes})
+        manifest_declarations=declarations,
+        report_declarations=dict(provisional.report_declarations, file_sha256=hashes))
     dataset = EpitopeDataset.from_predictions((), config=epitope_config)
     dataset.provenance = (provenance,)
     results = run_vaxrank_from_parsed_args(

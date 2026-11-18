@@ -391,11 +391,21 @@ def _retained_genomes(report):
     return tuple(genomes.values())
 
 
+def _retained_reference_context(reports, additional_provenance=()):
+    from .input_scope import reference_context_from_provenance
+    provenance = [*additional_provenance, *(r.input_provenance for r in reports)]
+    for report in reports:
+        if report.dataset is not None:
+            provenance.extend(report.dataset.provenance)
+    return reference_context_from_provenance(provenance)
+
+
 def _validate_report_scopes(reports, *, genome=None, alleles=()):
     from .host_reference import combine_host_references
     return validate_input_scopes(
         [replace(r.input_provenance, observed_mhc_alleles=_observed_alleles(r))
          for r in reports], genome=genome, prediction_alleles=alleles,
+        reference_context=_retained_reference_context(reports),
         retained_genomes={r.input_provenance.input_id: _retained_genomes(r) for r in reports},
         host_reference=combine_host_references(
             r.dataset.host_reference for r in reports if r.dataset is not None))
@@ -594,14 +604,16 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
                 raise ValueError(f'{path}: saved predictions have no host_reference; '
                                  'predict the source antigens with the selected reference first')
     loaded = [report for report in reports if report is not None]
+    context = _retained_reference_context(loaded, validation_provenance)
     shared_scope = validate_input_scopes(
         [report.input_provenance for report in loaded] + [p for _, _, p in pending] + list(validation_provenance),
-        genome=genome, prediction_alleles=alleles, host_reference=host_reference,
+        genome=genome, prediction_alleles=alleles, host_reference=host_reference, reference_context=context,
         retained_genomes={r.input_provenance.input_id: _retained_genomes(r) for r in loaded})
     for stored, references in native_scopes:
         validate_input_scopes([
             replace(p, scope=combine_scopes(p.scope, shared_scope, p.path, SPECIES_FIELDS))
             for p in stored], genome=genome, prediction_alleles=alleles, host_reference=host_reference,
+            reference_context=context,
             retained_genomes={p.input_id: references for p in stored})
     if pending:
         retained_ids = {p.input_id for r in loaded if r.dataset is not None for p in r.dataset.provenance}

@@ -1,7 +1,7 @@
-"""Patient/reference declarations for external reports, separate from evidence.
+"""Shared patient/reference declarations, separate from measured evidence.
 
-The ordinary VCF/BAM entry point does not use this module. Manifest values are
-user declarations, not facts inferred from filenames or prediction coverage.
+Manifest values are user declarations, not facts inferred from filenames or
+prediction coverage. Explicit custom reference contexts remain portable.
 """
 
 from dataclasses import asdict, dataclass, field, fields, replace
@@ -149,10 +149,13 @@ def load_reference_context(value):
     if isinstance(value, ReferenceContext):
         context = value
     else:
-        if not isinstance(value, (str, Path)):
-            raise ValueError('reference_context requires an ORFdata ReferenceContext or JSON file')
-        with Path(value).open() as stream:
-            record = json.load(stream)
+        if isinstance(value, dict):
+            record = value
+        elif isinstance(value, (str, Path)):
+            with Path(value).open() as stream:
+                record = json.load(stream)
+        else:
+            raise ValueError('reference_context requires an ORFdata ReferenceContext, serialized object or JSON file')
         if not isinstance(record, dict) or set(record) - {f.name for f in fields(ReferenceContext)}:
             raise ValueError('reference_context requires a serialized ORFdata ReferenceContext')
         try:
@@ -504,8 +507,10 @@ def host_scope_from_args(args, references=(), *, location='Host reference'):
     scope = combine_scopes(
         scope_from_mapping(getattr(args, '_input_species_scope', {}), location),
         species_scope_from_args(args), location)
-    context = load_reference_context(getattr(args, 'reference_context', None))
-    host = getattr(getattr(args, '_design_dataset', None), 'host_reference', None)
+    dataset = getattr(args, '_design_dataset', None)
+    context = reference_context_from_provenance(
+        getattr(dataset, 'provenance', ()), getattr(args, 'reference_context', None))
+    host = getattr(dataset, 'host_reference', None)
     if host is not None:
         scope = host.validate(scope, location=location)
     references = tuple(reference for reference in
@@ -533,6 +538,18 @@ def _species_for_taxon(taxon_id):
     from orfdata.reference import species_name_for_taxon
     name = species_name_for_taxon(taxon_id)
     return Species.get(name.replace('_', ' ').capitalize()) if name is not None else None
+
+
+def reference_context_from_provenance(provenance, explicit=None):
+    """Reconcile retained explicit contexts without inferring missing taxonomy."""
+    context = load_reference_context(explicit)
+    for source in provenance:
+        recorded = load_reference_context(source.report_declarations.get('reference_context'))
+        if recorded is not None:
+            if context is not None and context.key != recorded.key:
+                raise ValueError(f'{source.path}: conflicting reference_context declarations')
+            context = recorded
+    return context
 
 
 def validate_host_taxon(scope, reference, location, observed_alleles=(), *, reference_context=None):
@@ -591,7 +608,8 @@ def validate_input_scopes(provenance, *, genome=None, prediction_alleles=(),
     """Validate the whole batch before DSL scoring, output or live prediction."""
     shared = InputScope()
     genome = resolve_input_genome(genome)
-    context = load_reference_context(reference_context)
+    provenance = tuple(provenance)
+    context = reference_context_from_provenance(provenance, reference_context)
     retained_genomes = retained_genomes or {}
     for source in provenance:
         shared = combine_scopes(shared, source.scope, source.path, SHARED_FIELDS)

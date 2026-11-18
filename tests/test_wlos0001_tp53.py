@@ -66,7 +66,7 @@ def test_wlos0001_serialized_custom_genome_accepts_declared_context(tmp_path, mo
     arguments = ['--json-variants', str(source), '--bam', str(DATA / 'wlos0001-tp53.bam'),
                  '--reference-context', str(context), '--host-species', 'dog',
                  '--mhc-predictor', 'random', '--mhc-alleles', 'DLA-88*034:01',
-                 '--output-ascii-report', str(report)]
+                 '--output-ascii-report', str(report), '--output-epitopes', str(tmp_path / 'native.tsv')]
     wrong = json.loads(context.read_text())
     wrong['annotation_version'] = '99'
     context.write_text(json.dumps(wrong))
@@ -76,4 +76,27 @@ def test_wlos0001_serialized_custom_genome_accepts_declared_context(tmp_path, mo
     wrong['annotation_version'] = '98'
     context.write_text(json.dumps(wrong))
     run_cli(arguments)
-    assert 'VCF (somatic variants):' in report.read_text()
+    assert 'Direct variants/RNA:' in report.read_text()
+    from vaxrank.epitope_dataset import EpitopeDataset
+    native = tmp_path / 'native.tsv'
+    saved = EpitopeDataset.load(native)
+    assert saved.provenance[0].report_declarations['reference_context'] == wrong
+    source.unlink()
+    context.unlink()
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Native replay must not acquire predictions')
+    monkeypatch.setattr('mhctools.cli.predictors_from_args', forbidden)
+    replay = tmp_path / 'replay.txt'
+    run_cli(['--input-epitopes', str(native), '--output-ascii-report', str(replay),
+             '--no-processing-aware-annotation'])
+    assert 'TP53' in replay.read_text() and 'DLA-88*034:01' in replay.read_text()
+
+    from dataclasses import replace
+    declaration = dict(saved.provenance[0].report_declarations)
+    declaration['reference_context'] = dict(wrong, annotation_version='99')
+    saved.provenance = (replace(saved.provenance[0], report_declarations=declaration),)
+    inconsistent = tmp_path / 'inconsistent.tsv'
+    saved.save(inconsistent)
+    with pytest.raises(ValueError, match='annotation'):
+        run_cli(['--input-epitopes', str(inconsistent), '--output-csv', str(tmp_path / 'no.csv')])
+    assert not (tmp_path / 'no.csv').exists()
