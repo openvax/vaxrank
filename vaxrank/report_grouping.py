@@ -181,6 +181,10 @@ def group_report_evidence(data):
             for antigen in product['antigens']:
                 antigen['source_ids'] = list(dict.fromkeys(identities[key]['identifier']
                     for key in antigen['source_keys'] if key in identities))
+                if antigen.get('representative'):
+                    antigen['representative']['source_ids'] = list(dict.fromkeys(
+                        identities[key]['identifier'] for key in antigen['representative']['source_keys']
+                        if key in identities))
     groups, tables = grouped_candidate_details(data['variants'])
     by_id = {row['identifier']: row for row in directory}
     for group in groups:

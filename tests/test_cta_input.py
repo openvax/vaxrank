@@ -121,6 +121,12 @@ def test_expression_only_cli_outputs_and_offline_replay(tmp_path, monkeypatch, c
     design = from_native_json((first / 'cta_design.json').read_text(), dict)
     assert design['final_product_audit']['mhc_status'] == 'predictions_returned'
     assert len(design['final_product_audit']['unassessed_processing_compartments']) == 3
+    coverage = design['final_product_audit']['assembly_coverage']
+    assert coverage['native_mapping_policy'] == 'first_enabled_ranked_source'
+    assert not coverage['unresolved_product_antigen_names']
+    decisions = pd.read_csv(first / 'cta_target_decisions.csv')
+    expected = {PRAME, MAGEA4} if level == 'gene' else {PRAME}
+    assert set(decisions.loc[decisions.product_status == 'contributed', 'gene_id']) == expected
     assert any('unsupported_chemical_modifications' in a.reason_codes
                for a in design['final_product_audit']['product_audits'])
     for region in design['final_product_audit']['selected_regions']:

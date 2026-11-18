@@ -17,11 +17,16 @@ class AssemblyAntigen:
     """One sequence to pack, with all contributing candidate mappings.
 
     Sources remain separate observations: their scores and RNA support are not
-    added. The first occurrence in selection order supplies the display name.
+    added. The label names every recorded origin; the first enabled occurrence
+    supplies the allocation category; ranking and RNA evidence stay source-specific.
     """
     name: str
     amino_acids: str
     sources: list = field(default_factory=list)
+
+    @property
+    def gene_names(self):
+        return list(dict.fromkeys(s['gene_name'] for s in self.sources if s['gene_name']))
 
 
 def _source_record(source, name, antigen, peptide, source_evidence):
@@ -132,19 +137,33 @@ def antigens_for_assembly(ranked, options, modality, *, source_evidence=None):
     # Disabled origins remain in the provenance and audit, but cannot hide an
     # independently eligible occurrence of the same sequence.
     occurrences.sort(key=lambda a: policy.max_per_kind.get(selection_type(a.sources[0])) == 0)
-    by_sequence, used_names = {}, set()
+    by_sequence, labels = {}, {}
     for occurrence in occurrences:
+        labels.setdefault(occurrence.amino_acids, []).append(occurrence.name)
         existing = by_sequence.get(occurrence.amino_acids)
         if existing is not None:
             existing.sources.extend(s for s in occurrence.sources if s not in existing.sources)
             continue
-        name, index = occurrence.name, 2
-        while occurrence.name in used_names:
-            occurrence.name = name + ' [sequence %d]' % index
-            index += 1
-        used_names.add(occurrence.name)
         by_sequence[occurrence.amino_acids] = occurrence
+    used_names = set()
+    for antigen in by_sequence.values():
+        name = ' / '.join(dict.fromkeys(labels[antigen.amino_acids]))
+        antigen.name = name
+        index = 2
+        while antigen.name in used_names:
+            antigen.name = name + ' [sequence %d]' % index
+            index += 1
+        used_names.add(antigen.name)
+
     return list(by_sequence.values())
+
+
+def product_gene_names(product):
+    """Use recorded gene labels; preserve historical FASTA descriptions on replay."""
+    if product.antigens and all('gene_names' in antigen for antigen in product.antigens):
+        return list(dict.fromkeys(gene for antigen in product.antigens for gene in antigen['gene_names']))
+    from .vaccine_library import gene_names_from_antigen_names
+    return gene_names_from_antigen_names(product.antigen_names)
 
 
 def summarize_products(products):

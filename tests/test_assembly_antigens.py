@@ -93,3 +93,35 @@ def test_colliding_source_names_do_not_merge_distinct_sequences():
     groups = antigens_for_assembly([first, second], PeptideConstructConfig(), 'peptide')
     assert len(groups) == 2 and len({g.name for g in groups}) == 2
     assert groups[0].amino_acids != groups[1].amino_acids
+
+
+@pytest.mark.parametrize('modality', ['peptide', 'mrna'])
+def test_shared_sequence_labels_and_fasta_name_every_origin(tmp_path, modality):
+    ranked = [candidate(0), candidate(1, prefix='GGG')]
+    settings = dict(min_antigen_length_aa=9, max_antigen_length_aa=9, antigens_per_construct=1)
+    if modality == 'peptide':
+        products = assemble_peptide_constructs(ranked, PeptideConstructConfig(**settings))
+        path = tmp_path / 'vaccine.fasta'
+        write_peptide_outputs(products, path)
+    else:
+        products = assemble_mrna_constructs(ranked, RNAConstructConfig(**settings, optimize_linkers=False),
+                                            host_taxon_id=9606)
+        write_mrna_outputs(products, tmp_path)
+        path = tmp_path / 'full.fasta'
+    [product] = products
+    assert all(gene in product.antigen_names[0] for gene in ('GENE0', 'GENE1'))
+    assert product.antigens[0]['gene_names'] == ['GENE0', 'GENE1']
+    header = path.read_text().splitlines()[0]
+    assert 'GENE1' in header.split('genes=', 1)[1]
+
+
+def test_legacy_product_fasta_description_remains_reproducible(tmp_path):
+    from dataclasses import replace
+    first, second = candidate(0), candidate(1)
+    [product] = assemble_peptide_constructs([first, second], PeptideConstructConfig())
+    old_name = 'GENE0 (mutation)'
+    legacy = replace(product, antigen_names=[old_name], antigens=[
+        dict({k: v for k, v in product.antigens[0].items() if k != 'gene_names'}, name=old_name)])
+    path = tmp_path / 'legacy.fasta'
+    write_peptide_outputs([legacy], path)
+    assert path.read_text().splitlines()[0].endswith('genes=GENE0')

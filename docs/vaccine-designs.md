@@ -410,3 +410,18 @@ scripts. It is shorthand for the orthogonal axes:
 - `multi_epitope` ≡ `--antigen-content mutation_spanning --peptide-antigens-per-construct N`
 
 Prefer the explicit content and count flags for new designs.
+
+### Shared antigen sequences
+
+Identical emitted amino-acid sequences occupy one antigen slot, even when
+several genes or source candidates contribute them. Product labels, FASTA
+headers and manifests retain all recorded origins. Reports link the shared
+product to each source and identify the first enabled ranked source used for
+allocation and links to its ranking score and RNA evidence. Scores and RNA counts are not
+summed across origins.
+
+Identity of a selected window does not establish identity of complete proteins
+or translation of every possible source. Reports distinguish the supplied
+candidate contexts sharing a window; the source identifiers, transcripts and
+protein identifiers remain separate in the manifest and native evidence.
+Historical native designs retain their recorded labels during exact replay.

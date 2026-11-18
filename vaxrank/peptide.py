@@ -34,12 +34,11 @@ import json
 import logging
 from dataclasses import dataclass, field
 
-from .assembly_antigens import antigens_for_assembly, pack_antigens, record_assembly_decisions
+from .assembly_antigens import antigens_for_assembly, pack_antigens, product_gene_names, record_assembly_decisions
 from .manufacturability import ManufacturabilityScores
 from .construct_sequence import ConstructPlacement, validate_construct_placements
 from .native_serialization import to_native_json
 from .vaccine_library import (
-    gene_names_from_antigen_names,
     get_linker,
     iter_named_antigens,
 )
@@ -281,13 +280,13 @@ def assemble_peptide_constructs(
         for antigen in group:
             aa = antigen.amino_acids
             segments.append(dict(name=antigen.name, aa=aa, length_aa=len(aa), start_aa=offset,
-                                 end_aa=offset + len(aa), sources=antigen.sources))
+                                 end_aa=offset + len(aa), sources=antigen.sources, gene_names=antigen.gene_names))
             offset += len(aa) + len(linker_aa)
         components = dict(base_components)
         if linker:
             components.update(linker=options.linker, linker_inert=linker.inert_in_peptide_mode)
         else:
-            audit_queue = audits.get((names[0], sequence), [])
+            audit_queue = audits.get((group[0].sources[0]['candidate_name'], sequence), [])
             audit = audit_queue.pop(0) if audit_queue else {}
             if audit:
                 components['window_selection'] = audit
@@ -335,7 +334,7 @@ def write_peptide_outputs(constructs, fasta_path, manifest_path=None,
 
     with open(fasta_path, 'w') as f:
         for c in constructs:
-            genes = gene_names_from_antigen_names(c.antigen_names)
+            genes = product_gene_names(c)
             f.write(">%s antigens=%s length=%d genes=%s\n" % (
                 c.name, ','.join(c.antigen_names), len(c.sequence),
                 ','.join(genes)))
