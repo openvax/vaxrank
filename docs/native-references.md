@@ -2,7 +2,8 @@
 
 Native epitope exports retain their evidence, scores, mutation fragments and
 supporting transcript objects. Restoring transcript identity no longer opens an
-annotation database; Vaxrank requires PyEnsembl 2.22.2 for that contract.
+annotation database. Vaxrank requires PyEnsembl 2.22.2 for transcript restoration
+and Varcode 11.15.1 to defer gene lookup when restoring saved transcript effects.
 
 Direct runs also retain an explicitly supplied `--reference-context` declaration.
 Native replay validates the saved taxonomy, assembly and annotation pin without

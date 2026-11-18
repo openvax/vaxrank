@@ -22,7 +22,7 @@ pyensembl>=2.29.0,<3.0.0
 # 11.1 supplies shared candidate traversal and local consequence priority.
 # Ordinary annotations can retain realized splice/phase alternatives; the
 # selected comparison and its patient baseline remain distinct from the set.
-varcode>=11.1.0,<12.0.0
+varcode>=11.15.1,<12.0.0
 # 1.62.2 adds occurrence-scoped RNA support for exported SV ORF placements.
 # 1.61 adds reference-frame ncORF reconstruction. The Isovar input adapters
 # validate each supported result schema; producer evidence is retained losslessly.
