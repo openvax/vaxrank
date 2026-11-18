@@ -80,7 +80,7 @@ def write_cta_design(args, ranked, dataset, products, predictor=None):
             for product in records:
                 name = modality + ':' + product.name
                 sequence = sequences[name]
-                first_source = (product.antigen_sources.get(product.antigen_names[0], [None])[0]
+                first_source = (next(iter(product.antigen_sources.get(product.antigen_names[0], ())), None)
                                 if len(product.antigen_names) == 1 else None)
                 matches = [r for r in regions if first_source and source_matches_candidate(
                     first_source, r['antigen'], r['sequence'],
