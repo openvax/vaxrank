@@ -9,9 +9,10 @@ import hashlib
 import json
 import math
 from pathlib import Path
-import re
 
 from serializable import DataclassSerializable
+
+from .file_digest import is_sha256_digest
 
 
 def _text(value, name):
@@ -20,7 +21,7 @@ def _text(value, name):
 
 
 def _sha(value, name):
-    if not isinstance(value, str) or not re.fullmatch('[0-9a-f]{64}', value):
+    if not is_sha256_digest(value):
         raise ValueError(f'CTA restriction requires a SHA-256 for {name}')
 
 

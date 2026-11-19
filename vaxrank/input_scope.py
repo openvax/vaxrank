@@ -18,6 +18,7 @@ import yaml
 
 from . import cells
 from .allele_validation import parse_prediction_allele
+from .file_digest import is_sha256_digest
 
 
 MANIFEST_SCHEMA = "vaxrank.input_manifest.v1"
@@ -46,9 +47,8 @@ class InputScope(DataclassSerializable):
             raise ValueError("host_taxon_id must be a positive integer NCBI taxonomy ID")
         if self.mhc_species is not None:
             object.__setattr__(self, 'mhc_species', normalize_mhc_species(self.mhc_species))
-        if self.host_reference_sha256 is not None and (
-                not isinstance(self.host_reference_sha256, str)
-                or not re.fullmatch('[0-9a-f]{64}', self.host_reference_sha256)):
+        if self.host_reference_sha256 is not None and not is_sha256_digest(
+                self.host_reference_sha256):
             raise ValueError('host_reference_sha256 must be a SHA-256')
 
     @classmethod

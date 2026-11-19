@@ -76,10 +76,6 @@ class JunctionSwapResult:
         return [link.name for link in self.chosen_linker_per_junction]
 
 
-class JunctionPredictionWarning(UserWarning):
-    """A junction predictor cannot provide scores required for optimization."""
-
-
 def junction_kmers(left_aa, linker_aa, right_aa, k_lengths,
                    reference_proteome=None):
     """Enumerate k-mers spanning a single junction.

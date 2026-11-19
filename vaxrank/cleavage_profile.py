@@ -18,6 +18,8 @@ from mhctools import PeptideInput
 from mhctools.cleavage import CleavageModel, CleavageResult, CleavageSite
 from serializable import DataclassSerializable
 
+from .file_digest import is_sha256_digest
+
 
 @dataclass(frozen=True)
 class CleavageProfile(DataclassSerializable):
@@ -73,9 +75,7 @@ class CleavageProfile(DataclassSerializable):
             raise ValueError("Missing cleavage observations require an explanation")
         if self.status == "failed" and not self.error_message:
             raise ValueError("Failed cleavage assessment requires its error")
-        if self.model_asset_sha256 and (
-                len(self.model_asset_sha256) != 64
-                or any(c not in "0123456789abcdef" for c in self.model_asset_sha256)):
+        if self.model_asset_sha256 and not is_sha256_digest(self.model_asset_sha256):
             raise ValueError("Invalid cleavage model asset SHA-256")
         if self.raw_residue_scores:
             scores = _residue_scores(self.raw_residue_scores, len(self.peptide.sequence))

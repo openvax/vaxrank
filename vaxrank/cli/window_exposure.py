@@ -11,6 +11,7 @@ from mhctools import format_vaccine_window_report, vaccine_window_rows
 from .companion import add_version_argument
 from ..core_exposure import assess_dataset_windows
 from ..epitope_dataset import EpitopeDataset
+from ..file_digest import file_sha256
 
 
 def main(argv=None):
@@ -33,9 +34,10 @@ def main(argv=None):
         request, result = assess_dataset_windows(
             dataset, json.loads(profile_data), min_length=args.min_length, max_length=args.max_length,
             n_term=args.n_term, c_term=args.c_term)
-        result['input_files'] = [{'path': path, 'sha256': hashlib.sha256(data).hexdigest()}
-                                 for path, data in ((args.profile, profile_data),
-                                     (args.input_epitopes, Path(args.input_epitopes).read_bytes()))]
+        result['input_files'] = [
+            {'path': args.profile, 'sha256': hashlib.sha256(profile_data).hexdigest()},
+            {'path': args.input_epitopes, 'sha256': file_sha256(args.input_epitopes)},
+        ]
         rows = vaccine_window_rows(result)
         report = '**Experimental research output.** Clinical safety and efficacy are not established.\n\n'
         report += format_vaccine_window_report(result)

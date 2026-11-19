@@ -1308,13 +1308,6 @@ def lens_source_antigen_vaccine_entry(
     return metadata
 
 
-def lens_fusion_vaccine_entry(metadata, selection, options=None, genome=None):
-    """Backward-compatible fusion wrapper around the typed source path."""
-    return lens_source_antigen_vaccine_entry(
-        metadata, selection, genome=genome, options=options
-    )
-
-
 def external_vaccine_peptide(variant, selection, context, mutant_start,
                              mutant_end, gene_name, transcripts, counts,
                              options, provenance=("", "", ""),

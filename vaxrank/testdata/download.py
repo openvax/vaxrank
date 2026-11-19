@@ -18,7 +18,6 @@ import errno
 import json
 import os
 from pathlib import Path
-import re
 import shutil
 import sys
 import tempfile
@@ -26,6 +25,8 @@ from urllib.parse import urlsplit
 
 from datacache import Cache, FileValidationError, get_cache_root, inspect_files
 from osteosarc import OsteosarcError
+
+from ..file_digest import is_sha256_digest
 
 
 DEFAULT_MANIFEST = None
@@ -73,7 +74,7 @@ def load_manifest(path=DEFAULT_MANIFEST, *, offline=False):
         if name in names:
             raise ValueError("Duplicate asset filename: " + name)
         names.add(name)
-        if not re.fullmatch("[0-9a-f]{64}", asset["sha256"]):
+        if not is_sha256_digest(asset["sha256"]):
             raise ValueError("Asset needs a lowercase SHA-256 digest")
         if type(asset["size_bytes"]) is not int or asset["size_bytes"] < 0:
             raise ValueError("Asset needs a nonnegative byte size")

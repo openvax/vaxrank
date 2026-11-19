@@ -2,13 +2,13 @@
 
 from dataclasses import dataclass, replace
 from functools import lru_cache
-import hashlib
 import json
 
 from isovar import validate_rna_feature_support
 from isovar.rna_feature_support import SCHEMA as ISOVAR_RNA_SCHEMA
 from serializable import DataclassSerializable
 
+from .file_digest import is_sha256_digest, text_sha256 as _sha256
 from .native_serialization import _json_loads
 
 
@@ -16,7 +16,6 @@ MEASUREMENT_REF_FIELD = "__vaxrank_rna_measurement__"
 PROFILE_REF_FIELD = "__vaxrank_sampling_profile__"
 UNION_REF_FIELD = "__vaxrank_shared_rna_union__"
 SHARED_RNA_UNION_SCHEMA = "vaxrank.shared_sequence_rna_union.v1"
-_HEX64 = frozenset("0123456789abcdef")
 
 RNA_BINDINGS = frozenset(
     "rna_" + name
@@ -28,14 +27,6 @@ RNA_BINDINGS = frozenset(
 
 def _canonical_json(value) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
-
-
-def _sha256(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
-def is_sha256_digest(value) -> bool:
-    return isinstance(value, str) and len(value) == 64 and set(value) <= _HEX64
 
 
 @lru_cache(maxsize=256)

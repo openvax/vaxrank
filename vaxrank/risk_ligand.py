@@ -18,6 +18,7 @@ from .amino_acids import (
     has_only_standard_amino_acids,
     validate_amino_acid_sequence,
 )
+from .file_digest import is_sha256_digest
 from .identifiers import normalize_ensembl_gene_id, normalize_mhc_allele
 from .prediction_input import (
     prediction_integer, prediction_row_fields,
@@ -143,7 +144,7 @@ class RiskProteinSequenceSet(DataclassSerializable):
             self.hpa_source_sha256,
             self.cta_unfiltered_gene_ids_sha256,
         ):
-            if len(digest) != 64:
+            if not is_sha256_digest(digest):
                 raise ValueError("Risk protein provenance requires SHA-256 digests")
         proteins = tuple(sorted(self.proteins, key=lambda protein: (
             protein.gene_id,
@@ -262,7 +263,7 @@ class RiskLigandSource(DataclassSerializable):
     tissue_evidence: tuple[TissueRiskEvidence, ...]
 
     def __post_init__(self):
-        if not self.source_sequence_name or len(self.protein_sequence_sha256) != 64:
+        if not self.source_sequence_name or not is_sha256_digest(self.protein_sequence_sha256):
             raise ValueError("Risk ligand source requires protein sequence identity")
         object.__setattr__(
             self, "gene_id", normalize_ensembl_gene_id(self.gene_id)
@@ -401,7 +402,7 @@ class RiskLigandIndexProvenance(DataclassSerializable):
             self.cta_unfiltered_gene_ids_sha256,
             self.cache_identity_sha256,
         ):
-            if len(digest) != 64:
+            if not is_sha256_digest(digest):
                 raise ValueError("Risk ligand provenance requires SHA-256 digests")
 
 

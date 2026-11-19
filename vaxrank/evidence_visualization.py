@@ -1,7 +1,6 @@
 """Publication-ready comparison of DNA, short-read, and long-read evidence."""
 
 from datetime import datetime, timezone
-from hashlib import sha256
 from html import escape
 import json
 from pathlib import Path
@@ -9,6 +8,7 @@ import re
 import shutil
 import tempfile
 
+from .file_digest import file_sha256
 from .mutation_visualization import _slug, _write_pdf, _write_png
 from .version import __version__
 
@@ -208,7 +208,7 @@ def generate_evidence_figures(
             "created_utc": timestamp,
             "vaxrank_version": __version__,
             "source_json": str(input_json),
-            "source_json_sha256": sha256(input_json.read_bytes()).hexdigest(),
+            "source_json_sha256": file_sha256(input_json),
             "formats": list(formats),
             "png_scale": png_scale if "png" in formats else None,
             "png_dimensions": ({"width": round(1200 * png_scale),

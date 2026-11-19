@@ -21,9 +21,10 @@ from serializable import DataclassSerializable
 
 from .amino_acids import validate_amino_acid_sequence
 from .antigen_origin import AntigenOrigin, CodingReference, VariantOrigin
+from .file_digest import is_sha256_digest
 from .identifiers import normalize_ensembl_gene_id
 from .normal_observations import MatchedNormalObservation, validate_normal_observations
-from .rna_support import RNAFeatureEvidence, is_sha256_digest, validate_rna_support, slice_rna_support
+from .rna_support import RNAFeatureEvidence, validate_rna_support, slice_rna_support
 
 
 ANTIGEN_KIND_MUTATION = "mutation"

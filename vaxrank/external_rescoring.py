@@ -20,6 +20,7 @@ from .epitope_io import (
 )
 from .external_report import ExternalRecord
 from .epitope_dataset import EpitopeDataset, read_epitope_report
+from .file_digest import file_sha256
 from .input_scope import (
     InputProvenance, SHARED_FIELDS, SPECIES_FIELDS, combine_scopes, normalize_alleles, provenance_columns,
     read_input_manifest, report_declarations, resolve_input_genome, scope_from_mapping, scope_dict,
@@ -28,8 +29,8 @@ from .input_scope import (
 
 
 def _exacto_identity(path, options):
-    contents = {'table': hashlib.sha256(Path(path).read_bytes()).hexdigest()}
-    contents.update({name: hashlib.sha256(Path(options[name]).read_bytes()).hexdigest()
+    contents = {'table': file_sha256(path)}
+    contents.update({name: file_sha256(options[name])
                      for name in ('primary_structures', 'transcript_read_support') if name in options})
     return 'exacto:' + hashlib.sha256(json.dumps(contents, sort_keys=True).encode()).hexdigest()
 
@@ -534,8 +535,7 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
     for input_index, ((fmt, path), declarations) in enumerate(zip(inputs, scopes)):
         if fmt not in INPUT_FORMATS:
             raise ValueError("Unsupported external format: %s" % fmt)
-        content = Path(path).read_bytes()
-        content_sha256 = hashlib.sha256(content).hexdigest()
+        content_sha256 = file_sha256(path)
         content_id = (_exacto_identity(path, declarations.get('exacto', {}))
                       if fmt == 'exacto' else fmt + ':' + content_sha256)
         if fmt == 'cta_expression':

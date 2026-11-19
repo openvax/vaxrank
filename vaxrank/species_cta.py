@@ -3,7 +3,6 @@
 from dataclasses import dataclass, replace
 import hashlib
 import json
-import re
 
 from serializable import DataclassSerializable
 
@@ -18,6 +17,7 @@ from .cta_expression import (
     CTAExpressionDecision, CTAExpressionInput, CTAExpressionResult,
     CTATargetExclusionPolicy, _expression_rows,
 )
+from .file_digest import file_sha256, is_sha256_digest
 from .vaccine_antigen import (
     AminoAcidInterval, TargetableMask, TumorSpecificityAttestation,
     TumorSpecificityEvidence, VaccineAntigen,
@@ -54,7 +54,7 @@ class SpeciesCTAExpressionDecision(CTAExpressionDecision):
         super().__post_init__()
         if bool(self.protein_id) != bool(self.protein_sequence_sha256):
             raise ValueError('Species CTA protein selection requires its sequence checksum')
-        if self.protein_id and not re.fullmatch('[0-9a-f]{64}', self.protein_sequence_sha256):
+        if self.protein_id and not is_sha256_digest(self.protein_sequence_sha256):
             raise ValueError('Species CTA protein selection requires a SHA-256')
         if (bool(self.unsupported_amino_acids) != (self.status == 'unsupported_protein_sequence')
                 or (self.unsupported_amino_acids and (not self.protein_id
@@ -124,7 +124,7 @@ class SpeciesCTAExpressionResult(CTAExpressionResult):
                 or reference['annotation_source'] != self.annotation_name
                 or reference['annotation_release'] != self.annotation_version):
             raise ValueError('Species CTA result and evidence annotation disagree')
-        if not re.fullmatch('[0-9a-f]{64}', self.host_reference_sha256):
+        if not is_sha256_digest(self.host_reference_sha256):
             raise ValueError('Species CTA result requires its host reference identity')
         by_gene = _unique_candidates(candidates)
         for decision in self.decisions:
@@ -269,7 +269,6 @@ def admit_species_cta_expression(path, *, input_contract, admission_policy, host
                                  exclusion_policy=None, overrides=None, evidence_snapshot=None,
                                  restriction_policy=None, restriction_evidence=None):
     """Use mapped host sequences and retain all OncoRef evidence, including limits."""
-    from pathlib import Path
     import pandas as pd
     from oncoref.species_antigens import cta_snapshot
 
@@ -292,7 +291,7 @@ def admit_species_cta_expression(path, *, input_contract, admission_policy, host
     input_contract = SpeciesCTAExpressionInput(**{**input_contract.to_dict(), 'namespace': namespace})
     exclusions = exclusion_policy or CTATargetExclusionPolicy((), ())
     overrides = overrides or {}
-    fingerprint = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    fingerprint = file_sha256(path)
     rows = _expression_rows(path, input_contract, normalize=lambda value, level: feature_id(value, level, namespace))
     by_gene = _unique_candidates(candidates)
     ambiguous = {gid for c in candidates if c['mapping']['status'] != 'unique'
@@ -399,7 +398,7 @@ def admit_species_cta_expression(path, *, input_contract, admission_policy, host
                                  transcript_id=occurrence.transcript_id, assessment=assessment))
     if set(overrides) != used_overrides:
         raise ValueError('CTA overrides do not match resolved expression targets: ' + ', '.join(sorted(set(overrides) - used_overrides)))
-    if fingerprint != hashlib.sha256(Path(path).read_bytes()).hexdigest():
+    if fingerprint != file_sha256(path):
         raise ValueError('Expression input changed during admission')
     return SpeciesCTAExpressionResult(
         input_contract, admission_policy, exclusions, fingerprint,

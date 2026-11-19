@@ -25,7 +25,7 @@ from typing import Optional
 import pandas as pd
 from serializable import DataclassSerializable
 
-from .file_digest import file_sha256
+from .file_digest import file_sha256, is_sha256_digest
 from .identifiers import normalize_ensembl_gene_id
 
 DEFAULT_HPA_LEVELS = ("High", "Medium")
@@ -94,7 +94,7 @@ class HPAReferenceProvenance(DataclassSerializable):
     verification_status: str
 
     def __post_init__(self):
-        if len(self.source_sha256) != 64:
+        if not is_sha256_digest(self.source_sha256):
             raise ValueError("HPA provenance requires a SHA-256 digest")
         if self.source_bytes <= 0:
             raise ValueError("HPA provenance requires a non-empty source artifact")
@@ -173,7 +173,7 @@ class TissueRiskAssessment(DataclassSerializable):
         ids = [protein.gene_id for protein in proteins]
         if len(ids) != len(set(ids)):
             raise ValueError("Tissue-risk assessment has duplicate source genes")
-        if len(self.cta_unfiltered_gene_ids_sha256) != 64:
+        if not is_sha256_digest(self.cta_unfiltered_gene_ids_sha256):
             raise ValueError("CTA universe provenance requires a SHA-256 digest")
         if self.cta_unfiltered_gene_count <= 0:
             raise ValueError("CTA universe provenance cannot be empty")

@@ -4,8 +4,8 @@ from dataclasses import replace
 from collections import defaultdict
 import hashlib
 import math
-from pathlib import Path
 
+from .file_digest import file_sha256
 from .vaccine_antigen import SelfReferenceMatch, SelfReferenceSource
 
 
@@ -102,7 +102,7 @@ def admit_expression(path, contract, policy, bundle, scope):
                 assessment=assessment, gene_identity=dict(canonical_gene_id=occurrence['gene_id'],
                     source_gene_id=occurrence['gene_id'], status='verified_sequence_bundle')))
     return CTAExpressionResult(contract, policy, CTATargetExclusionPolicy((), ()),
-        hashlib.sha256(Path(path).read_bytes()).hexdigest(), reference.reference_assembly,
+        file_sha256(path), reference.reference_assembly,
         annotation_name, annotation_version, tuple(decisions), target_reference=dict(
             bundle_id=bundle.identity, manifest=bundle.manifest, coverage=bundle.coverage))
 

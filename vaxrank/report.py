@@ -20,10 +20,8 @@ import os
 import sys
 import tempfile
 
-from astropy.io import ascii as asc
 import jinja2
 import pandas as pd
-import roman
 from mhctools.pred import Prediction
 from varcode import Variant, load_vcf
 
@@ -73,6 +71,54 @@ def display_epitope_value(value):
 
 
 JINJA_ENVIRONMENT.filters["display_epitope_value"] = display_epitope_value
+
+_ROMAN_NUMERALS = (
+    (1000, "M"), (900, "CM"), (500, "D"), (400, "CD"),
+    (100, "C"), (90, "XC"), (50, "L"), (40, "XL"),
+    (10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I"),
+)
+
+
+def _to_roman(n):
+    """Convert an integer in ``1..3999`` to an uppercase Roman numeral."""
+    if not isinstance(n, int) or isinstance(n, bool) or not 0 < n < 4000:
+        raise ValueError(f"number out of range (must be 1..3999): {n!r}")
+    parts = []
+    for value, numeral in _ROMAN_NUMERALS:
+        count, n = divmod(n, value)
+        if count:
+            parts.append(numeral * count)
+    return "".join(parts)
+
+
+def _format_fixed_width_table(rows):
+    """Format dict rows as a right-aligned two-line fixed-width ASCII table."""
+    if not rows:
+        return "\n\n"
+    columns = []
+    seen = set()
+    for row in rows:
+        for key in row:
+            if key not in seen:
+                seen.add(key)
+                columns.append(key)
+    headers = [f"col{i}" if col == "" else str(col) for i, col in enumerate(columns)]
+    formatted_rows = [
+        ["" if col not in row else str(row[col]) for col in columns]
+        for row in rows
+    ]
+    widths = [
+        max(len(header), *(len(row[i]) for row in formatted_rows))
+        for i, header in enumerate(headers)
+    ]
+    sep = "   "
+    lines = [
+        sep.join(header.rjust(w) for header, w in zip(headers, widths)),
+        sep.join("-" * w for w in widths),
+    ]
+    for row in formatted_rows:
+        lines.append(sep.join(cell.rjust(w) for cell, w in zip(row, widths)))
+    return "\n".join(lines) + "\n"
 
 
 @dataclass(frozen=True)
@@ -545,7 +591,7 @@ class TemplateDataCreator(object):
         aa_after_mutation = amino_acids[mutation_end:]
 
         header_display_data = {
-            'num': roman.toRoman(rank + 1).lower(),
+            'num': _to_roman(rank + 1).lower(),
             'aa_before_mutation': aa_before_mutation,
             'aa_mutant': aa_mutant,
             'aa_after_mutation': aa_after_mutation,
@@ -1198,21 +1244,14 @@ class TemplateDataCreator(object):
                         wt_epitopes.append(
                             {key: epitope_data[key] for key in key_list})
 
-                # hack: make a nicely-formatted fixed width table for epitopes, used in ASCII report
-                with tempfile.TemporaryFile(mode='r+') as temp:
-                    display_rows = [{key: display_epitope_value(value)
-                                     for key, value in row.items()} for row in epitopes]
-                    asc.write(display_rows, temp, format='fixed_width_two_line', delimiter_pad=' ')
-                    temp.seek(0)
-                    ascii_epitopes = temp.read()
+                display_rows = [{key: display_epitope_value(value)
+                                 for key, value in row.items()} for row in epitopes]
+                ascii_epitopes = _format_fixed_width_table(display_rows)
 
-                ascii_wt_epitopes = None
-                if len(wt_epitopes) > 0:
-                    with tempfile.TemporaryFile(mode='r+') as temp:
-                        asc.write(
-                            wt_epitopes, temp, format='fixed_width_two_line', delimiter_pad=' ')
-                        temp.seek(0)
-                        ascii_wt_epitopes = temp.read()
+                ascii_wt_epitopes = (
+                    _format_fixed_width_table(wt_epitopes)
+                    if len(wt_epitopes) > 0 else None
+                )
                 peptide_dict = {
                     'header_display_data': header_display_data,
                     'peptide_data': peptide_data,

@@ -8,7 +8,7 @@ import tempfile
 
 from pyensembl import Genome
 
-from .file_digest import file_sha256
+from .file_digest import file_sha256, is_sha256_digest
 from .native_serialization import _json_loads
 
 
@@ -168,9 +168,7 @@ class NativeReferences:
             if not isinstance(resource, dict) or set(resource) != {"field", "index", "path", "sha256", "size"}:
                 raise ValueError("Malformed native reference resource")
             digest, size = resource["sha256"], resource["size"]
-            if (not isinstance(digest, str) or len(digest) != 64
-                    or any(c not in "0123456789abcdef" for c in digest)
-                    or type(size) is not int or size < 0):
+            if not is_sha256_digest(digest) or type(size) is not int or size < 0:
                 raise ValueError("Invalid native reference checksum or size")
             field, index = resource["field"], resource["index"]
             if field not in ({"gtf_path_or_url", "genome_fasta_path_or_url",

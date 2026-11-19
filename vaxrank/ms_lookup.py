@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from .file_digest import file_sha256
 from .ms_evidence import _texts
 
 
@@ -74,7 +75,7 @@ def verified_package(directory, manifest_digest):
     from hitlist.mhc_evidence import verify_mhc_evidence_package
     path = Path(directory)
     verified = verify_mhc_evidence_package(path)
-    if hashlib.sha256((path / 'manifest.json').read_bytes()).hexdigest() != manifest_digest:
+    if file_sha256(path / 'manifest.json') != manifest_digest:
         raise ValueError('Hitlist package changed during verification')
     return verified
 
@@ -86,8 +87,7 @@ def capture_package(directory, sequences, alleles):
     from .allele_validation import parse_prediction_allele
 
     directory = Path(directory).resolve()
-    manifest_bytes = (directory / 'manifest.json').read_bytes()
-    digest = hashlib.sha256(manifest_bytes).hexdigest()
+    digest = file_sha256(directory / 'manifest.json')
     manifest = verified_package(str(directory), digest)
     path = directory / 'native' / 'observations.parquet'
     before = path.stat()
@@ -100,8 +100,8 @@ def capture_package(directory, sequences, alleles):
     # modality/outcome contract. Retain every field and the package identity.
     after = path.stat()
     if (before.st_ino, before.st_mtime_ns, before.st_size) != (
-            after.st_ino, after.st_mtime_ns, after.st_size) or manifest_bytes != (
-                directory / 'manifest.json').read_bytes():
+            after.st_ino, after.st_mtime_ns, after.st_size) or (
+                file_sha256(directory / 'manifest.json') != digest):
         raise ValueError('Hitlist package changed during capture')
     return dict(schema_version=1, hitlist_version=version('hitlist'), status='captured',
         query=dict(peptides=peptides, mhc_species=species), data_directory=str(directory),
