@@ -83,6 +83,32 @@ records sharing that exact candidate sequence within each
   attribution limitations, and native exports deduplicate shared union records
   in-file.
 
+## Longitudinal support and matched-normal evidence
+
+When multi-library, timepoint-scoped, or CTA-admission inputs are supplied,
+reports include a consolidated **Longitudinal and library support** matrix
+without sidecars (omitted automatically on single-BAM OpenVax 1 VCF runs):
+
+- Observed below-threshold CTA measurements retain their value, unit,
+  measurement level (`gene` vs. `transcript`), threshold, evidence source/version,
+  and input SHA-256 receipt, explicitly distinguishing `missing` values from
+  `[measured zero]`.
+- Non-CTA targets distinguish `exact window` RNA support from `allele/event span`,
+  `different ranked window` (noting that absence from ranked windows does not
+  imply absent RNA), `no ranked window`, and `unmeasured` libraries.
+- Dependent pipelines on the same library (`sample_id` / `library_id`) share one
+  column and are never summed, and selected targets qualified only at earlier
+  timepoints are flagged explicitly.
+
+`VaccineAntigen.normal_observations` and Isovar antigen imports
+(`normal_observations`, `candidate_normal_observations`,
+`normal_conflict_policy: "hold_for_review" | "flag_for_review"`) record
+structured `MatchedNormalObservation` rows separately for normal `DNA` and
+normal/blood `RNA`. Repeated pipelines on one normal library remain grouped
+without summing counts, and observed normal alternate support conflicts with an
+unqualified somatic assumption without labelling alternate reads germline or
+contamination.
+
 ## Evidence in reports
 
 Full candidate details (`--report-candidate-details`) distinguish **construct

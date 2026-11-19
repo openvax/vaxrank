@@ -22,6 +22,7 @@ from serializable import DataclassSerializable
 from .amino_acids import validate_amino_acid_sequence
 from .antigen_origin import AntigenOrigin, CodingReference, VariantOrigin
 from .identifiers import normalize_ensembl_gene_id
+from .normal_observations import MatchedNormalObservation, validate_normal_observations
 from .rna_support import RNAFeatureEvidence, is_sha256_digest, validate_rna_support, slice_rna_support
 
 
@@ -294,10 +295,14 @@ class VaccineAntigen(DataclassSerializable):
     source_protein_completeness: str = SOURCE_PROTEIN_UNASSESSED
     source_protein_sha256: str = ""
     source_protein_length: Optional[int] = None
+    normal_observations: tuple[MatchedNormalObservation, ...] = field(default_factory=tuple)
 
     def __post_init__(self):
         normalized = next((kind for kind in ANTIGEN_KINDS if kind.lower() == self.kind.lower()), self.kind)
         object.__setattr__(self, 'kind', normalized)
+        object.__setattr__(
+            self, "normal_observations", validate_normal_observations(self.normal_observations)
+        )
         if self.origin is not None and not isinstance(self.origin, AntigenOrigin):
             raise TypeError('Antigen origin must be an AntigenOrigin record')
         if type(self.source_protein_offset) is not int or self.source_protein_offset < 0:
@@ -400,6 +405,7 @@ class VaccineAntigen(DataclassSerializable):
             source_protein_completeness=self.source_protein_completeness,
             source_protein_sha256=self.source_protein_sha256,
             source_protein_length=self.source_protein_length,
+            normal_observations=self.normal_observations,
         )
 
     @classmethod

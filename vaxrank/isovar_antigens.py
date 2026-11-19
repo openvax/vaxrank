@@ -349,8 +349,19 @@ def _attestation(value):
     return _typed_record(TumorSpecificityAttestation, value)
 
 
+def _normal_records(values):
+    from .normal_observations import MatchedNormalObservation, validate_normal_observations
+    parsed = [
+        r if isinstance(r, MatchedNormalObservation) else _typed_record(MatchedNormalObservation, r)
+        for r in (values or ())
+    ]
+    return validate_normal_observations(parsed)
+
+
 def antigens_from_isovar(result, *, scope=None, species='', tumor_specificity=None,
-                         candidate_attestations=None, options=None, somatic=False):
+                         candidate_attestations=None, options=None, somatic=False,
+                         normal_observations=(), candidate_normal_observations=None,
+                         normal_conflict_policy='hold_for_review'):
     """Adapt all supported Isovar hypotheses into one native antigen dataset.
 
     ``tumor_specificity`` is an explicit source-wide assertion; use
@@ -392,15 +403,33 @@ def antigens_from_isovar(result, *, scope=None, species='', tumor_specificity=No
                   if result['schema'] == 'isovar.sv_rna_candidates.v5' else _sv_export(result)
                   if family == 'sv' else _fusion(result) if family == 'fusion' else _proteins(result)
                   if family == 'protein_hypotheses' else _coding(result, family))
+    from .normal_observations import (
+        NORMAL_CONFLICT_POLICIES,
+        adjudicate_somatic_attestation_with_normal,
+        summarize_normal_assessment,
+    )
+    if normal_conflict_policy not in NORMAL_CONFLICT_POLICIES:
+        raise ValueError(
+            f"Unknown normal_conflict_policy {normal_conflict_policy!r}; "
+            f"expected one of {sorted(NORMAL_CONFLICT_POLICIES)}"
+        )
     antigens, decisions = {}, []
     candidate_attestations = dict(candidate_attestations or {})
     default_attestation = _attestation(tumor_specificity)
+    default_normals = _normal_records(normal_observations)
+    candidate_normals = {
+        k: _normal_records(v) for k, v in (candidate_normal_observations or {}).items()
+    }
     policy = options.admission
     for candidate in candidates:
         key = candidate.identifier
         if not isinstance(key, str) or not key or key in antigens:
             raise ValueError('Isovar candidate identifiers must be nonempty and unique')
         requested = _attestation(candidate_attestations.get(key, default_attestation))
+        normals = candidate_normals.get(key, default_normals)
+        adjudicated = adjudicate_somatic_attestation_with_normal(
+            requested, normals, conflict_policy=normal_conflict_policy
+        )
         reasons = list(candidate.reasons)
         if not candidate.intervals:
             reasons.append('no_targetable_amino_acid_change')
@@ -414,10 +443,17 @@ def antigens_from_isovar(result, *, scope=None, species='', tumor_specificity=No
             reasons.append('partial_coding_candidate')
         if candidate.ambiguous and not policy.allow_ambiguous:
             reasons.append('ambiguous_coding_candidate')
-        attestation = requested
+        attestation = adjudicated
         if reasons:
-            attestation = replace(requested, status='held_out', rationale_code='isovar:' + ','.join(reasons),
-                                  requires_review=True, override_reason='')
+            prefix = (
+                adjudicated.rationale_code + ';'
+                if adjudicated.rationale_code and adjudicated.rationale_code != requested.rationale_code
+                else ''
+            )
+            attestation = replace(
+                adjudicated, status='held_out', rationale_code=prefix + 'isovar:' + ','.join(reasons),
+                requires_review=True, override_reason='',
+            )
         names = tuple(sorted({s for s in candidate.gene_names if s}))
         genes = tuple(sorted({s for s in candidate.gene_ids if s}))
         if species and candidate.species and canonical_species(species) != canonical_species(candidate.species):
@@ -431,18 +467,23 @@ def antigens_from_isovar(result, *, scope=None, species='', tumor_specificity=No
             protein_ids=tuple(sorted({s for s in candidate.proteins if s})), species=candidate.species or species,
             source_identifier=key,
             source_protein_completeness='partial' if candidate.partial else 'complete',
+            normal_observations=normals,
             source_metadata=(('isovar_evidence_id', identity), ('isovar_family', family),
                 ('gene_ids', _json(genes)), ('isovar_candidate', _json(dict(
                     candidate.evidence, protein_sequence=candidate.protein,
                     partial_coding_candidate=candidate.partial,
                     ambiguous_coding_candidate=candidate.ambiguous)))))
         decision_reasons = list(reasons)
+        if normals and requested.admits_construct and not adjudicated.admits_construct:
+            decision_reasons.extend(summarize_normal_assessment(requested, normals)['conflict_reasons'])
         if not requested.admits_construct:
             decision_reasons.append(requested.rationale_code or 'missing_tumor_specificity')
         decisions.append(dict(candidate_id=key, status=attestation.status, reasons=decision_reasons,
                               requested_tumor_specificity=asdict(requested)))
     if set(candidate_attestations) - set(antigens):
         raise ValueError('Attestations name unknown Isovar candidates')
+    if set(candidate_normals) - set(antigens):
+        raise ValueError('Normal observations name unknown Isovar candidates')
     evidence = dict(isovar_result=result, family=family, options=msgspec.to_builtins(options), decisions=decisions)
     return AntigenDataset(antigens, scope=scope, source_evidence={identity: evidence})
 

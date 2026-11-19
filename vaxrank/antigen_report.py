@@ -231,6 +231,53 @@ def shared_sequence_rna_sections(peptides):
     return sections
 
 
+def normal_observation_sections(antigen):
+    """Render recorded matched-normal DNA and blood/normal RNA observations."""
+    observations = getattr(antigen, "normal_observations", ()) or ()
+    if not observations:
+        return []
+    from .normal_observations import NORMAL_ALT_INTERPRETATION_NOTE, summarize_normal_assessment
+    summary = summarize_normal_assessment(antigen.tumor_specificity, observations)
+    rows = [
+        ("Asserted somatic origin", summary["asserts_somatic"]),
+        ("Matched-normal DNA state", summary["normal_dna_state"]),
+        ("Normal / blood RNA state", summary["normal_rna_state"]),
+        ("Conflict with somatic assumption", summary["conflict"]),
+        ("Conflict reasons", summary["conflict_reasons"]),
+        ("Review triggers", summary["review_reasons"]),
+    ]
+    for lib in summary["libraries"]:
+        pipeline_parts = []
+        for run in lib["pipelines"]:
+            ver = (" " + run["pipeline_version"]) if run["pipeline_version"] else ""
+            counts = (
+                "unmeasured"
+                if run["depth"] is None or run["alt_count"] is None
+                else "%d/%d alt (%s)" % (run["alt_count"], run["depth"], run["coverage_adequacy"])
+            )
+            pipeline_parts.append("%s%s: %s" % (run["pipeline"], ver, counts))
+        label = "%s library %s (%s)" % (
+            lib["assay"], lib["library_id"], ", ".join(lib["tissues"])
+        )
+        detail = "state=%s, %d dependent pipeline(s)%s — %s" % (
+            lib["summary_state"],
+            lib["dependent_pipeline_count"],
+            (
+                ", max observed alt=%d" % lib["max_observed_alt"]
+                if lib["max_observed_alt"] is not None
+                else ""
+            ),
+            "; ".join(pipeline_parts),
+        )
+        rows.append((label, detail))
+    note = (
+        "Dependent pipelines on one library remain grouped and are never summed. "
+        + (NORMAL_ALT_INTERPRETATION_NOTE if summary["conflict"] else
+           "Normal DNA and normal/blood RNA observations remain separate by assay.")
+    )
+    return [_section("Matched-normal and blood observations", rows, note)]
+
+
 def antigen_evidence_sections(antigen, source_evidence=None):
     """Render every recorded attestation and source context without merging counts.
 
@@ -239,7 +286,7 @@ def antigen_evidence_sections(antigen, source_evidence=None):
     are retained separately; an ambiguous origin never supplies another origin's
     reference model or sample evidence.
     """
-    sections = rna_support_sections(antigen)
+    sections = rna_support_sections(antigen) + normal_observation_sections(antigen)
     attestation = antigen.tumor_specificity
     for index, record in enumerate(attestation.evidence_records, 1):
         rows = [('Evidence type', record.evidence_kind), ('Source', record.evidence_source),

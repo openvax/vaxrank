@@ -186,6 +186,8 @@ def _canonical_native(value):
         empty_tuple = dict(__class__=dict(__module__='builtins', __name__='tuple'), __value__=[])
         if result.get('rna_support') == empty_tuple:
             result.pop('rna_support')
+        if result.get('normal_observations') == empty_tuple:
+            result.pop('normal_observations')
     prediction_tuple = (metadata == dict(__module__='builtins', __name__='tuple')
                         and result['__value__'] and all(
                             isinstance(item, dict) and item.get('__class__') ==
