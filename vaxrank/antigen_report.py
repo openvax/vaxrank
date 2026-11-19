@@ -170,6 +170,67 @@ def rna_support_sections(antigen):
     return sections
 
 
+def shared_sequence_rna_sections(peptides):
+    """Render recorded within-library shared-sequence RNA set unions."""
+    seen = set()
+    records = []
+    for peptide in peptides:
+        for record in getattr(peptide, "shared_sequence_rna_support", ()) or ():
+            union_id = record.get("union_id")
+            if union_id not in seen:
+                seen.add(union_id)
+                records.append(record)
+    sections = []
+    for index, record in enumerate(records, 1):
+        values = record["values"]
+        rows = [
+            ("Candidate window", record["sequence"]),
+            ("Sample / library", record["evidence_scope"]),
+            ("Fragment rule", record["fragment_mode"]),
+            ("Union reads", values["reads"]),
+            ("Union fragments", values["fragments"]),
+            ("Joint paired-mate-only fragments", len(record["joint_only_fragment_ids"])),
+            ("Naive sum of source reads", values["sum_of_source_reads"]),
+            ("Naive sum of source fragments", values["sum_of_source_fragments"]),
+            ("Library reads denominator", values["library_reads"]),
+            ("Library fragments denominator", values["library_fragments"]),
+            ("Union reads per million", values["reads_per_million"]),
+            ("Union fragments per million", values["fragments_per_million"]),
+            ("Read evidence set identity", record["evidence_set_id"]),
+            ("Fragment evidence set identity", record["fragment_evidence_set_id"]),
+            ("Shared union identity", record["union_id"]),
+            ("Attribution limitations", record["attribution_limitations"]),
+        ]
+        rows += [
+            (name.replace("_", " ") + " — unavailable", reason)
+            for name, reason in record["unavailable"].items()
+        ]
+        for member_index, member in enumerate(record["members"], 1):
+            label = member.get("gene_name") or member.get("gene_id") or member.get("source_identifier") or (
+                "Origin %d" % member_index
+            )
+            detail = (
+                "%d reads (%d shared, %d exclusive), %d fragments (%d shared, %d exclusive)"
+                % (
+                    member["reads"],
+                    member["reads_shared_with_other_sources"],
+                    member["reads_exclusive_to_source"],
+                    member["fragments"],
+                    member["fragments_shared_with_other_sources"],
+                    member["fragments_exclusive_to_source"],
+                )
+            )
+            rows.append(("Origin %d (%s)" % (member_index, label), detail))
+        sections.append(_section(
+            "Shared-sequence RNA union %d" % index,
+            rows,
+            "Within-library Isovar set union across origins encoding this exact candidate sequence. "
+            "Distinct libraries remain separate, shared reads/fragments are counted once, and "
+            "effective-length-normalized group densities remain undefined.",
+        ))
+    return sections
+
+
 def antigen_evidence_sections(antigen, source_evidence=None):
     """Render every recorded attestation and source context without merging counts.
 

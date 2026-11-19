@@ -117,6 +117,7 @@ def test_pinned_predictions_are_complete_real_model_outputs():
     # and category allocation. Do not rewrite its producer configuration.
     assert expected_vaccine_config.pop("max_windows_per_antigen_source") == 3
     assert expected_vaccine_config.pop("antigen_allocation") is None
+    assert expected_vaccine_config.pop("shared_sequence_rna_policy") == "source"
     # The pinned manifest predates the rename of the LENS source gate.
     expected_vaccine_config["included_antigen_sources"] = (
         expected_vaccine_config.pop("included_lens_sources"))

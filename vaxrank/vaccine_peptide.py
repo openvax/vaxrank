@@ -118,6 +118,7 @@ class VaccinePeptide(DataclassSerializable):
     ranking_rules: Optional[tuple] = None
     antigen: Optional[VaccineAntigen] = None
     window_selection_audit: dict = field(default_factory=dict)
+    shared_sequence_rna_support: tuple = field(default_factory=tuple)
 
     # Derived attributes computed in __post_init__ — not part of the
     # serialized form. `init=False` keeps them out of the generated
@@ -177,6 +178,7 @@ class VaccinePeptide(DataclassSerializable):
             self.manufacturability_rules = tuple(self.manufacturability_rules)
         if self.ranking_rules is not None:
             self.ranking_rules = tuple(self.ranking_rules)
+        self.shared_sequence_rna_support = tuple(self.shared_sequence_rna_support or ())
 
         # Resolve the score expression: user-supplied or the canonical
         # default. Pre-parse once so syntax errors surface at config /
@@ -410,4 +412,6 @@ class VaccinePeptide(DataclassSerializable):
             d["ranking_rules"] = list(self.ranking_rules)
         if self.window_selection_audit:
             d['window_selection_audit'] = self.window_selection_audit
+        if self.shared_sequence_rna_support:
+            d['shared_sequence_rna_support'] = list(self.shared_sequence_rna_support)
         return d

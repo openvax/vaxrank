@@ -135,7 +135,9 @@ def _source_graph(ranked, options):
         emitted_antigen_names=emitted_names(p),
         mutation_fragment=p.mutant_protein_fragment,
         epitopes=tuple(p.epitopes), target_epitope_score=p.target_epitope_score,
-        window_selection=p.window_selection_audit) for p in peptides])
+        window_selection=p.window_selection_audit,
+        **({'shared_sequence_rna_support': list(p.shared_sequence_rna_support)}
+           if p.shared_sequence_rna_support else {})) for p in peptides])
         for source, peptides in ranked]
 
 
@@ -249,6 +251,8 @@ def _assembly_identity(args, ranked, options, context):
         for key in ('variant_types', 'variant_contexts'):
             if not vaccine['antigen_allocation'].get(key):
                 vaccine['antigen_allocation'].pop(key, None)
+    if vaccine.get('shared_sequence_rna_policy', 'source') == 'source':
+        vaccine.pop('shared_sequence_rna_policy', None)
     # The LENS source gate was recorded as ``included_antigen_sources`` in
     # every design saved before it was renamed. Hash it under that spelling
     # so those designs keep their identity and replay offline.

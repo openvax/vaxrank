@@ -437,6 +437,7 @@ _VACCINE_CONFIG_MAPPING: list[tuple[str, str]] = [
     ("vaccine_peptides.included_lens_sources", "included_lens_sources"),
     ("vaccine_peptides.require_target_epitopes_in_variant",
      "require_target_epitopes_in_variant"),
+    ("vaccine_peptides.shared_sequence_rna_policy", "shared_sequence_rna_policy"),
 ]
 
 

@@ -903,6 +903,21 @@ class ExternalConstructOptions:
     vaccine_config: object = None
     manufacturability_config: object = None
 
+    def __post_init__(self):
+        if self.vaccine_config is not None:
+            if self.combined_score_expr is None:
+                object.__setattr__(
+                    self, "combined_score_expr", self.vaccine_config.combined_score_expr
+                )
+            if self.ranking_rules is None and self.vaccine_config.ranking_rules is not None:
+                object.__setattr__(self, "ranking_rules", self.vaccine_config.ranking_rules)
+            if self.num_target_epitopes_to_keep is None:
+                object.__setattr__(
+                    self,
+                    "num_target_epitopes_to_keep",
+                    self.vaccine_config.num_target_epitopes_to_keep,
+                )
+
     @classmethod
     def from_configs(cls, vaccine_config=None, manufacturability_config=None,
                      vaccine_peptide_length=None,

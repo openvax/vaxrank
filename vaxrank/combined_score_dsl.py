@@ -111,6 +111,11 @@ import logging
 import math
 
 from .rna_support import RNA_BINDINGS, rna_support_bindings, applicable_rna_support
+from .shared_sequence_rna import (
+    SHARED_RNA_BINDINGS,
+    SHARED_RNA_UNDEFINED_LENGTH_BINDINGS,
+    shared_sequence_rna_bindings,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -146,7 +151,7 @@ _FUNCTIONS = {
     'pow': pow,
 }
 
-SOURCE_AGNOSTIC_BINDINGS = RNA_BINDINGS | frozenset({
+SOURCE_AGNOSTIC_BINDINGS = RNA_BINDINGS | SHARED_RNA_BINDINGS | frozenset({
     "target_epitope_score",
     "self_epitope_score",
     "window_epitope_score",
@@ -257,6 +262,7 @@ def combined_score_bindings(vp):
     bindings['window_selection_factor'] = float(utility / vp.target_epitope_score
                                               if vp.target_epitope_score > 0 else 0.)
     bindings.update(rna_support_bindings(getattr(vp, "antigen", None)))
+    bindings.update(shared_sequence_rna_bindings(vp))
     frag = vp.mutant_protein_fragment
     if frag is None:
         return bindings
@@ -327,6 +333,32 @@ def evaluate_combined_score(expr_or_tree, vaccine_peptide):
                          "Supply one explicit feature/library measurement for this window, "
                          "with the required geometry and whole-library denominators; "
                          "choose longitudinal aggregation separately." % (sorted(missing_rna), count))
+    missing_shared = [
+        name for name in combined_score_binding_names(tree) & SHARED_RNA_BINDINGS
+        if bindings[name] is None
+    ]
+    if missing_shared:
+        undefined_length = sorted(set(missing_shared) & SHARED_RNA_UNDEFINED_LENGTH_BINDINGS)
+        if undefined_length:
+            raise ValueError(
+                "Unavailable RNA score bindings %s: shared_sequence_effective_length_undefined "
+                "(a within-library read-set union across alternative transcript paths does not "
+                "define a shared effective sampling length)." % undefined_length
+            )
+        shared_records = getattr(vaccine_peptide, "shared_sequence_rna_support", ()) or ()
+        if not shared_records:
+            raise ValueError(
+                "Unavailable RNA score bindings %s (0 shared-sequence union records; "
+                "opt in via shared_sequence_rna_policy='within_library_union' or "
+                "--shared-sequence-rna-policy within_library_union and supply applicable "
+                "RNAFeatureEvidence)." % sorted(missing_shared)
+            )
+        raise ValueError(
+            "Unavailable RNA score bindings %s (%d shared-sequence union scopes). "
+            "Supply a single library scope with required whole-library denominators; "
+            "choose longitudinal aggregation separately."
+            % (sorted(missing_shared), len(shared_records))
+        )
     namespace = dict(_FUNCTIONS)
     namespace.update(bindings)
     try:

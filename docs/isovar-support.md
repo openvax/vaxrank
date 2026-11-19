@@ -52,6 +52,37 @@ An older fragment without this field retains an unknown version. Historical
 fixture producer versions remain immutable and are never rewritten to the
 current installation.
 
+## Shared-sequence RNA set unions
+
+By default (`vaccine_peptides.shared_sequence_rna_policy: source`), each source
+gene or transcript is scored from its own `RNAFeatureEvidence` record, keeping
+`openvax-v1` and historical replay unchanged. When multiple origins encode the
+exact same candidate vaccine amino-acid window (for example paralogs or
+overlapping isoforms), adding per-origin counts can double-count shared reads
+and selecting one origin's count omits distinct reads supporting other origins.
+
+Setting `--shared-sequence-rna-policy within_library_union` (or
+`vaccine_peptides.shared_sequence_rna_policy: within_library_union` in YAML)
+computes `isovar.union_rna_support` across applicable `RNAFeatureEvidence`
+records sharing that exact candidate sequence within each
+`evidence_scope = (sample_id, source_id)`:
+
+- `rna_shared_reads`, `rna_shared_fragments`, `rna_shared_reads_per_million`,
+  and `rna_shared_fragments_per_million` bind in `combined_score_expr` when a
+  single library scope is active and Contributing measurements agree on
+  `fragment_mode` and whole-library denominators (`library_reads`,
+  `library_fragments`).
+- Individually spanning reads and paired-mate-only fragments remain distinct;
+  distinct libraries and timepoints are never pooled.
+- Group effective-length quantities (`rna_shared_effective_length_*`,
+  `rna_shared_*_per_effective_kb*`) remain unavailable
+  (`shared_sequence_effective_length_undefined`) because a read-set union across
+  alternative transcript paths has no shared effective sampling length.
+- Candidate and shared-product reports record the union counts, naive sum across
+  origins, per-origin shared/exclusive counts, `evidence_set_id`, and
+  attribution limitations, and native exports deduplicate shared union records
+  in-file.
+
 ## Evidence in reports
 
 Full candidate details (`--report-candidate-details`) distinguish **construct

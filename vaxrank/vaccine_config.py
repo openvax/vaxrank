@@ -171,8 +171,11 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     # independent epitope predictor.
     require_target_epitopes_in_variant: bool = True
     window_selection: Optional[dict] = None
+    shared_sequence_rna_policy: str = "source"
 
     def __post_init__(self):
+        from .shared_sequence_rna import validate_shared_sequence_rna_policy
+        validate_shared_sequence_rna_policy(self.shared_sequence_rna_policy)
         limit = self.max_windows_per_antigen_source
         if limit is not None and (type(limit) is not int or limit < 1):
             raise ValueError('max_windows_per_antigen_source must be a positive integer or None (legacy)')

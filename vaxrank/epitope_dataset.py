@@ -713,6 +713,12 @@ def dataset_ranking_result(report, epitopes, genome=None, options=None):
             continue
         identity = _object_json(antigen)
         groups.setdefault(identity, (antigen, []))[1].append(epitope)
+    shared_policy = (
+        options.vaccine_config.shared_sequence_rna_policy
+        if options.vaccine_config is not None
+        else 'source'
+    )
+    pending_entries = []
     for fragment, antigen, candidates in mutation_groups.values():
         vaccines = vaccine_peptides_from_epitopes(
             fragment.variant, fragment, candidates, epitope_config=dataset.config, antigen=antigen,
@@ -721,28 +727,63 @@ def dataset_ranking_result(report, epitopes, genome=None, options=None):
             num_target_epitopes_to_keep=(options.num_target_epitopes_to_keep
                                         if options.num_target_epitopes_to_keep is not None else 1000),
             manufacturability_config=options.manufacturability_config)
-        accumulator.add(ExternalVariantEntry(
+        pending_entries.append(ExternalVariantEntry(
             variant=fragment.variant, vaccine_peptide=vaccines[0] if vaccines else None,
             vaccine_peptides=tuple(vaccines),
             resolved_protein_context=True, has_rna_support=bool(fragment.n_rna_alt),
             dna_vaf=fragment.dna_vaf))
     options = source_options
-    for antigen, candidates in groups.values():
-        vaccine = VaccinePeptide(
-            antigen=antigen, epitopes=candidates,
-            num_target_epitopes_to_keep=options.num_target_epitopes_to_keep,
-            combined_score_expr=options.combined_score_expr,
-            ranking_rules=options.ranking_rules,
-            manufacturability_thresholds=options.manufacturability_thresholds,
-            manufacturability_rules=options.manufacturability_rules)
-        vaccines = [vaccine]
-        if options.vaccine_config is not None and options.vaccine_config.max_windows_per_antigen_source is not None:
-            # Window-scoped RNA is intentionally unavailable for the unsliced
-            # parent. Select concrete windows before ranking source contexts.
-            from .window_selection import optimize_antigen_windows
-            selected_windows = optimize_antigen_windows([(antigen, vaccines)], options.vaccine_config)
-            vaccines = selected_windows[0][1] if selected_windows else []
-        accumulator.add(ExternalVariantEntry(
+    raw_antigen_groups = [
+        (
+            antigen,
+            [
+                VaccinePeptide(
+                    antigen=antigen, epitopes=candidates,
+                    num_target_epitopes_to_keep=options.num_target_epitopes_to_keep,
+                    combined_score_expr=options.combined_score_expr,
+                    ranking_rules=options.ranking_rules,
+                    manufacturability_thresholds=options.manufacturability_thresholds,
+                    manufacturability_rules=options.manufacturability_rules,
+                )
+            ],
+        )
+        for antigen, candidates in groups.values()
+    ]
+    if (
+        options.vaccine_config is not None
+        and options.vaccine_config.max_windows_per_antigen_source is not None
+        and raw_antigen_groups
+    ):
+        # Window-scoped RNA is intentionally unavailable for the unsliced
+        # parent. Select concrete windows across all antigen sources together
+        # before ranking source contexts so within-library shared-sequence RNA
+        # unions observe all matching candidate windows.
+        from .window_selection import optimize_antigen_windows
+        selected_by_id = {
+            id(src): vps
+            for src, vps in optimize_antigen_windows(raw_antigen_groups, options.vaccine_config)
+        }
+        antigen_groups = [(antigen, selected_by_id.get(id(antigen), [])) for antigen, _ in raw_antigen_groups]
+    else:
+        antigen_groups = raw_antigen_groups
+    for antigen, vaccines in antigen_groups:
+        pending_entries.append(ExternalVariantEntry(
             source=antigen, vaccine_peptides=tuple(vaccines),
             vaccine_peptide=vaccines[0] if vaccines else None, resolved_protein_context=True))
+    if shared_policy != 'source' and pending_entries:
+        from .shared_sequence_rna import attach_shared_sequence_rna_to_groups
+        updated_groups = attach_shared_sequence_rna_to_groups(
+            [(idx, list(entry.vaccine_peptides)) for idx, entry in enumerate(pending_entries)],
+            policy=shared_policy,
+        )
+        pending_entries = [
+            replace(
+                entry,
+                vaccine_peptides=tuple(vps),
+                vaccine_peptide=vps[0] if vps else None,
+            )
+            for entry, (_, vps) in zip(pending_entries, updated_groups)
+        ]
+    for entry in pending_entries:
+        accumulator.add(entry)
     return accumulator.result(report.source_format)

@@ -20,6 +20,7 @@ from ..config.loader import (
     load_vaxrank_config,
 )
 from ..manufacturability_config import ManufacturabilityConfig
+from ..shared_sequence_rna import SHARED_SEQUENCE_RNA_POLICIES
 from ..vaccine_config import VaccineConfig
 from ..vaccine_config import LENS_ANTIGEN_SOURCES
 from ..antigen_allocation import (
@@ -36,6 +37,18 @@ def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
         '--max-windows-per-antigen-source', type=int, default=None,
         help='Maximum distinct non-overlapping windows per antigen source (default: 3). '
              'Manufacturing alternatives do not consume additional windows.')
+    vaccine_peptide_group.add_argument(
+        '--shared-sequence-rna-policy',
+        choices=sorted(SHARED_SEQUENCE_RNA_POLICIES),
+        default=None,
+        help=(
+            'How candidate RNA support is evaluated when multiple origins share '
+            'the exact same candidate amino-acid window: "source" (default, '
+            'each origin uses its own RNA measurement) or "within_library_union" '
+            '(compute exact within-library Isovar read/fragment set unions for '
+            'rna_shared_* score bindings without pooling across libraries).'
+        ),
+    )
     allocation_group = arg_parser.add_argument_group(
         'Antigen type selection',
         'Counts are unique antigen sequences across the whole vaccine after deduplication: '
@@ -184,6 +197,8 @@ def vaccine_config_from_args(args : argparse.Namespace, merged_config=None) -> V
     vaccine_config_kwargs = extract_vaccine_config_kwargs(merged_config)
     if getattr(args, 'max_windows_per_antigen_source', None) is not None:
         vaccine_config_kwargs['max_windows_per_antigen_source'] = args.max_windows_per_antigen_source
+    if getattr(args, 'shared_sequence_rna_policy', None) is not None:
+        vaccine_config_kwargs['shared_sequence_rna_policy'] = args.shared_sequence_rna_policy
     vaccine_config_kwargs['antigen_allocation'] = antigen_allocation_from_args(
         args, vaccine_config_kwargs.get('antigen_allocation'))
 

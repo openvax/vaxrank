@@ -925,6 +925,28 @@ class TemplateDataCreator(object):
             else:
                 protein_note = 'Complete protein identity is not established by this window.'
 
+            shared_unions = []
+            seen_union_ids = set()
+            for source in sources:
+                for _, cand in matching_candidates(source):
+                    for rec in getattr(cand, 'shared_sequence_rna_support', ()) or ():
+                        uid = rec.get('union_id')
+                        if uid not in seen_union_ids:
+                            seen_union_ids.add(uid)
+                            vals = rec['values']
+                            shared_unions.append(
+                                '%s: %d reads, %d fragments (naive sum %d fragments; %s)'
+                                % (
+                                    '/'.join(rec['evidence_scope']),
+                                    vals['reads'],
+                                    vals['fragments'],
+                                    vals['sum_of_source_fragments'],
+                                    rec['evidence_set_id'],
+                                )
+                            )
+            if shared_unions:
+                protein_note += ' Within-library RNA union: ' + '; '.join(shared_unions) + '.'
+
             origin_summaries = []
             for index, source in enumerate(sources):
                 matches = matching_candidates(source)
@@ -1211,7 +1233,8 @@ class TemplateDataCreator(object):
             variant_dict['source_evidence_sections'] = (
                 antigen_evidence_sections(antigen, self.source_evidence)
                 if entity_label == 'Antigen' else rna_support_sections(antigen))
-            from .antigen_report import patient_background_sections
+            from .antigen_report import patient_background_sections, shared_sequence_rna_sections
+            variant_dict['source_evidence_sections'] += shared_sequence_rna_sections(vaccine_peptides)
             variant_dict['source_evidence_sections'] += patient_background_sections(
                 vaccine_peptides, self.source_evidence)
             variants.append(variant_dict)
