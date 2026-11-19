@@ -1020,6 +1020,38 @@ class TemplateDataCreator(object):
                     ))
                     genes = ', '.join(gene_list)
                     protein_groups, protein_note, origin_summaries = summarize_shared_origins(antigen, sources)
+                    normal_summary_lines = []
+                    seen_normal_keys = set()
+                    from .normal_observations import summarize_normal_assessment
+                    for source in sources:
+                        for _, cand in matching_candidates(source):
+                            obs = getattr(cand.antigen, 'normal_observations', ()) or ()
+                            if not obs:
+                                continue
+                            norm = summarize_normal_assessment(cand.antigen.tumor_specificity, obs)
+                            nkey = json.dumps(norm, sort_keys=True)
+                            if nkey in seen_normal_keys:
+                                continue
+                            seen_normal_keys.add(nkey)
+                            lib_bits = []
+                            for lib in norm['libraries']:
+                                runs = ', '.join(
+                                    '%s %s' % (
+                                        r['pipeline'],
+                                        'unmeasured' if r['depth'] is None or r['alt_count'] is None
+                                        else '%d/%d [%s]' % (r['alt_count'], r['depth'], r['coverage_adequacy']),
+                                    )
+                                    for r in lib['pipelines']
+                                )
+                                lib_bits.append('%s %s (%s): %s' % (
+                                    lib['assay'], lib['library_id'], '/'.join(lib['tissues']), runs,
+                                ))
+                            line = 'Normal DNA=%s, Normal RNA=%s (%s).' % (
+                                norm['normal_dna_state'], norm['normal_rna_state'], '; '.join(lib_bits),
+                            )
+                            if norm['note']:
+                                line += ' ' + norm['note']
+                            normal_summary_lines.append(line)
                     intervals = target_intervals[antigen['name']]
                     if intervals is not None:
                         product_intervals.extend((start + antigen['start_aa'], end + antigen['start_aa'])
@@ -1033,6 +1065,7 @@ class TemplateDataCreator(object):
                         protein_groups=protein_groups,
                         protein_identity_note=protein_note,
                         origin_summaries=origin_summaries,
+                        normal_summaries=normal_summary_lines,
                         representative=(dict(name=sources[0]['candidate_name'],
                             source_keys=list(dict.fromkeys(report_source_key(key)
                                 for key, _ in matching_candidates(sources[0])))) if sources else None),
@@ -1230,10 +1263,16 @@ class TemplateDataCreator(object):
                 'prediction_origins': prediction_origins(vaccine_peptides),
             }
             variant_dict['admission_note'] = ADMISSION_NOTE if entity_label == 'Antigen' else ''
+            from .antigen_report import (
+                normal_observation_sections,
+                patient_background_sections,
+                shared_sequence_rna_sections,
+            )
             variant_dict['source_evidence_sections'] = (
                 antigen_evidence_sections(antigen, self.source_evidence)
-                if entity_label == 'Antigen' else rna_support_sections(antigen))
-            from .antigen_report import patient_background_sections, shared_sequence_rna_sections
+                if entity_label == 'Antigen'
+                else rna_support_sections(antigen) + normal_observation_sections(antigen)
+            )
             variant_dict['source_evidence_sections'] += shared_sequence_rna_sections(vaccine_peptides)
             variant_dict['source_evidence_sections'] += patient_background_sections(
                 vaccine_peptides, self.source_evidence)
@@ -1265,6 +1304,13 @@ class TemplateDataCreator(object):
         self.template_data['input_coverage'] = coverage_view(
             getattr(self.patient_info, 'input_coverage', None), self.source_evidence,
             self.template_data['ranked_candidates'], self.products)
+        from .longitudinal_support import build_longitudinal_support_view
+        self.template_data['longitudinal_support'] = build_longitudinal_support_view(
+            self.ranked_variants_with_vaccine_peptides,
+            self.products,
+            self.selection,
+            self.patient_info,
+        )
         from .reference_coverage import coverage_view as host_coverage_view
         self.template_data['host_coverage'] = host_coverage_view(
             self.host_reference.coverage if self.host_reference is not None else None)

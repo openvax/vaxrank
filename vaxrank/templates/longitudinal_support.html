@@ -1,0 +1,27 @@
+<section class="appendix" id="longitudinal-support">
+<h2>Longitudinal and library support</h2>
+<p><strong>Design scope:</strong> {{ longitudinal_support.design_scope_label | e }}.</p>
+<p class="note">Each column represents one sequencing library (<code>sample_id</code> / <code>library_id</code>); repeated pipelines on the same library remain grouped in one column and are never summed. Below-threshold CTA measurements distinguish missing values from measured zeros, and mutation rows distinguish exact-window RNA support from alternative windows and unmeasured libraries.</p>
+<table class="pure-table pure-table-bordered">
+<thead>
+<tr>
+<th>Target / candidate window</th>
+{% for lib in longitudinal_support.libraries %}
+<th>{{ lib.sample_id | e }}{% if lib.timepoint and lib.timepoint != lib.sample_id %} ({{ lib.timepoint | e }}){% endif %}{% if lib.library_id and lib.library_id != lib.sample_id %}<br><span class="note">lib {{ lib.library_id | e }}</span>{% endif %}{% if lib.pipelines %}<br><span class="note">{{ lib.pipelines | join(', ') | e }}</span>{% endif %}</th>
+{% endfor %}
+<th>Qualifying samples &amp; longitudinal status</th>
+</tr>
+</thead>
+<tbody>
+{% for row in longitudinal_support.rows %}
+<tr>
+<td><strong>{{ row.gene | e }}</strong> ({{ row.kind | e }}){% if row.transcript_ids %}<br><span class="note">{{ row.transcript_ids | join(', ') | e }}</span>{% endif %}{% if row.window %}<br><code>{{ row.window | e }}</code>{% endif %}<br>{% if row.selected %}Selected: {{ row.selected_products | join(', ') | e }}{% else %}<span class="note">Not emitted in products</span>{% endif %}</td>
+{% for cell in row.cells %}
+<td>{{ cell.summary | e }}</td>
+{% endfor %}
+<td>{% if row.qualifying_timepoints %}Qualifying timepoints: {{ row.qualifying_timepoints | join(', ') | e }} ({{ row.qualifying_samples | join(', ') | e }}){% elif row.qualifying_samples %}Qualifying samples: {{ row.qualifying_samples | join(', ') | e }}{% else %}No qualifying sample{% endif %}{% if row.qualified_only_earlier %}<br><strong>Qualified only through earlier timepoints</strong> (not qualified at {{ longitudinal_support.latest_timepoint | e }}{% if row.below_threshold_at_latest %}; below threshold at {{ longitudinal_support.latest_timepoint | e }}{% endif %}).{% endif %}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</section>

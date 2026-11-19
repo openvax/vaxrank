@@ -1,0 +1,11 @@
+=== Longitudinal and library support ===
+Design scope: {{ longitudinal_support.design_scope_label }}.
+Libraries remain separate (sample_id / library_id); repeated pipelines on one library are never summed.
+Libraries:
+{% for lib in longitudinal_support.libraries %}  - {{ lib.sample_id }}{% if lib.timepoint and lib.timepoint != lib.sample_id %} (timepoint {{ lib.timepoint }}){% endif %}{% if lib.library_id and lib.library_id != lib.sample_id %} [library {{ lib.library_id }}]{% endif %}{% if lib.pipelines %}: pipelines {{ lib.pipelines | join(', ') }}{% endif %}
+{% endfor %}
+{% for row in longitudinal_support.rows %}
+Target: {{ row.gene }} ({{ row.kind }}){% if row.window %} | window {{ row.window }}{% endif %} | {% if row.selected %}Selected ({{ row.selected_products | join(', ') }}){% else %}Not emitted in products{% endif %}
+{% for cell in row.cells %}  [{{ longitudinal_support.libraries[loop.index0].sample_id }}{% if longitudinal_support.libraries[loop.index0].timepoint and longitudinal_support.libraries[loop.index0].timepoint != longitudinal_support.libraries[loop.index0].sample_id %}/{{ longitudinal_support.libraries[loop.index0].timepoint }}{% endif %}]: {{ cell.summary }}
+{% endfor %}  Qualification: {% if row.qualifying_timepoints %}timepoints {{ row.qualifying_timepoints | join(', ') }} ({{ row.qualifying_samples | join(', ') }}){% elif row.qualifying_samples %}samples {{ row.qualifying_samples | join(', ') }}{% else %}none{% endif %}{% if row.qualified_only_earlier %}; QUALIFIED ONLY THROUGH EARLIER TIMEPOINTS (not qualified at {{ longitudinal_support.latest_timepoint }}{% if row.below_threshold_at_latest %}; below threshold at {{ longitudinal_support.latest_timepoint }}{% endif %}){% endif %}.
+{% endfor %}

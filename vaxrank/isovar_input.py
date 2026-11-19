@@ -37,7 +37,9 @@ def _configured_read_collector(family, settings):
 
 
 def reconstruct_isovar_antigens(family, *, inputs, options=None, scope=None, species='',
-                                tumor_specificity=None, candidate_attestations=None, somatic=False):
+                                tumor_specificity=None, candidate_attestations=None, somatic=False,
+                                normal_observations=(), candidate_normal_observations=None,
+                                normal_conflict_policy='hold_for_review'):
     """Call a public Isovar producer and adapt its complete result.
 
     ``inputs`` contains the selected function's typed data arguments: for
@@ -99,6 +101,9 @@ def reconstruct_isovar_antigens(family, *, inputs, options=None, scope=None, spe
     dataset = antigens_from_isovar(result, scope=scope, species=species,
         somatic=somatic,
         tumor_specificity=tumor_specificity, candidate_attestations=candidate_attestations,
+        normal_observations=normal_observations,
+        candidate_normal_observations=candidate_normal_observations,
+        normal_conflict_policy=normal_conflict_policy,
         options=IsovarSourceOptions(admission=options.admission))
     for evidence in dataset.source_evidence.values():
         evidence['reconstruction'] = dict(controls=resolved,
@@ -229,6 +234,7 @@ def load_isovar_input(path, *, scope=None, genome=None, options=None, configured
     if document.get('schema') != ISOVAR_INPUT_SCHEMA:
         raise ValueError('Expected ' + ISOVAR_INPUT_SCHEMA + ' or a supported Isovar result')
     allowed = {'schema', 'scope', 'species', 'somatic', 'tumor_specificity', 'candidate_attestations',
+               'normal_observations', 'candidate_normal_observations', 'normal_conflict_policy',
                'options', 'result', 'reconstruct'}
     if set(document) - allowed:
         raise ValueError('Unknown Isovar input fields: ' + ', '.join(sorted(set(document) - allowed)))
@@ -238,7 +244,10 @@ def load_isovar_input(path, *, scope=None, genome=None, options=None, configured
     adapter = dict(scope=scope, species=document.get('species', ''),
                    somatic=document.get('somatic', False),
                    tumor_specificity=document.get('tumor_specificity'),
-                   candidate_attestations=document.get('candidate_attestations'))
+                   candidate_attestations=document.get('candidate_attestations'),
+                   normal_observations=document.get('normal_observations', ()),
+                   candidate_normal_observations=document.get('candidate_normal_observations'),
+                   normal_conflict_policy=document.get('normal_conflict_policy', 'hold_for_review'))
     sources = configured_sources or {}
     if set(sources) - set(FAMILIES):
         raise ValueError('Unknown Isovar configured source families: ' + ', '.join(sorted(set(sources) - set(FAMILIES))))

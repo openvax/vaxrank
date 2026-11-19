@@ -56,6 +56,12 @@ def _antigen_from_dict(value):
             'left': _typed_record(GenomicEndpoint, row['left']),
             'right': _typed_record(GenomicEndpoint, row['right'])}) for row in origin.get('junctions', ()))
         value['origin'] = _typed_record(AntigenOrigin, origin)
+    if 'normal_observations' in value:
+        from .normal_observations import MatchedNormalObservation
+        value['normal_observations'] = tuple(
+            _typed_record(MatchedNormalObservation, obs)
+            for obs in value.get('normal_observations', ())
+        )
     return _typed_record(VaccineAntigen, value)
 
 
@@ -94,7 +100,8 @@ class AntigenDataset:
         antigens = archive.encode_tree({
             key: {k: v for k, v in asdict(a).items()
                   if (k not in ("rna_support", "source_protein_offset", "origin",
-                                "source_protein_sha256", "source_protein_length") or v)
+                                "source_protein_sha256", "source_protein_length",
+                                "normal_observations") or v)
                   and not (k == "source_protein_completeness" and v == "unassessed")}
             for key, a in self.antigens.items()
         })
