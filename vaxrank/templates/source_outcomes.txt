@@ -20,5 +20,6 @@ Failed RNA filters alone do not establish final exclusion when DNA fallback is e
 {% endfor %}{% endfor %}
 {% for expression in input_coverage.expression %}
 CTA expression: {{ expression.identity }}; sample {{ expression.contract.sample_id }}; {{ expression.contract.measurement_level }} / {{ expression.contract.expression_unit }}; assay {{ expression.contract.assay }}
-{% for row in expression.decisions %}{{ row.input_identifier }} {{ row.gene_name }}: {{ row.value if row.value is not none else 'Unknown' }}; {{ row.status }}
+{% if expression.omitted_not_cta_count %}Omitted {{ expression.omitted_not_cta_count }} non-CTA background features (status: not_cta)
+{% endif %}{% for row in expression.decisions %}{{ row.input_identifier }} {{ row.gene_name }}: {{ row.value if row.value is not none else 'Unknown' }}; {{ row.status }}
 {% endfor %}{% endfor %}

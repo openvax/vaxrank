@@ -609,3 +609,117 @@ def test_matched_normal_observations_conflict_dependent_pipelines_and_replay(tmp
     assert rna_only_ag.tumor_specificity.status == "admitted"
     assert rna_only_ag.tumor_specificity.requires_review is True
     assert "matched_normal_dna_missing" in rna_only_ag.tumor_specificity.rationale_code
+
+
+def test_source_outcomes_omits_not_cta_background_and_keeps_concise_pipeline_headers(tmp_path):
+    """Regression test for #887: not_cta background rows are summarized, not dumped verbatim."""
+    from vaxrank.input_coverage import coverage_view
+
+    long_source_uri = (
+        "rna-seq/reprocessed/BG003082/BG003082.rsem.genes.results:"
+        "osteosarc:cbbf4b9d834a8a25faf55897b31a8b21a3b48fe670586f50332e16a8b34d93fc"
+    )
+    ag_cta = _cta_antigen(
+        "ENSG00000241476",
+        "SSX2",
+        "ENST00000337502",
+        "KMKASEKIFYVYMKRKYEAMTKLGF",
+    )
+    cta_res = CTAExpressionResult(
+        input_contract=CTAExpressionInput(
+            measurement_level="gene",
+            id_column="gene_id",
+            value_column="TPM",
+            expression_unit="TPM",
+            sample_id="T0-BG",
+            evidence_source=long_source_uri,
+            evidence_version="1.0",
+            assay="bulk_rna_seq",
+        ),
+        admission_policy=CTAAdmissionPolicy(5.0, "TPM"),
+        exclusion_policy=CTATargetExclusionPolicy(gene_patterns=(), gene_exceptions=()),
+        input_sha256="b" * 64,
+        reference_assembly="GRCh38",
+        annotation_name="ensembl",
+        annotation_version="112",
+        decisions=(
+            CTAExpressionDecision(
+                input_identifier="ENSG00000241476",
+                gene_name="SSX2",
+                gene_id="ENSG00000241476",
+                transcript_id="ENST00000337502",
+                value=24.5,
+                status="admitted",
+                assessment=CTASequenceAssessment(
+                    antigen=ag_cta,
+                    bundle_id="bundle-1",
+                    record_id="rec-1",
+                    occurrence={"gene_id": "ENSG00000241476"},
+                ),
+            ),
+            CTAExpressionDecision(
+                input_identifier="ENSG00000185686",
+                gene_name="PRAME",
+                gene_id="ENSG00000185686",
+                transcript_id="ENST00000398743",
+                value=1.2,
+                status="held_out",
+            ),
+            *(
+                CTAExpressionDecision(
+                    input_identifier=f"ENSG00000900{i:03d}",
+                    gene_name=f"HOUSEKEEPING_{i}",
+                    gene_id=f"ENSG00000900{i:03d}",
+                    transcript_id=f"ENST00000900{i:03d}",
+                    value=10.0,
+                    status="not_cta",
+                )
+                for i in range(50)
+            ),
+        ),
+    )
+
+    source_evidence = {"cta:T0-BG": {"cta_expression_admission": to_native_json(cta_res)}}
+    cov = coverage_view({}, source_evidence, [], {})
+    assert len(cov["expression"]) == 1
+    expr_entry = cov["expression"][0]
+    assert expr_entry["omitted_not_cta_count"] == 50
+    assert [d["gene_name"] for d in expr_entry["decisions"]] == ["SSX2", "PRAME"]
+
+    ep = _ep("KMKASEKIF", ag_cta.amino_acids, "pred-ssx2", offset=0)
+    vp = VaccinePeptide(antigen=ag_cta, epitopes=[ep])
+    ranked = [(ag_cta, [vp])]
+    pinfo = PatientInfo(
+        patient_id="P-887",
+        vcf_paths=[],
+        bam_path=None,
+        mhc_alleles=["HLA-A*02:01"],
+        num_somatic_variants=0,
+        num_coding_effect_variants=0,
+        num_variants_with_rna_support=0,
+        num_variants_with_vaccine_peptides=0,
+        input_coverage={"sources": [], "original_inputs": [], "current_inputs": []},
+    )
+    creator = TemplateDataCreator(
+        ranked_variants_with_vaccine_peptides=ranked,
+        patient_info=pinfo,
+        final_review="",
+        reviewers="",
+        args_for_report={"manufacturability": True, "wt_epitopes": False},
+        input_json_file=None,
+        source_evidence=source_evidence,
+    )
+    tdata = creator.compute_template_data()
+    html_out = tmp_path / "report_887.html"
+    txt_out = tmp_path / "report_887.txt"
+    make_html_report(tdata, str(html_out))
+    make_ascii_report(tdata, str(txt_out))
+    html_text = html_out.read_text()
+    txt_text = txt_out.read_text()
+    assert "50 non-CTA background features omitted" in html_text
+    assert "Omitted 50 non-CTA background features" in txt_text
+    assert "HOUSEKEEPING_0" not in html_text
+    assert "HOUSEKEEPING_0" not in txt_text
+    assert "PRAME" in html_text and "held_out" in html_text
+    assert long_source_uri not in html_text
+    assert "bulk_rna_seq" in html_text
