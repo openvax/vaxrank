@@ -1196,6 +1196,14 @@ def load_unified_external(args, epitope_config, options, genome):
         values = {e.dna_vaf for e in entries if e.dna_vaf is not None}
         if len(values) == 1 and entries[0].variant is not None:
             dna_vaf[entries[0].variant] = next(iter(values))
+    if (
+        options.vaccine_config is not None
+        and options.vaccine_config.shared_sequence_rna_policy != 'source'
+    ):
+        from .shared_sequence_rna import attach_shared_sequence_rna_to_groups
+        ranked = attach_shared_sequence_rna_to_groups(
+            ranked, policy=options.vaccine_config.shared_sequence_rna_policy
+        )
     ranked = rank_constructs(ranked)
     from .antigen_allocation import select_ranked_sources
     ranked = select_ranked_sources(ranked,

@@ -77,7 +77,8 @@ def selection_policy_view(selection):
         ('num_target_epitopes_to_keep', 'Maximum target epitopes per window'),
         ('ranking_rules', 'Window ranking rules'),
         ('require_target_epitopes_in_variant', 'Require a target epitope'),
-        ('window_selection', 'Shared window-selection policy')])))
+        ('window_selection', 'Shared window-selection policy'),
+        ('shared_sequence_rna_policy', 'Shared-sequence RNA policy')])))
     sections.append(dict(title='Design scope', rows=_rows(record.get('effective_design', {}), [
         ('max_ranked_sources', 'Maximum ranked sources'), ('vaccine_types', 'Requested modalities')])))
     assembly = selection.get('construct_assembly') or {}
@@ -122,6 +123,8 @@ def candidate_calculation(peptide):
             unit = 'DNA observations'
         elif name == 'n_mutant_amino_acids':
             unit = 'aa'
+        elif name.startswith('rna_shared_'):
+            unit = 'within-library shared-sequence RNA union'
         terms.append(dict(name=name, value=value, display=display(value), unit=unit, evidence=evidence))
     return dict(expression=peptide.combined_score_expr, terms=terms,
                 result=display(peptide.combined_score), raw_result=peptide.combined_score,

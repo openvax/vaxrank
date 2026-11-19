@@ -31,7 +31,9 @@ def window_evidence_key(peptide, processing):
         target_mask=peptide.antigen.targetable_mask, rna_support=peptide.antigen.rna_support, epitopes=epitopes,
         processing=processing, score=peptide.combined_score,
         target_score=peptide.target_epitope_score, scoring_expression=peptide.combined_score_expr,
-        manufacturability=peptide.manufacturability_scores._asdict())))
+        manufacturability=peptide.manufacturability_scores._asdict(),
+        **({'shared_sequence_rna_support': peptide.shared_sequence_rna_support}
+           if peptide.shared_sequence_rna_support else {}))))
 
 
 def prediction_table_key(peptide, processing):
@@ -53,7 +55,9 @@ def window_measurements_key(peptide):
     return _key(to_native_json(dict(sequence=peptide.amino_acids,
         target_mask=peptide.antigen.targetable_mask, rna_support=peptide.antigen.rna_support, score=peptide.combined_score,
         target_score=peptide.target_epitope_score, expression=peptide.combined_score_expr,
-        manufacturability=peptide.manufacturability_scores._asdict())))
+        manufacturability=peptide.manufacturability_scores._asdict(),
+        **({'shared_sequence_rna_support': peptide.shared_sequence_rna_support}
+           if peptide.shared_sequence_rna_support else {}))))
 
 
 def window_contexts(peptide):

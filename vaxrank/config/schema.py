@@ -105,6 +105,7 @@ class VaccinePeptidesConfigSchema(
     included_lens_sources: Optional[list[str]] = None
     require_target_epitopes_in_variant: Optional[bool] = None
     window_selection: Optional[dict] = None
+    shared_sequence_rna_policy: Optional[str] = None
     # Antigen-design knobs hoisted from ``vaccine_constructs:`` top
     # level (post-2.19).
     antigen_content: Optional[str] = None

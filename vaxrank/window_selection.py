@@ -324,36 +324,47 @@ def optimize_peptide_windows(ranked, options, audit_out=None, *, source_limit=No
     different enumeration context. No new predictions are run during selection.
     """
     from .ranking import rank_constructs
+    from .shared_sequence_rna import (
+        SHARED_SEQUENCE_RNA_POLICY_SOURCE,
+        SHARED_SEQUENCE_RNA_POLICY_UNION,
+        attach_shared_sequence_rna_to_groups,
+    )
     policy = WindowSelection.resolve(options.window_selection or {})
-    output = []
-    for source, peptides in ranked:
+    shared_policy = getattr(options, 'shared_sequence_rna_policy', None)
+    if shared_policy is None:
+        shared_policy = (
+            SHARED_SEQUENCE_RNA_POLICY_UNION
+            if any(p.shared_sequence_rna_support for _, ps in ranked for p in ps)
+            else SHARED_SEQUENCE_RNA_POLICY_SOURCE
+        )
+
+    tasks = []
+    for source_idx, (source, peptides) in enumerate(ranked):
         # A manufacturing refinement operates within each biological region;
         # it cannot replace three independent windows with three nearby shifts.
         if source_limit is None and any(p.window_selection_audit.get('source_window') for p in peptides):
-            refined = []
             for peptide in peptides:
-                required = set(tuple(x) for x in peptide.window_selection_audit['source_window']['required_targets'])
-                items = optimize_peptide_windows([(source, [replace(peptide,
-                    window_selection_audit={k: v for k, v in peptide.window_selection_audit.items()
-                                            if k != 'source_window'})])],
-                    options, audit_out, source_limit=1, score_fraction=score_fraction, required_content=required)
-                # Refinement must preserve every selected target occurrence.
-                chosen = next((p for _, ps in items for p in ps
-                               if required <= target_content(p, positioned=True)), None)
-                if chosen is None:
-                    continue
-                else:
-                    chosen.window_selection_audit['source_window'] = peptide.window_selection_audit['source_window']
-                refined.append(chosen)
-            if refined:
-                output.append((source, refined))
-            continue
+                sw = peptide.window_selection_audit['source_window']
+                required = set(tuple(x) for x in sw['required_targets'])
+                stripped = replace(
+                    peptide,
+                    window_selection_audit={
+                        k: v for k, v in peptide.window_selection_audit.items()
+                        if k != 'source_window'
+                    },
+                )
+                tasks.append((source_idx, source, [stripped], 1, required, sw))
+        else:
+            tasks.append((source_idx, source, peptides, source_limit, required_content, None))
+
+    enumerated = []
+    for task_idx, (_, _, base_peptides, sub_limit, sub_required, _) in enumerate(tasks):
         candidates = []
-        for peptide in peptides:
+        for peptide in base_peptides:
             maximum = min(len(peptide.amino_acids), options.max_antigen_length_aa)
             lengths = (range(options.min_antigen_length_aa, maximum + 1)
                        if policy.enumerate_lengths else [maximum])
-            if source_limit is not None and required_content is None and maximum < options.min_antigen_length_aa:
+            if sub_limit is not None and sub_required is None and maximum < options.min_antigen_length_aa:
                 # Imported contexts can be shorter than a requested window;
                 # retain their real sequence (the writer reports the length).
                 # Manufacturing refinement still enforces its own minimum.
@@ -372,6 +383,7 @@ def optimize_peptide_windows(ranked, options, audit_out=None, *, source_limit=No
                     candidates.append(replace(
                         peptide, mutant_protein_fragment=part, antigen=antigen,
                         epitopes=slice_epitopes(peptide.epitopes, start, end),
+                        shared_sequence_rna_support=(),
                         combined_score_expr=(peptide.combined_score_expr if options.window_selection is None or any(
                             name in peptide.combined_score_expr for name in (
                                 'window_epitope_score', 'window_selection_factor')) else
@@ -379,15 +391,22 @@ def optimize_peptide_windows(ranked, options, audit_out=None, *, source_limit=No
                         window_selection_audit={'parent_window': dict(
                             sequence=original_parent['sequence'], start=original_parent['start'] + start,
                             end=original_parent['start'] + end)}))
-        if source_limit is not None and getattr(options, 'require_target_epitopes', True):
+        if sub_limit is not None and getattr(options, 'require_target_epitopes', True):
             candidates = [p for p in candidates if p.contains_target_epitopes()]
-        if source_limit is not None:
+        enumerated.append((task_idx, candidates))
+
+    if shared_policy != SHARED_SEQUENCE_RNA_POLICY_SOURCE:
+        enumerated = attach_shared_sequence_rna_to_groups(enumerated, policy=shared_policy)
+
+    chosen_by_idx = {}
+    for (source_idx, source, _, sub_limit, sub_required, saved_sw), (_, candidates) in zip(tasks, enumerated):
+        if sub_limit is not None:
             chosen = select_source_windows(candidates, policy=options.window_selection,
-                limit=source_limit, score_fraction=score_fraction,
+                limit=sub_limit, score_fraction=score_fraction,
                 preferred_length=options.max_antigen_length_aa,
                 n_term='acetylated' if options.n_terminal_acetylation else 'free',
                 c_term='amidated' if options.c_terminal_amidation else 'free', audit_out=audit_out,
-                required_content=required_content)
+                required_content=sub_required)
         else:
             chosen = select_windows(candidates, policy,
                                 preferred_length=options.max_antigen_length_aa,
@@ -395,8 +414,19 @@ def optimize_peptide_windows(ranked, options, audit_out=None, *, source_limit=No
                                 n_term='acetylated' if options.n_terminal_acetylation else 'free',
                                 c_term='amidated' if options.c_terminal_amidation else 'free',
                                 audit_out=audit_out)
+        if saved_sw is not None:
+            # Refinement must preserve every selected target occurrence.
+            refined_item = next(
+                (p for p in chosen if sub_required <= target_content(p, positioned=True)),
+                None,
+            )
+            chosen = []
+            if refined_item is not None:
+                refined_item.window_selection_audit['source_window'] = saved_sw
+                chosen = [refined_item]
         if chosen:
-            output.append((source, chosen))
+            chosen_by_idx.setdefault(source_idx, (source, []))[1].extend(chosen)
+    output = [chosen_by_idx[idx] for idx in sorted(chosen_by_idx)]
     return rank_constructs(output)
 
 
@@ -409,6 +439,7 @@ def optimize_antigen_windows(ranked, config):
         max_antigen_length_aa=config.max_peptide_length,
         candidates_per_slot=config.max_vaccine_peptides_per_variant,
         require_target_epitopes=config.require_target_epitopes_in_variant,
+        shared_sequence_rna_policy=config.shared_sequence_rna_policy,
         n_terminal_acetylation=False, c_terminal_amidation=False)
     return optimize_peptide_windows(ranked, options, source_limit=config.max_windows_per_antigen_source,
                                     score_fraction=config.score_fraction_of_best)
