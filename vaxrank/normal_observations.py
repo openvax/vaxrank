@@ -257,3 +257,122 @@ def adjudicate_somatic_attestation_with_normal(
         rationale_code=rationale if summary["conflict"] or not attestation.rationale_code else rationale,
         requires_review=True,
     )
+
+
+_STATE_LABELS = {
+    STATE_ZERO_ALT_ADEQUATE: "0 alt",
+    STATE_OBSERVED_ALT: "alt reads observed",
+    STATE_LOW_COVERAGE: "low coverage",
+    STATE_MISSING: "unmeasured",
+}
+
+
+def _dedup_pipeline_runs(pipelines):
+    seen = set()
+    unique = []
+    for run in pipelines:
+        key = (
+            run["pipeline"],
+            run.get("pipeline_version", ""),
+            run["alt_count"],
+            run["depth"],
+            run["coverage_adequacy"],
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(run)
+    return unique
+
+
+def _format_run_compact(run):
+    if run["depth"] is None or run["alt_count"] is None:
+        return f"{run['pipeline']} unmeasured"
+    suffix = " (low cov)" if run["coverage_adequacy"] == ADEQUACY_LOW else ""
+    return f"{run['pipeline']} {run['alt_count']}/{run['depth']}{suffix}"
+
+
+def _format_assay_compact(assay_name, libs, *, inline_libraries=False):
+    if not libs:
+        return f"{assay_name} unmeasured"
+    if inline_libraries:
+        parts = []
+        for lib in libs:
+            runs = ", ".join(_format_run_compact(r) for r in lib["dedup_pipelines"])
+            parts.append(f"{lib['library_id']}: {runs}")
+        states = {lib["summary_state"] for lib in libs}
+        state_label = (
+            _STATE_LABELS[STATE_OBSERVED_ALT] if STATE_OBSERVED_ALT in states
+            else _STATE_LABELS[STATE_ZERO_ALT_ADEQUATE] if STATE_ZERO_ALT_ADEQUATE in states
+            else _STATE_LABELS[STATE_LOW_COVERAGE] if STATE_LOW_COVERAGE in states
+            else _STATE_LABELS[STATE_MISSING]
+        )
+        return f"{assay_name} {state_label} ({'; '.join(parts)})"
+
+    measured_depths = [
+        r["depth"] for lib in libs for r in lib["dedup_pipelines"] if r["depth"] is not None
+    ]
+    alt_libs = [lib for lib in libs if lib["summary_state"] == STATE_OBSERVED_ALT]
+    if alt_libs:
+        max_alt = max(
+            (lib["max_observed_alt"] for lib in alt_libs if lib["max_observed_alt"] is not None),
+            default=0,
+        )
+        # Show the worst (highest alt / lowest depth at max_alt) ratio for context
+        worst_depth = min(
+            (
+                r["depth"] for lib in alt_libs for r in lib["dedup_pipelines"]
+                if r["alt_count"] == max_alt and r["depth"] is not None
+            ),
+            default=None,
+        )
+        ratio = f"{max_alt}/{worst_depth}" if worst_depth is not None else str(max_alt)
+        return f"{assay_name} alt reads in {len(alt_libs)}/{len(libs)} libraries (max {ratio})"
+
+    adequate_zero = [lib for lib in libs if lib["summary_state"] == STATE_ZERO_ALT_ADEQUATE]
+    if adequate_zero:
+        if measured_depths:
+            lo, hi = min(measured_depths), max(measured_depths)
+            depth_span = f"{lo}x" if lo == hi else f"{lo}-{hi}x"
+            return f"{assay_name} 0 alt across {len(adequate_zero)}/{len(libs)} libraries ({depth_span})"
+        return f"{assay_name} 0 alt across {len(adequate_zero)}/{len(libs)} libraries"
+
+    low_cov = [lib for lib in libs if lib["summary_state"] == STATE_LOW_COVERAGE]
+    if low_cov:
+        max_d = max(measured_depths) if measured_depths else 0
+        return f"{assay_name} low coverage ({len(low_cov)}/{len(libs)} libraries, max {max_d}x)"
+    return f"{assay_name} unmeasured ({len(libs)} libraries)"
+
+
+def format_normal_product_summary(summary: dict, *, inline_limit: int = 4) -> dict:
+    """Format a matched-normal assessment into concise product-view prose + optional library rows."""
+    libraries = []
+    for lib in summary["libraries"]:
+        dedup = _dedup_pipeline_runs(lib["pipelines"])
+        libraries.append(dict(
+            assay=lib["assay"],
+            library_id=lib["library_id"],
+            tissue=", ".join(lib["tissues"]),
+            state_label=_STATE_LABELS.get(lib["summary_state"], lib["summary_state"]),
+            summary_state=lib["summary_state"],
+            max_observed_alt=lib["max_observed_alt"],
+            dedup_pipelines=dedup,
+            runs_text=", ".join(_format_run_compact(r) for r in dedup),
+        ))
+    dna_libs = [lib for lib in libraries if lib["assay"] == "DNA"]
+    rna_libs = [lib for lib in libraries if lib["assay"] == "RNA"]
+    inline = len(libraries) <= inline_limit
+    dna_text = _format_assay_compact("DNA", dna_libs, inline_libraries=inline)
+    rna_text = _format_assay_compact("RNA", rna_libs, inline_libraries=inline)
+    headline = f"Matched normal: {dna_text}; {rna_text}."
+    if summary["conflict"]:
+        headline += " Review required."
+    text_line = f"{headline} {summary['note']}" if summary["note"] else headline
+    return dict(
+        headline=headline,
+        note=summary["note"],
+        text_line=text_line,
+        collapsible=not inline,
+        library_count=len(libraries),
+        libraries=libraries,
+    )

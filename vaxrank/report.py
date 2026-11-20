@@ -1021,8 +1021,12 @@ class TemplateDataCreator(object):
                     genes = ', '.join(gene_list)
                     protein_groups, protein_note, origin_summaries = summarize_shared_origins(antigen, sources)
                     normal_summary_lines = []
+                    normal_summary_details = []
                     seen_normal_keys = set()
-                    from .normal_observations import summarize_normal_assessment
+                    from .normal_observations import (
+                        format_normal_product_summary,
+                        summarize_normal_assessment,
+                    )
                     for source in sources:
                         for _, cand in matching_candidates(source):
                             obs = getattr(cand.antigen, 'normal_observations', ()) or ()
@@ -1033,25 +1037,9 @@ class TemplateDataCreator(object):
                             if nkey in seen_normal_keys:
                                 continue
                             seen_normal_keys.add(nkey)
-                            lib_bits = []
-                            for lib in norm['libraries']:
-                                runs = ', '.join(
-                                    '%s %s' % (
-                                        r['pipeline'],
-                                        'unmeasured' if r['depth'] is None or r['alt_count'] is None
-                                        else '%d/%d [%s]' % (r['alt_count'], r['depth'], r['coverage_adequacy']),
-                                    )
-                                    for r in lib['pipelines']
-                                )
-                                lib_bits.append('%s %s (%s): %s' % (
-                                    lib['assay'], lib['library_id'], '/'.join(lib['tissues']), runs,
-                                ))
-                            line = 'Normal DNA=%s, Normal RNA=%s (%s).' % (
-                                norm['normal_dna_state'], norm['normal_rna_state'], '; '.join(lib_bits),
-                            )
-                            if norm['note']:
-                                line += ' ' + norm['note']
-                            normal_summary_lines.append(line)
+                            formatted = format_normal_product_summary(norm)
+                            normal_summary_lines.append(formatted['text_line'])
+                            normal_summary_details.append(formatted)
                     intervals = target_intervals[antigen['name']]
                     if intervals is not None:
                         product_intervals.extend((start + antigen['start_aa'], end + antigen['start_aa'])
@@ -1066,6 +1054,7 @@ class TemplateDataCreator(object):
                         protein_identity_note=protein_note,
                         origin_summaries=origin_summaries,
                         normal_summaries=normal_summary_lines,
+                        normal_details=normal_summary_details,
                         representative=(dict(name=sources[0]['candidate_name'],
                             source_keys=list(dict.fromkeys(report_source_key(key)
                                 for key, _ in matching_candidates(sources[0])))) if sources else None),
