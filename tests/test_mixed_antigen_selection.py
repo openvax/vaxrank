@@ -81,14 +81,6 @@ def test_mixed_native_design_and_source_strata(mixed_native, tmp_path, monkeypat
     for fasta in output.glob('*.fasta'):
         assert (replay / fasta.name).read_bytes() == fasta.read_bytes()
     assert (replay / 'manifest.json').read_bytes() == (output / 'manifest.json').read_bytes()
-    if kind is None:
-        from vaxrank.core_exposure import assess_dataset_windows
-        request, result = assess_dataset_windows(EpitopeDataset.load(saved),
-            {'scenario': 'Synthetic mixed-source test', 'times_hours': [0, 1]},
-            min_length=8, max_length=10)
-        assert {c['metadata']['antigen_kind'] for c in request['candidates']} == set(expected)
-        assert all(c['status'] == 'unassessed' for c in result['candidates'])
-        assert any(g['reason'] == 'antigen_not_admitted' for g in result['source_coverage_gaps'])
 
 
 def test_native_source_fields_ignore_unverified_producer_labels(tmp_path):

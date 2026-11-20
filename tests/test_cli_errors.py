@@ -226,31 +226,6 @@ def test_a_new_nested_output_dir_is_still_accepted_and_not_created_early(tmp_pat
     assert args.output_csv.endswith("ranked_candidates.csv")
 
 
-def test_figure_commands_report_input_mistakes_in_one_line(tmp_path, capsys, monkeypatch):
-    """The companion commands leaked a traceback for a missing or wrong-shaped file."""
-    from vaxrank.cli import (
-        complex_variant_visualization, evidence_visualization, mutation_visualization)
-    monkeypatch.setattr(sys, 'argv', ['embedding-application', '-v'])
-
-    wrong_shape = tmp_path / "wrong.json"
-    wrong_shape.write_text('{"unrelated": 1}')
-    cases = [
-        ("vaxrank-mutation-figure", mutation_visualization.main, [str(tmp_path / "nope.csv")], "nope.csv"),
-        ("vaxrank-evidence-figure", evidence_visualization.main, [str(tmp_path / "nope.json")], "nope.json"),
-        ("vaxrank-complex-result-figure", complex_variant_visualization.main,
-         [str(wrong_shape), "--output-root", str(tmp_path / "out")], "'records' and 'metadata'"),
-    ]
-    for prog, main, argv, expected in cases:
-        with pytest.raises(SystemExit) as exit_info:
-            main(argv)
-        assert exit_info.value.code == 1
-        err = capsys.readouterr().err
-        assert err.startswith("%s: error: " % prog), err
-        assert expected in err
-        assert "Traceback" not in err and "--verbose" not in err
-        assert len(err.splitlines()) == 1
-
-
 def test_every_bundled_policy_has_its_own_description():
     from vaxrank.config.policies import list_policies
 
@@ -371,28 +346,13 @@ def test_pepsickle_in_a_configured_interpreter_counts_as_installed(monkeypatch):
 
 def test_every_companion_command_answers_version_like_vaxrank(capsys):
     from vaxrank.testdata import download
-    from vaxrank.cli import (
-        complex_variant_visualization, evidence_visualization, mutation_visualization, window_exposure)
     from vaxrank.version import __version__
 
-    for prog, main in [("vaxrank-mutation-figure", mutation_visualization.main),
-                       ("vaxrank-evidence-figure", evidence_visualization.main),
-                       ("vaxrank-complex-result-figure", complex_variant_visualization.main),
-                       ("vaxrank-window-exposure", window_exposure.main),
-                       ("vaxrank-test-data", download.main)]:
+    for prog, main in [("vaxrank-test-data", download.main)]:
         with pytest.raises(SystemExit) as exit_info:
             main(["--version"])
         assert exit_info.value.code == 0
         assert capsys.readouterr().out.strip() == "%s %s" % (prog, __version__)
-
-
-def test_companion_options_all_have_help():
-    from vaxrank.cli import complex_variant_visualization, evidence_visualization, mutation_visualization
-
-    for module in (mutation_visualization, evidence_visualization, complex_variant_visualization):
-        for action in module.make_parser()._actions:
-            assert action.help, "%s %s has no help" % (module.__name__, action.option_strings or action.dest)
-
 
 
 def test_missing_input_paths_name_the_flag_before_any_work(tmp_path, monkeypatch, capsys):

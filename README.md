@@ -117,14 +117,10 @@ reused by default. [Input workflows](https://openvax.github.io/vaxrank/input-wor
 reports, saved Vaxrank evidence, combining several reports in one run, and when
 to compute new predictions instead.
 
-Companion commands share the installed package:
+Companion command sharing the installed package:
 
 | Command | Purpose | Documented in |
 |---|---|---|
-| `vaxrank-mutation-figure` | Transcript and protein context figures from `--output-isovar-csv` | [Analysis outputs](https://openvax.github.io/vaxrank/outputs/#mutation-and-assembly-figures) |
-| `vaxrank-evidence-figure` | Evidence summary figure from an evidence JSON | [Analysis outputs](https://openvax.github.io/vaxrank/outputs/) |
-| `vaxrank-complex-result-figure` | Figures for complex-variant results JSON | [Analysis outputs](https://openvax.github.io/vaxrank/outputs/) |
-| `vaxrank-window-exposure` | Delivery exposure of admitted SLP windows | [Window exposure](https://openvax.github.io/vaxrank/core-window-exposure/) |
 | `vaxrank-test-data` | Download the shared Sid test data | [Test data](https://github.com/openvax/vaxrank/blob/main/TEST_DATA.md) |
 
 ## Documentation
@@ -147,9 +143,8 @@ Evidence guides cover [local Hitlist evidence](https://openvax.github.io/vaxrank
 [MS-supported scoring](https://openvax.github.io/vaxrank/ms-evidence/). See also the
 experimental [antigen](https://openvax.github.io/vaxrank/antigen-inputs/),
 [Isovar](https://openvax.github.io/vaxrank/isovar-inputs/),
-[CTA expression](https://openvax.github.io/vaxrank/design/expression-cta-inputs/),
-[mixed-antigen](https://openvax.github.io/vaxrank/mixed-antigen-design/) and
-[window exposure](https://openvax.github.io/vaxrank/core-window-exposure/) workflows.
+[CTA expression](https://openvax.github.io/vaxrank/design/expression-cta-inputs/) and
+[mixed-antigen](https://openvax.github.io/vaxrank/mixed-antigen-design/) workflows.
 
 ## Development
 
