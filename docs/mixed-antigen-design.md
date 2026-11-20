@@ -83,5 +83,4 @@ total capacity across panels. The shared type limits above apply across the
 vaccine, not independently within each mRNA molecule.
 
 Saved CTA/viral reports need no Ensembl release; mutation reports still need
-annotation when it was not retained. Optional [window exposure](core-window-exposure.md)
-is also experimental and does not change selection.
+annotation when it was not retained.

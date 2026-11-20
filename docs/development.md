@@ -64,7 +64,7 @@ not trusted and not automatically deleted.
 
 Library callers of `assess_vaccine_antigen_window` and
 `safety_assessment_from_prediction_frame` can pass `prediction_requests`, a
-tuple of public `MHCRequest` records (also used by context audits). Each record
+tuple of public `MHCRequest` records. Each record
 declares an exact prediction kind, predictor name/version, one allele, and one
 required peptide length. Resolve these from the intended model configuration before
 prediction; never construct the request from the output rows. Declare lengths
@@ -79,9 +79,7 @@ longer than the window requires no positions, but an entirely empty prediction
 inventory cannot be reported as complete.
 
 Historical inventories without a request remain readable and explicitly lack
-coverage. The safety policy reports `incomplete` in audit mode and raises
-`SafetyPolicyError` in enforce mode for undeclared or incomplete coverage. Off
-mode remains visibly disabled. Native replay retains the request and recomputes
+coverage. Native replay retains the request and recomputes
 gaps from the preserved evidence; JSON reports include both. These coverage
 checks do not enable default CLI safety enforcement or change its screening
 thresholds, which remain separate work.

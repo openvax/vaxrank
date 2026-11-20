@@ -34,7 +34,6 @@ nav:
     - Isovar inputs: isovar-inputs.md
     - CTA expression inputs: design/expression-cta-inputs.md
     - Mixed antigens: mixed-antigen-design.md
-    - Window exposure: core-window-exposure.md
   - How it works:
     - How Vaxrank works: how-it-works.md
     - Varcode, Isovar & Vaxrank: library-responsibilities.md

@@ -351,12 +351,6 @@ another source's prediction, admission or support. Legacy report IDs remain in
 See [Evidence and provenance](unified_evidence.md) for the data model.
 Run `vaxrank --print-default-config` for current configuration defaults.
 
-## Experimental window exposure
-
-`vaxrank-window-exposure` explores delivery of admitted SLP windows under explicit
-kinetic assumptions, without changing selection. See the
-[window exposure guide](core-window-exposure.md).
-
 ## Coverage in design reports
 
 HTML, PDF and text reports lead with input coverage, then emitted products,
