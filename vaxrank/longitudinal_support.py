@@ -260,7 +260,7 @@ def build_longitudinal_support_view(
         )
         cta_decisions = [
             d for d in admission.decisions
-            if d.status not in {"not_cta", "unresolved_reference"}
+            if d.status not in {"not_cta", "unresolved_reference", "unsafe_reference", "not_current_cta"}
         ]
         if len(cta_decisions) > 50:
             small_cta_panel = False

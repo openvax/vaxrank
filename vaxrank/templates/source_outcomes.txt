@@ -7,7 +7,9 @@ Rows group identical recorded outcomes and context; every source identity is ret
   {{ source.origin }}; {{ source.stage }}: {{ source.reasons | join('; ') }}
   {{ source.product_outcome }}{% if source.retained_epitopes is not none %}; {{ source.retained_epitopes }} retained epitope records{% endif %}
 {% endfor %}
-{% for producer in input_coverage.producers %}{% for model in producer.unresolved %}
+{% for producer in input_coverage.producers %}
+Producer: {{ producer.family }} / {{ producer.sample or 'Unknown' }}; event: {{ producer.event_label }}; reference models: {{ producer.models if producer.models is not none else 'Unknown' }}; resolved coding candidates: {{ producer.candidates }}; RNA reconstructions: {{ producer.rna_reconstructions if producer.rna_reconstructions is not none else 'Unknown' }}; state: {{ producer.state or 'Not recorded' }}
+{% endfor %}{% for producer in input_coverage.producers %}{% for model in producer.unresolved %}
 Unresolved reference model: {{ model.identity }}; {{ model.reason }}; producer {{ producer.identity }}
 {% endfor %}{% endfor %}
 {% for original in input_coverage.direct %}
@@ -20,6 +22,6 @@ Failed RNA filters alone do not establish final exclusion when DNA fallback is e
 {% endfor %}{% endfor %}
 {% for expression in input_coverage.expression %}
 CTA expression: {{ expression.identity }}; sample {{ expression.contract.sample_id }}; {{ expression.contract.measurement_level }} / {{ expression.contract.expression_unit }}; assay {{ expression.contract.assay }}
-{% if expression.omitted_not_cta_count %}Omitted {{ expression.omitted_not_cta_count }} non-CTA background features (status: not_cta)
+{% if expression.omitted_not_cta_count %}Omitted {{ expression.omitted_not_cta_count }} non-CTA background features
 {% endif %}{% for row in expression.decisions %}{{ row.input_identifier }} {{ row.gene_name }}: {{ row.value if row.value is not none else 'Unknown' }}; {{ row.status }}
 {% endfor %}{% endfor %}

@@ -23,9 +23,6 @@ Related alternative sequences do not establish independent target coverage.</p>
 <p>Emitted antigen sequences by type: {% for kind, count in group.assembly_decisions.allocation.emitted_counts.items() %}{{ kind }}: {{ count }}{% if not loop.last %}; {% endif %}{% else %}none{% endfor %}.</p>
 {% for goal in group.assembly_decisions.allocation.unmet_goals %}<p>{{ goal.kind }} representation goal: requested {{ goal.requested }}, emitted {{ goal.emitted }}; {{ goal.reason | replace('_', ' ') }} ({{ goal.available }} eligible unique sequences).</p>{% endfor %}
 {% endif %}
-<table class="pure-table"><thead><tr><th>Order / sources</th><th>Final antigen sequence</th><th>Packing outcome</th></tr></thead><tbody>
-{% for decision in group.assembly_decisions.rows %}<tr><td>{{ decision.order }}: {% for source in decision.sources %}<a href="#source-{{ source }}">{{ source }}</a>{% if not loop.last %}, {% endif %}{% endfor %}<br>{{ decision.mapping_count }} candidate mappings</td>
-<td class="sequence-cell">{{ decision.sequence }}</td><td>{{ decision.outcome | replace('_', ' ') }}{% if decision.products %}: {{ decision.products | join(', ') }}{% endif %}{% if decision.length_constraint %}<br>Assembled length {{ decision.length_constraint.length }} {{ decision.length_constraint.unit }}; limit {{ decision.length_constraint.limit }} {{ decision.length_constraint.unit }}.{% endif %}</td></tr>{% endfor %}</tbody></table>
 {% else %}<p class="note">Historical assembly ordering, deduplication and capacity decisions were not recorded. Product mappings below describe the saved result.</p>{% endif %}{% endif %}
 {% if group.files %}<p>Product files (relative to the run output directory):
 {% for file in group.files %}<code>{{ file }}</code>{% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
@@ -75,6 +72,13 @@ C-terminal amidation: {{ 'yes' if product.c_terminal_amidation else 'no' }}.</p>
 {% endif %}
 </article>
 {% else %}<p>No {{ group.modality }} products were emitted.</p>{% endfor %}
+{% if group.assembly_decisions is defined and group.assembly_decisions is not none and group.assembly_decisions.rows %}
+<details>
+<summary>Packing decisions ({{ group.assembly_decisions.rows | length }} candidate sequences)</summary>
+<table class="pure-table"><thead><tr><th>Order / sources</th><th>Final antigen sequence</th><th>Packing outcome</th></tr></thead><tbody>
+{% for decision in group.assembly_decisions.rows %}<tr><td>{{ decision.order }}: {% for source in decision.sources %}<a href="#source-{{ source }}">{{ source }}</a>{% if not loop.last %}, {% endif %}{% endfor %}<br>{{ decision.mapping_count }} candidate mappings</td>
+<td class="sequence-cell">{{ decision.sequence }}</td><td>{{ decision.outcome | replace('_', ' ') }}{% if decision.products %}: {{ decision.products | join(', ') }}{% endif %}{% if decision.length_constraint %}<br>Assembled length {{ decision.length_constraint.length }} {{ decision.length_constraint.unit }}; limit {{ decision.length_constraint.limit }} {{ decision.length_constraint.unit }}.{% endif %}</td></tr>{% endfor %}</tbody></table>
+</details>{% endif %}
 </section>
 {% endfor %}
 {% else %}<p>No construct files were emitted. Use <code>--output-dir</code> to request product assembly. Candidate windows are analysis results.</p>{% endif %}

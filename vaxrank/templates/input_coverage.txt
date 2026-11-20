@@ -18,10 +18,6 @@ Distinct observations of one input are separate histories and must not be added.
 {% for key, label in [('loaded', 'Parsed variants loaded'), ('annotatable', 'Variants with annotation results'), ('coding_effect', 'Coding-effect variants'), ('coding_with_rna_protein', 'Coding-effect variants with an RNA-derived protein'), ('with_candidate_windows', 'Variants with candidate windows')] %}{{ label }}: {{ original.counts[key] if original.counts[key] is not none else "Not assessed at this stage" }}
 {% endfor %}{% endfor %}
 {% if not input_coverage.direct %}Original VCF/BAM stage counts: unknown (not retained). Surviving rows cannot recover that denominator.{% endif %}
-{% for producer in input_coverage.producers %}
-Producer: {{ producer.family }} / {{ producer.sample or 'Unknown' }}; reference models: {{ producer.models if producer.models is not none else 'Unknown' }}; resolved coding candidates: {{ producer.candidates }}; RNA reconstructions: {{ producer.rna_reconstructions if producer.rna_reconstructions is not none else "Unknown" }}; event: {{ producer.event | tojson }}; state: {{ producer.state or 'Not recorded' }}
+{% for group in input_coverage.producer_summaries %}
+Producer summary: {{ group.family }} / {{ group.sample }}; events: {{ group.events }}; reference models: {{ group.models if group.models is not none else 'Unknown' }}; resolved coding candidates: {{ group.candidates }}; RNA reconstructions: {{ group.rna_reconstructions if group.rna_reconstructions is not none else 'Unknown' }}; states: {{ group.states }}
 {% endfor %}
-
-{% for producer in input_coverage.producers %}{% for model in producer.model_outcomes %}
-Reference model: {{ model.reference or model.identity }}; compatible RNA reconstructions: {{ model.compatible_rna if model.compatible_rna is not none else 'Unknown' }}; coding candidates: {{ model.candidates if model.candidates is not none else 'Unknown' }}; outcome: {{ model.reason or model.state or 'Not recorded' }}
-{% endfor %}{% endfor %}

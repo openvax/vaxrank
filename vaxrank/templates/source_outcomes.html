@@ -8,8 +8,13 @@ they are not disjoint losses. “No ranked window” does not identify a biologi
 <td>{{ source.stage }}{% for reason in source.reasons %}<br>{{ reason | e }}{% endfor %}
 {% if source.retained_epitopes is not none %}<br>{{ source.retained_epitopes }} retained epitope records{% endif %}</td><td>{{ source.product_outcome | e }}</td></tr>{% endfor %}
 </tbody></table>
+{% if input_coverage.producers %}<details>
+<summary>Per-event producer and reference-model ledger ({{ input_coverage.producers | length }} event records)</summary>
+<table class="pure-table pure-table-bordered"><thead><tr><th>Family / sample</th><th>Event</th><th>Reference models</th><th>Resolved coding candidates</th><th>RNA reconstructions</th><th>State</th></tr></thead><tbody>
+{% for producer in input_coverage.producers %}<tr><td>{{ producer.family | e }} / {{ producer.sample or 'Unknown' | e }}</td><td>{{ producer.event_label | e }}</td><td>{{ producer.models if producer.models is not none else 'Unknown' }}</td><td>{{ producer.candidates }}</td><td>{{ producer.rna_reconstructions if producer.rna_reconstructions is not none else 'Unknown' }}</td><td>{{ producer.state or 'Not recorded' | e }}</td></tr>{% endfor %}</tbody></table>
+</details>{% endif %}
 {% for producer in input_coverage.producers %}{% if producer.unresolved %}
-<h3>Unresolved reference models: {{ producer.family }} / {{ producer.sample or 'Unknown' }}</h3>
+<h3>Unresolved reference models: {{ producer.family }} / {{ producer.sample or 'Unknown' }} ({{ producer.event_label | e }})</h3>
 <p>Producer evidence identity: {{ producer.identity | e }}</p><ul>{% for model in producer.unresolved %}
 <li>{{ model.identity | e }} {{ model.context | e }}: {{ model.reason | e }}{% if model.status %} ({{ model.status | e }}){% endif %}</li>{% endfor %}</ul>{% endif %}{% endfor %}
 {% for original in input_coverage.direct %}<p>Recorded Isovar thresholds: {{ original.isovar_filter_thresholds | tojson | e }}. Failed RNA filters alone do not establish final exclusion when DNA fallback is enabled.</p><h3>Original variant outcomes: {{ original.input_id | e }}</h3>
@@ -18,7 +23,7 @@ they are not disjoint losses. “No ranked window” does not identify a biologi
 {% for key in ('is_coding_nonsynonymous', 'rna_support', 'has_vaccine_peptide') %}<td>{{ ('Yes' if row[key] else 'No') if row[key] is not none else 'Not assessed at this stage' }}</td>{% endfor %}<td>{% if row.isovar_filter_results %}{% for name, passed in row.isovar_filter_results.items() %}{{ name | e }}: {{ 'Pass' if passed else 'Fail' }}<br>{% endfor %}{% else %}Not recorded{% endif %}</td></tr>{% endfor %}
 {% for row in original.annotation_unavailable %}<tr><td>{{ row.contig }}:{{ row.start }} {{ row.ref }}&gt;{{ row.alt }}</td><td colspan="4">Annotation result unavailable</td></tr>{% endfor %}</tbody></table>{% endfor %}
 {% for expression in input_coverage.expression %}<h3>CTA expression admission: {{ expression.identity | e }}</h3>
-{% if expression.omitted_not_cta_count %}<p class="note">{{ expression.omitted_not_cta_count }} non-CTA background features omitted (status: <code>not_cta</code>).</p>{% endif %}
+{% if expression.omitted_not_cta_count %}<p class="note">{{ expression.omitted_not_cta_count }} non-CTA background features omitted.</p>{% endif %}
 {% if expression.decisions %}<table class="pure-table pure-table-bordered"><thead><tr><th>Feature / gene</th><th>Expression ({{ expression.contract.expression_unit }})</th><th>Recorded decision</th></tr></thead><tbody>
 {% for row in expression.decisions %}<tr><td>{{ row.input_identifier | e }} {{ row.gene_name | e }}</td><td>{{ row.value if row.value is not none else 'Unknown' }}</td><td>{{ row.status | e }}</td></tr>{% endfor %}</tbody></table>{% endif %}{% endfor %}
 </section>

@@ -237,3 +237,66 @@ def test_direct_structural_variant_is_not_counted_as_a_small_variant():
     families = {f['name']: f for f in coverage_view(coverage, {}, [], {})['families']}
     assert families['Structural variants']['records'] == 1
     assert families['Small variants']['records'] == 0
+
+
+def test_input_coverage_summarizes_producers_before_products_and_keeps_ledger_in_appendix():
+    """Regression test for #890: Input coverage groups per-event producers by (family, sample)."""
+    from vaxrank.native_serialization import to_native_json
+    from vaxrank.patient_info import PatientInfo
+    from vaxrank.peptide import PeptideConstructConfig, assemble_peptide_constructs
+    from vaxrank.report import TemplateDataCreator
+    from .test_product_reports import render
+
+    _, _, _, ranked, coverage = _coverage_fixture()
+    audit = {}
+    products = {'peptide': assemble_peptide_constructs(
+        ranked, PeptideConstructConfig(max_constructs=1), selection_audit=audit)}
+    selection = {'construct_assembly': {'peptide': {'source_graph': to_native_json(
+        dict(inputs=[], products={}, assembly_decisions=audit))}}}
+    evidence = {
+        f'isovar-ev-{i}': {
+            'family': 'variant_orfs',
+            'decisions': [{'admitted': True}] * (i + 1),
+            'isovar_result': {
+                'sample_id': 'T1-BostonGene',
+                'assembly_state': 'assembled',
+                'variant': {'contig': '14', 'start': 101980520 + i, 'ref': 'G', 'alt': 'A'},
+                'rna_candidates': [{'id': f'r{i}'}],
+                'models': [{'model_id': f'm{i}', 'state': 'resolved', 'candidate_ids': ['c1'],
+                            'compatible_rna_candidate_count': 1, 'reference': {'orf_id': f'ENSP{i}'}}],
+            },
+        }
+        for i in range(5)
+    }
+    data = TemplateDataCreator(
+        ranked,
+        PatientInfo('P-890', input_coverage=coverage),
+        '',
+        '',
+        dict(manufacturability=False, wt_epitopes=False),
+        None,
+        products=products,
+        source_evidence=evidence,
+        selection=selection,
+    ).compute_template_data()
+
+    summaries = data['input_coverage']['producer_summaries']
+    assert len(summaries) == 1
+    assert summaries[0]['family'] == 'Additional variant ORFs'
+    assert summaries[0]['sample'] == 'T1-BostonGene'
+    assert summaries[0]['events'] == 5
+    assert summaries[0]['models'] == 5
+    assert summaries[0]['candidates'] == 15
+
+    html = render(data, 'html')
+    txt = render(data, 'txt')
+    front_html = html.split('<h2 id="products">', 1)[0]
+    assert front_html.count('Additional variant ORFs / T1-BostonGene') == 1
+    assert 'Reference-model outcomes:' not in front_html
+    assert 'Per-event producer and reference-model ledger (5 event records)' in html
+    assert '14:101980520 G&gt;A' in html
+    assert '14:101980520 G>A' in txt
+    assert 'Producer summary: Additional variant ORFs / T1-BostonGene; events: 5' in txt
+    # Emitted construct appears before the collapsible packing-decisions ledger
+    products_html = html.split('<h2 id="products">', 1)[1].split('<h2', 1)[0]
+    assert products_html.index('id="product-peptide_001"') < products_html.index('Packing decisions')
