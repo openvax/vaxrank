@@ -723,3 +723,93 @@ def test_source_outcomes_omits_not_cta_background_and_keeps_concise_pipeline_hea
     assert "PRAME" in html_text and "held_out" in html_text
     assert long_source_uri not in html_text
     assert "bulk_rna_seq" in html_text
+    assert "<h3>CTA expression inputs</h3>" in html_text
+    assert "CTA expression input:" not in html_text
+
+
+def test_many_normal_libraries_render_concise_headline_and_collapsible_audit(tmp_path):
+    """Regression test for #892: avoid multi-kilobyte inline normal walls in product cells."""
+    from dataclasses import replace
+
+    obs = [
+        # Duplicate identical runs on same library (different source_identity) collapse in display
+        MatchedNormalObservation(
+            assay="DNA", library_id="wgs-1", pipeline="DRAGEN", source_identity="pair-a",
+            tissue="blood", depth=52, alt_count=0,
+        ),
+        MatchedNormalObservation(
+            assay="DNA", library_id="wgs-1", pipeline="DRAGEN", source_identity="pair-b",
+            tissue="blood", depth=52, alt_count=0,
+        ),
+        MatchedNormalObservation(
+            assay="DNA", library_id="wes-1", pipeline="Sarek", source_identity="pair-a",
+            tissue="blood", depth=143, alt_count=0,
+        ),
+        *(
+            MatchedNormalObservation(
+                assay="RNA", library_id=f"blood-pool-{i}", pipeline="catalogue",
+                source_identity=f"pool-{i}", tissue="blood", depth=2000 + i * 100,
+                alt_count=2 if i in (1, 3) else 0,
+            )
+            for i in range(5)
+        ),
+    ]
+    ag = VaccineAntigen(
+        kind="mutation",
+        amino_acids="MTSAKKMLLWNWKKWEKMRNK",
+        targetable_mask=TargetableMask((AminoAcidInterval(13, 14),)),
+        tumor_specificity=TumorSpecificityAttestation(
+            status="admitted",
+            evidence_kind="somatic_variant",
+            evidence_source="somatic_vcf",
+            patient_specific=True,
+            rationale_code="somatic",
+        ),
+        gene_name="MBD4",
+        gene_id="ENSG00000129071",
+        source_identifier="mbd4-ncorf",
+        normal_observations=tuple(obs),
+    )
+    ep = _ep("KKMLLWNWKK", ag.amino_acids, "pred-mbd4", offset=4)
+    vp = VaccinePeptide(antigen=ag, epitopes=[ep])
+    ranked = [(ag, [vp])]
+    products = {
+        "peptide": assemble_peptide_constructs(
+            ranked,
+            PeptideConstructConfig(min_antigen_length_aa=15, max_antigen_length_aa=25),
+            target_alleles=["HLA-A*02:01"],
+        )
+    }
+    creator = TemplateDataCreator(
+        ranked_variants_with_vaccine_peptides=ranked,
+        patient_info=PatientInfo(
+            patient_id="P-892",
+            vcf_paths=[],
+            bam_path=None,
+            mhc_alleles=["HLA-A*02:01"],
+            num_somatic_variants=1,
+            num_coding_effect_variants=1,
+            num_variants_with_rna_support=1,
+            num_variants_with_vaccine_peptides=1,
+        ),
+        final_review="",
+        reviewers="",
+        args_for_report={"manufacturability": False, "wt_epitopes": False},
+        input_json_file=None,
+        products=products,
+    )
+    tdata = creator.compute_template_data()
+    html_out = tmp_path / "report_892.html"
+    txt_out = tmp_path / "report_892.txt"
+    make_html_report(tdata, str(html_out))
+    make_ascii_report(tdata, str(txt_out))
+    html_text = html_out.read_text()
+    txt_text = txt_out.read_text()
+    assert "Matched normal: DNA 0 alt across 2/2 libraries (52-143x); RNA alt reads in 2/5 libraries (max 2/2100). Review required." in html_text
+    assert "Matched normal: DNA 0 alt across 2/2 libraries (52-143x); RNA alt reads in 2/5 libraries (max 2/2100). Review required." in txt_text
+    assert "Per-library normal audit (7 libraries)" in html_text
+    assert "DRAGEN 0/52, DRAGEN 0/52" not in html_text
+    assert "observed_alt_support" not in html_text
+    assert "[adequate_coverage]" not in html_text
+    # Ensure replace import is used cleanly
+    assert replace(ag, gene_name="MBD4").gene_name == "MBD4"

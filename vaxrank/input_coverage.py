@@ -286,6 +286,7 @@ def coverage_view(coverage, source_evidence, ranked_candidates, products):
                 identity=evidence_id,
                 contract=asdict(admission.input_contract),
                 decisions=decisions,
+                admitted_count=sum(1 for d in decisions if d.get('status') == 'admitted'),
                 omitted_not_cta_count=omitted_not_cta_count,
             ))
 

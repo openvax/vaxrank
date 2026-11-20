@@ -27,8 +27,8 @@ Stage: {{ original.stage }}. Distinct observations of one input are separate his
 {% for group in input_coverage.producer_summaries %}<tr><td>{{ group.family | e }} / {{ group.sample | e }}</td><td>{{ group.events }}</td><td>{{ group.models if group.models is not none else 'Unknown' }}</td><td>{{ group.candidates }}</td><td>{{ group.rna_reconstructions if group.rna_reconstructions is not none else 'Unknown' }}</td><td>{{ group.states | e }}</td></tr>{% endfor %}</tbody></table>
 <p class="note">One event can produce several reference-model interpretations and many RNA reconstructions; counts are grouped by family and sample here.
 See <a href="#source-outcomes">source outcomes</a> for per-event producer records, reference-model outcomes, and unresolved models.</p>{% endif %}
-{% for expression in input_coverage.expression %}<p>CTA expression input: {{ expression.decisions | length }} measured features;
-{{ expression.contract.measurement_level }} / {{ expression.contract.expression_unit }};
-sample {{ expression.contract.sample_id | e }}; assay {{ expression.contract.assay | e }}.</p>{% endfor %}
+{% if input_coverage.expression %}<h3>CTA expression inputs</h3>
+<table class="pure-table pure-table-bordered"><thead><tr><th>Sample</th><th>Admitted / CTA features</th><th>Level / unit</th><th>Assay</th></tr></thead><tbody>
+{% for expression in input_coverage.expression %}<tr><td>{{ expression.contract.sample_id | e }}</td><td>{{ expression.admitted_count | default(0) }} / {{ expression.decisions | length }}</td><td>{{ expression.contract.measurement_level | e }} / {{ expression.contract.expression_unit | e }}</td><td>{{ expression.contract.assay | e }}</td></tr>{% endfor %}</tbody></table>{% endif %}
 <p><a href="#source-outcomes">Source outcomes</a> &middot; <a href="#input-lineage">Original inputs and current report inputs</a></p>
 </section>
