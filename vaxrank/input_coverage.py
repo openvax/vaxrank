@@ -276,8 +276,9 @@ def coverage_view(coverage, source_evidence, ranked_candidates, products):
             supplied.add('cta')
             decisions = []
             omitted_not_cta_count = 0
+            background_statuses = {'not_cta', 'unresolved_reference', 'unsafe_reference', 'not_current_cta'}
             for decision in admission.decisions:
-                if decision.status == 'not_cta':
+                if decision.status in background_statuses:
                     omitted_not_cta_count += 1
                 else:
                     decisions.append(asdict(decision))
