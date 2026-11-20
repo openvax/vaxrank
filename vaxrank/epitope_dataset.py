@@ -13,9 +13,10 @@ import pandas as pd
 from mhctools.pred import Prediction
 from topiary import TopiaryResult, combine_sources, is_stated, read_csv, read_tsv
 
+from .file_digest import file_sha256, is_sha256_digest
 from .rna_support import (
     RNA_BINDINGS, RNASupportArchive, _canonical_json, _sha256,
-    is_sha256_digest, rna_support_bindings,
+    rna_support_bindings,
 )
 from .allele_validation import validate_peptide_alleles
 from .candidate_epitope import CandidateEpitope, Peptide, stated_or_blank
@@ -617,7 +618,7 @@ def read_epitope_report(path, *, source_format, scope_declarations=None, **_):
         import hashlib
         import json
         from .input_scope import combine_scopes, report_declarations, scope_from_mapping, scope_dict
-        identity = "topiary:" + hashlib.sha256(Path(path).read_bytes()).hexdigest()
+        identity = "topiary:" + file_sha256(path)
         result = read_table(path)
         producer_scope, _ = report_declarations(path, source_format, frame=result.df)
         scope = combine_scopes(producer_scope, scope_from_mapping(

@@ -15,7 +15,6 @@
 import logging
 import json
 import logging.config
-import math
 import os
 import sys
 from importlib.resources import files
@@ -73,20 +72,10 @@ from ..peptide import (
     assemble_peptide_constructs,
     write_peptide_outputs,
 )
+from ..proteome import normalize_json_value
 from ..vaf import extract_dna_vaf_by_variant
 
 logger = logging.getLogger(__name__)
-
-
-def _nan_to_none(value):
-    """Replace non-finite floats in normalized dict/list values with None."""
-    if isinstance(value, float) and not math.isfinite(value):
-        return None
-    if isinstance(value, dict):
-        return {key: _nan_to_none(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_nan_to_none(item) for item in value]
-    return value
 
 
 def serialize_json_nan_tolerant(obj):
@@ -95,8 +84,7 @@ def serialize_json_nan_tolerant(obj):
     Producers should already coerce non-finite floats to None. This writer
     also normalizes them so one bad float cannot lose the report (#289).
     """
-    from serializable.helpers import to_serializable_repr
-    return json.dumps(_nan_to_none(to_serializable_repr(obj)), allow_nan=False)
+    return json.dumps(normalize_json_value(obj), allow_nan=False)
 
 
 def filter_unannotatable_variants(variants):

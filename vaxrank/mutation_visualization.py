@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from hashlib import sha256
 from html import escape
 import json
 import math
@@ -16,6 +15,7 @@ import tempfile
 
 import pandas as pd
 
+from .file_digest import file_sha256
 from .version import __version__
 
 
@@ -648,7 +648,7 @@ def generate_mutation_figures(
             "created_utc": timestamp,
             "vaxrank_version": __version__,
             "source_csv": str(input_csv),
-            "source_csv_sha256": sha256(input_csv.read_bytes()).hexdigest(),
+            "source_csv_sha256": file_sha256(input_csv),
             "formats": list(formats),
             "png_scale": png_scale if "png" in formats else None,
             "png_dimensions": ({

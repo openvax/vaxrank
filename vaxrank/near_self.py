@@ -26,6 +26,7 @@ import numpy as np
 from serializable import DataclassSerializable
 
 from .amino_acids import STANDARD_AMINO_ACIDS, validate_amino_acid_sequence
+from .file_digest import is_sha256_digest
 from .identifiers import normalize_mhc_allele
 from .risk_ligand import (
     PatientHLARiskLigandIndex,
@@ -160,7 +161,7 @@ class SimilarityComparatorProvenance(DataclassSerializable):
     matrix_source_url: str
 
     def __post_init__(self):
-        if not self.metric or len(self.matrix_sha256) != 64:
+        if not self.metric or not is_sha256_digest(self.matrix_sha256):
             raise ValueError("Similarity comparator provenance is incomplete")
 
 
@@ -284,7 +285,7 @@ class NearSelfAssessment(DataclassSerializable):
             raise ValueError("Near-self distance requires at least one hit")
         if any(hit.hamming_distance != self.nearest_distance for hit in hits):
             raise ValueError("Near-self result contains a non-nearest hit")
-        if len(self.risk_index_cache_identity_sha256) != 64:
+        if not is_sha256_digest(self.risk_index_cache_identity_sha256):
             raise ValueError("Near-self result requires risk-index provenance")
         object.__setattr__(self, "nearest_hits", hits)
         object.__setattr__(

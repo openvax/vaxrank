@@ -1,7 +1,6 @@
 """Vaxrank's consumer boundary for Topiary selection policies."""
 
 from dataclasses import replace
-import hashlib
 import json
 from pathlib import Path
 
@@ -9,11 +8,12 @@ import numpy as np
 import pandas as pd
 from topiary import SelectionPolicy, TopiaryResult, evaluate_selection_policy
 
+from .file_digest import canonical_json_sha256, file_sha256
+
 
 def canonical_digest(definition):
     """Identify the complete effective configuration, independent of key order."""
-    text = json.dumps(definition, sort_keys=True, separators=(",", ":"), allow_nan=False)
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return canonical_json_sha256(definition)
 
 
 def evaluate_frame(frame, cfg, *, group_keys, alleles=None, kind_support=None,
@@ -96,7 +96,7 @@ def save_policy_evaluations(evaluations, directory):
         evaluation.audit.to_csv(directory / (stem + "-criteria.tsv"), sep="\t", index=False)
         records.append(dict(name=evaluation.policy.name, sha256=evaluation.policy.sha256,
                             evidence=evidence_path.name,
-                            evidence_sha256=hashlib.sha256(evidence_path.read_bytes()).hexdigest()))
+                            evidence_sha256=file_sha256(evidence_path)))
     (directory / "index.json").write_text(json.dumps(records, indent=2) + "\n")
     return records
 

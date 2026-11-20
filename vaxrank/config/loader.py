@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import warnings
-import hashlib
 from copy import deepcopy
 from importlib.resources import files
 from typing import Any
@@ -9,6 +8,7 @@ from typing import Any
 import msgspec
 
 from .schema import VaxrankConfigSchema
+from ..file_digest import file_sha256
 from ..modalities import known_modalities
 
 # Top-level YAML keys that have been renamed across versions. Each
@@ -385,8 +385,7 @@ def configuration_provenance(args):
         paths = [paths]
     sources = []
     for path in paths:
-        with open(resolve_config_path(path), 'rb') as stream:
-            sources.append(dict(path=str(path), sha256=hashlib.sha256(stream.read()).hexdigest()))
+        sources.append(dict(path=str(path), sha256=file_sha256(resolve_config_path(path))))
     return dict(name=resolved.get('name'), sources=sources,
                 ordered_overrides=getattr(args, 'config_overrides', None),
                 set_overrides=getattr(args, 'config_set_overrides', None),

@@ -30,10 +30,8 @@ from .version import __version__
 SCHEMA = "vaxrank.results.v1"
 
 
-def _json_value(value):
-    """Return strict JSON data, retaining unknown non-finite values as null."""
-    value = to_serializable_repr(value)
-
+def normalize_json_value(value):
+    """Convert to serializable JSON data, rendering non-finite floats as None."""
     def normalize(item):
         if isinstance(item, float) and not math.isfinite(item):
             return None
@@ -43,7 +41,12 @@ def _json_value(value):
             return [normalize(child) for child in item]
         return item
 
-    value = normalize(value)
+    return normalize(to_serializable_repr(value))
+
+
+def _json_value(value):
+    """Return strict JSON data, retaining unknown non-finite values as null."""
+    value = normalize_json_value(value)
     json.dumps(value, allow_nan=False)
     return value
 

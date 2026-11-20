@@ -6,6 +6,7 @@ import json
 import re
 
 from serializable import DataclassSerializable
+from .file_digest import is_sha256_digest
 from .input_scope import resolved_reference_assembly
 
 
@@ -61,7 +62,7 @@ class CTAAnnotationReference(DataclassSerializable):
             raise ValueError("Unsupported CTA identity contract")
         _validate_annotation_identity(self.annotation_species, self.annotation_assembly,
                                       self.annotation_release)
-        if len(self.annotation_sha256) != 64:
+        if not is_sha256_digest(self.annotation_sha256):
             raise ValueError("CTA annotation requires SHA-256 provenance")
         candidates = tuple(sorted(set(self.canonical_candidate_gene_ids)))
         excluded = tuple(sorted(set(self.self_reference_excluded_gene_ids)))

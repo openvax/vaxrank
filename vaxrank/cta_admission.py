@@ -14,6 +14,7 @@ from typing import Optional
 import pandas as pd
 from serializable import DataclassSerializable
 
+from .file_digest import is_sha256_digest
 from .identifiers import normalize_ensembl_gene_id
 from .cta_identity import (
     CTAAnnotationReference, cta_annotation_identity, identity_digest,
@@ -97,10 +98,7 @@ class PatientTumorExpressionEvidence(DataclassSerializable):
             raise ValueError("Tumor expression measurement level must be gene or transcript")
         if (self.measurement_level == "transcript") != bool(self.transcript_id):
             raise ValueError("Only transcript expression requires a measured transcript ID")
-        if self.input_sha256 and (
-            len(self.input_sha256) != 64
-            or any(c not in "0123456789abcdef" for c in self.input_sha256)
-        ):
+        if self.input_sha256 and not is_sha256_digest(self.input_sha256):
             raise ValueError("Tumor expression input_sha256 must be a SHA-256 digest")
         try:
             value = float(self.value)
@@ -156,7 +154,7 @@ class CTAReferenceEvidence(DataclassSerializable):
             self.unfiltered_gene_ids_sha256,
             self.source_row_sha256,
         ):
-            if len(digest) != 64:
+            if not is_sha256_digest(digest):
                 raise ValueError("CTA reference evidence requires SHA-256 provenance")
 
 
@@ -187,7 +185,7 @@ class CTAReferenceResolution(DataclassSerializable):
                     or identity.get("canonical_gene_id") != self.evidence.gene_id):
                 raise ValueError("CTA reference requires verified annotation identity")
             source_id = identity["source_gene_id"]
-            if any(len(d) != 64 for d in (
+            if any(not is_sha256_digest(d) for d in (
                     self.annotation_reference_sha256, self.annotation_sha256,
                     self.self_reference_excluded_gene_ids_sha256)):
                 raise ValueError("CTA annotation identity requires SHA-256 provenance")

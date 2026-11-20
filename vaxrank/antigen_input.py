@@ -12,6 +12,7 @@ from .allele_validation import parse_prediction_allele, validate_prediction_fram
 from .cells import text as cell_text
 from .epitope_config import EpitopeConfig
 from .epitope_dataset import EpitopeDataset
+from .file_digest import file_sha256
 from .input_scope import (
     InputProvenance, InputScope, SHARED_FIELDS, combine_scopes,
     scope_from_mapping, scope_dict, provenance_dict, validate_input_scopes, validate_host_taxon,
@@ -207,7 +208,7 @@ class AntigenDataset:
         digest = hashlib.sha256(json.dumps(resolved, sort_keys=True, allow_nan=False).encode()).hexdigest()
         return InputProvenance(
             input_id='antigens:' + digest, source_format='antigens', path=str(path),
-            content_sha256=hashlib.sha256(Path(path).read_bytes()).hexdigest() if path else digest,
+            content_sha256=file_sha256(path) if path else digest,
             scope=scope,
             manifest_path=str(Path(manifest_path).resolve()) if manifest_path else None,
             manifest_declarations=dict(manifest_declarations or {}),

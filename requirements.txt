@@ -1,6 +1,4 @@
 numpy>=2.0.0,<3.0.0
-# Streaming FASTA parsing; 1.6 also supports our Python 3.11 floor.
-biotite>=1.6.0,<3.0.0
 # Shared test-data downloads use verified cache hits, explicit roots and bounded
 # HTTP retries via datacache's public API, without fetching during normal tests.
 # The 1.11.1 floor is what inspect_files/Cache.inspect need: download_test_data
@@ -71,7 +69,6 @@ mhctools>=4.8.1,<5.0.0
 # 5.113.0 exposes the representative-transcript rule shared by CTA and risk
 # protein resolution (vaxrank#836).
 topiary>=5.113.0,<6.0.0
-roman
 jinja2>=3.1
 weasyprint>=62.0
 # Vector figures remain the source of truth; CairoSVG provides explicit,
@@ -80,7 +77,6 @@ cairosvg>=2.7,<3.0
 pdfkit  # legacy: needs wkhtmltopdf, use --pdf-backend=pdfkit to enable
 openpyxl
 xvfbwrapper>=0.2.34  # legacy: only needed with --pdf-backend=pdfkit on headless Linux
-astropy>=6.1
 platformdirs
 msgspec>=0.18.6,<1.0.0
 dnachisel>=3.2.0,<4.0.0

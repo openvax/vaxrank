@@ -785,7 +785,22 @@ class ReferenceProteome:
 
 
 def _read_fasta(path):
-    """Read FASTA with Biotite, retaining first-token IDs and last duplicate wins."""
-    from biotite.sequence.io.fasta import FastaFile
-
-    return {header.split()[0]: sequence for header, sequence in FastaFile.read_iter(path)}
+    """Stream FASTA records, retaining first-token IDs with last duplicate winning."""
+    records = {}
+    header = None
+    chunks = []
+    with open(path, "r", encoding="utf-8") as handle:
+        for raw_line in handle:
+            line = raw_line.strip()
+            if not line or line[0] == ";":
+                continue
+            if line[0] == ">":
+                if header is not None:
+                    records[header.split()[0]] = "".join(chunks)
+                header = line[1:]
+                chunks = []
+            elif header is not None:
+                chunks.append(line)
+    if header is not None:
+        records[header.split()[0]] = "".join(chunks)
+    return records

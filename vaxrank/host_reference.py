@@ -5,8 +5,8 @@ from functools import cached_property
 import hashlib
 import json
 from pathlib import Path
-import re
 
+from .file_digest import is_sha256_digest
 from .input_scope import InputScope, combine_scopes
 from .reference_coverage import DISCOVER_CATALOGUES, reference_coverage, validate_catalogues
 from .vaccine_antigen import SelfReferenceMatch, SelfReferenceSource
@@ -73,7 +73,7 @@ class HostReference:
             if 'catalogues' in value and catalogues is None:
                 raise ValueError('host_reference catalogues must be an explicit list')
             expected, value = value['identity'], value['path']
-            if not isinstance(expected, str) or not re.fullmatch('[0-9a-f]{64}', expected):
+            if not is_sha256_digest(expected):
                 raise ValueError('host_reference identity must be a SHA-256')
         if not isinstance(value, (str, Path)) or not str(value).strip():
             raise ValueError('host_reference requires an ORFdata snapshot path')

@@ -7,7 +7,6 @@ transcript measurements. It does not infer protein abundance or read counts.
 from dataclasses import dataclass, replace
 import csv
 from fnmatch import fnmatchcase
-import hashlib
 import math
 from pathlib import Path
 import re
@@ -23,6 +22,7 @@ from .cta_admission import (
     PatientTumorExpressionEvidence,
     assess_cta_antigen, resolve_cta_reference_evidence,
 )
+from .file_digest import file_sha256
 from .native_serialization import from_native_json, to_native_json
 from .cta_identity import CTAAnnotationReference, cta_annotation_identity, snapshot_cta_annotation
 from .vaccine_antigen import VaccineAntigen
@@ -265,7 +265,7 @@ def admit_cta_expression(path, *, input_contract, admission_policy, genome=None,
     if any(v in {"", "None"} for v in reference):
         raise ValueError("CTA expression admission requires a versioned genome reference")
     exclusion_policy = exclusion_policy or CTATargetExclusionPolicy()
-    fingerprint = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    fingerprint = file_sha256(path)
     rows = _expression_rows(path, input_contract)
     annotation_reference = snapshot_cta_annotation(genome)
     candidate_ids = set(annotation_reference.canonical_candidate_gene_ids)
@@ -378,7 +378,7 @@ def admit_cta_expression(path, *, input_contract, admission_policy, genome=None,
         decisions.append(replace(decision, status=status, assessment=assessment))
     if set(overrides or {}) != used_overrides:
         raise ValueError('CTA overrides do not match resolved expression targets')
-    if fingerprint != hashlib.sha256(Path(path).read_bytes()).hexdigest():
+    if fingerprint != file_sha256(path):
         raise ValueError("Expression input changed during admission")
     return CTAExpressionResult(input_contract, admission_policy, exclusion_policy,
                                fingerprint, *reference, tuple(decisions), annotation_reference)
