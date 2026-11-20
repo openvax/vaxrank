@@ -175,12 +175,20 @@ def build_longitudinal_support_view(
                         pipeline=prov.source_format,
                     )
 
+    def _cta_pipeline_label(contract):
+        src = str(contract.evidence_source or "").strip()
+        ver = str(contract.evidence_version or "").strip()
+        if src and "/" not in src and len(src) <= 40:
+            return f"{src}:{ver}" if ver and len(ver) <= 24 else src
+        assay = str(getattr(contract, "assay", "") or "").strip()
+        return assay or "cta_expression"
+
     for input_id, admission in cta_admissions.items():
         contract = admission.input_contract
         existing_key = input_to_lib_key.get(input_id)
+        pipeline_label = _cta_pipeline_label(contract)
         if existing_key is not None:
             lib = libraries_by_key[existing_key]
-            pipeline_label = f"{contract.evidence_source}:{contract.evidence_version}"
             if pipeline_label not in lib["pipelines"]:
                 lib["pipelines"].append(pipeline_label)
         else:
@@ -188,7 +196,7 @@ def build_longitudinal_support_view(
                 contract.sample_id,
                 library_id=contract.sample_id,
                 input_id=input_id,
-                pipeline=f"{contract.evidence_source}:{contract.evidence_version}",
+                pipeline=pipeline_label,
             )
 
     for ev_id, ev_record in source_evidence.items():

@@ -211,8 +211,19 @@ def coverage_view(coverage, source_evidence, ranked_candidates, products):
             from .cta_expression import load_cta_expression_result
             admission = load_cta_expression_result(evidence['cta_expression_admission'])
             supplied.add('cta')
-            expression_rows.append(dict(identity=evidence_id, contract=asdict(admission.input_contract),
-                                        decisions=[asdict(d) for d in admission.decisions]))
+            decisions = []
+            omitted_not_cta_count = 0
+            for decision in admission.decisions:
+                if decision.status == 'not_cta':
+                    omitted_not_cta_count += 1
+                else:
+                    decisions.append(asdict(decision))
+            expression_rows.append(dict(
+                identity=evidence_id,
+                contract=asdict(admission.input_contract),
+                decisions=decisions,
+                omitted_not_cta_count=omitted_not_cta_count,
+            ))
 
     families = []
     for family in dict.fromkeys((*FAMILIES, *sorted(supplied))):

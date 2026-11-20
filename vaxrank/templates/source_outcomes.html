@@ -18,6 +18,7 @@ they are not disjoint losses. “No ranked window” does not identify a biologi
 {% for key in ('is_coding_nonsynonymous', 'rna_support', 'has_vaccine_peptide') %}<td>{{ ('Yes' if row[key] else 'No') if row[key] is not none else 'Not assessed at this stage' }}</td>{% endfor %}<td>{% if row.isovar_filter_results %}{% for name, passed in row.isovar_filter_results.items() %}{{ name | e }}: {{ 'Pass' if passed else 'Fail' }}<br>{% endfor %}{% else %}Not recorded{% endif %}</td></tr>{% endfor %}
 {% for row in original.annotation_unavailable %}<tr><td>{{ row.contig }}:{{ row.start }} {{ row.ref }}&gt;{{ row.alt }}</td><td colspan="4">Annotation result unavailable</td></tr>{% endfor %}</tbody></table>{% endfor %}
 {% for expression in input_coverage.expression %}<h3>CTA expression admission: {{ expression.identity | e }}</h3>
-<table class="pure-table pure-table-bordered"><thead><tr><th>Feature / gene</th><th>Expression ({{ expression.contract.expression_unit }})</th><th>Recorded decision</th></tr></thead><tbody>
-{% for row in expression.decisions %}<tr><td>{{ row.input_identifier | e }} {{ row.gene_name | e }}</td><td>{{ row.value if row.value is not none else 'Unknown' }}</td><td>{{ row.status | e }}</td></tr>{% endfor %}</tbody></table>{% endfor %}
+{% if expression.omitted_not_cta_count %}<p class="note">{{ expression.omitted_not_cta_count }} non-CTA background features omitted (status: <code>not_cta</code>).</p>{% endif %}
+{% if expression.decisions %}<table class="pure-table pure-table-bordered"><thead><tr><th>Feature / gene</th><th>Expression ({{ expression.contract.expression_unit }})</th><th>Recorded decision</th></tr></thead><tbody>
+{% for row in expression.decisions %}<tr><td>{{ row.input_identifier | e }} {{ row.gene_name | e }}</td><td>{{ row.value if row.value is not none else 'Unknown' }}</td><td>{{ row.status | e }}</td></tr>{% endfor %}</tbody></table>{% endif %}{% endfor %}
 </section>
