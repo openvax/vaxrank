@@ -1344,9 +1344,13 @@ def resolve_ensembl_release(args):
             from ..input_scope import resolve_input_genome
             # Use the same release grammar as Varcode's genome resolver, including
             # aliases and dated releases, without confusing assembly suffixes for pins.
-            from varcode.reference import _split_release
+            import varcode.reference as varcode_reference
+            split_release = (
+                getattr(varcode_reference, 'split_release', None)
+                or varcode_reference._split_release
+            )
             reference = resolve_input_genome(requested)
-            pinned_release = (_split_release(requested)[1] if isinstance(requested, str)
+            pinned_release = (split_release(requested)[1] if isinstance(requested, str)
                               else getattr(reference, 'release', None))
             if pinned_release is not None:
                 if pinned_release != ensembl_release:

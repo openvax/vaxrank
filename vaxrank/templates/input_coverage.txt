@@ -9,7 +9,7 @@ No supplied evidence recorded does not establish that a family was assessed or e
 {% endif %}{% endfor %}
 {% if quiet.names %}{{ '\n' }}No supplied evidence recorded: {{ quiet.names | join(', ') }}.
 {% endif %}In products uses retained mappings from actual products; unknown also covers analysis-only reports.
-{% for expression in input_coverage.expression %}CTA expression ({{ expression.contract.sample_id }}): {{ expression.admitted_count | default(0) }} admitted / {{ expression.decisions | length }} CTA features ({{ expression.contract.measurement_level }} / {{ expression.contract.expression_unit }}; {{ expression.contract.assay }})
+{% for expression in input_coverage.expression %}Expression features ({{ expression.contract.sample_id }}): {{ expression.admitted_count | default(0) }} admitted / {{ expression.decisions | length }} CTA features ({{ expression.contract.measurement_level }} / {{ expression.contract.expression_unit }}; {{ expression.contract.assay }})
 {% endfor %}
 {% for original in input_coverage.direct %}
 Original variant observation: {{ original.input_id }}; Vaxrank {{ original.producer_version }}
