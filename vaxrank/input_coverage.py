@@ -148,6 +148,67 @@ def ranking_coverage(dataset, reports, outcomes, ranked):
                 current_inputs=[asdict(r.input_provenance) for r in reports])
 
 
+def _format_event_label(event):
+    if event is None or event == "":
+        return "Not recorded"
+    if isinstance(event, dict):
+        contig = event.get("contig")
+        start = event.get("start")
+        ref = event.get("ref")
+        alt = event.get("alt")
+        if contig is not None and start is not None and (ref is not None or alt is not None):
+            return f"{contig}:{start} {ref or '∅'}>{alt or '∅'}"
+        event_id = event.get("event_id")
+        if event_id:
+            return str(event_id)
+    return str(event)
+
+
+def _summarize_producers(producer_rows):
+    grouped = {}
+    for row in producer_rows:
+        key = (row['family'], row['sample'] or 'Unknown')
+        bucket = grouped.setdefault(key, dict(
+            family=key[0],
+            sample=key[1],
+            events=0,
+            models=0,
+            models_known=False,
+            candidates=0,
+            rna_reconstructions=0,
+            rna_known=False,
+            unresolved_models=0,
+            states=Counter(),
+        ))
+        bucket['events'] += 1
+        if row['models'] is not None:
+            bucket['models'] += row['models']
+            bucket['models_known'] = True
+        bucket['candidates'] += row['candidates']
+        if row['rna_reconstructions'] is not None:
+            bucket['rna_reconstructions'] += row['rna_reconstructions']
+            bucket['rna_known'] = True
+        bucket['unresolved_models'] += len(row.get('unresolved', ()))
+        bucket['states'][row['state'] or 'Not recorded'] += 1
+    summaries = []
+    for bucket in grouped.values():
+        state_str = ', '.join(
+            f"{state} ({count})" if count > 1 or len(bucket['states']) > 1 else state
+            for state, count in bucket['states'].most_common()
+        )
+        summaries.append(dict(
+            family=bucket['family'],
+            sample=bucket['sample'],
+            events=bucket['events'],
+            models=bucket['models'] if bucket['models_known'] else None,
+            candidates=bucket['candidates'],
+            rna_reconstructions=bucket['rna_reconstructions'] if bucket['rna_known'] else None,
+            unresolved_models=bucket['unresolved_models'],
+            states=state_str,
+        ))
+    return summaries
+
+
 def coverage_view(coverage, source_evidence, ranked_candidates, products):
     """Attach actual product outcomes to recorded input/ranking observations."""
     coverage = coverage or {}
@@ -189,11 +250,13 @@ def coverage_view(coverage, source_evidence, ranked_candidates, products):
             family = evidence['family']
             supplied.add(family)
             models = result.get('models', ())
+            event = result.get('variant') or result.get('event_id')
             producer_rows.append(dict(identity=evidence_id, family=FAMILIES.get(family, family),
                 sample=result.get('sample_id') or result.get('provenance', {}).get('sample_id'),
                 candidates=len(evidence.get('decisions', ())), models=len(models) if 'models' in result else None,
                 rna_reconstructions=len(result['rna_candidates']) if 'rna_candidates' in result else None,
-                event=result.get('variant') or result.get('event_id'),
+                event=event,
+                event_label=_format_event_label(event),
                 state=result.get('assembly_state') or result.get('status'),
                 model_outcomes=[dict(identity=m.get('model_id') or m.get('id') or str(i),
                     reference=m.get('reference', {}).get('orf_id') or m.get('reference', {}).get('kind'),
@@ -238,7 +301,9 @@ def coverage_view(coverage, source_evidence, ranked_candidates, products):
                          if products and mappings_complete and coverage
                          and all(r['selected'] is not None for r in sources) else None)))
     return dict(families=families, sources=rows, direct=observations,
-                producers=producer_rows, expression=expression_rows,
+                producers=producer_rows,
+                producer_summaries=_summarize_producers(producer_rows),
+                expression=expression_rows,
                 original_inputs=coverage.get('original_inputs', ()),
                 current_inputs=coverage.get('current_inputs', ()),
                 available=bool(coverage),

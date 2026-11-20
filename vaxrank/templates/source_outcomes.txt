@@ -7,7 +7,9 @@ Rows group identical recorded outcomes and context; every source identity is ret
   {{ source.origin }}; {{ source.stage }}: {{ source.reasons | join('; ') }}
   {{ source.product_outcome }}{% if source.retained_epitopes is not none %}; {{ source.retained_epitopes }} retained epitope records{% endif %}
 {% endfor %}
-{% for producer in input_coverage.producers %}{% for model in producer.unresolved %}
+{% for producer in input_coverage.producers %}
+Producer: {{ producer.family }} / {{ producer.sample or 'Unknown' }}; event: {{ producer.event_label }}; reference models: {{ producer.models if producer.models is not none else 'Unknown' }}; resolved coding candidates: {{ producer.candidates }}; RNA reconstructions: {{ producer.rna_reconstructions if producer.rna_reconstructions is not none else 'Unknown' }}; state: {{ producer.state or 'Not recorded' }}
+{% endfor %}{% for producer in input_coverage.producers %}{% for model in producer.unresolved %}
 Unresolved reference model: {{ model.identity }}; {{ model.reason }}; producer {{ producer.identity }}
 {% endfor %}{% endfor %}
 {% for original in input_coverage.direct %}

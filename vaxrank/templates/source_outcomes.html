@@ -8,8 +8,13 @@ they are not disjoint losses. “No ranked window” does not identify a biologi
 <td>{{ source.stage }}{% for reason in source.reasons %}<br>{{ reason | e }}{% endfor %}
 {% if source.retained_epitopes is not none %}<br>{{ source.retained_epitopes }} retained epitope records{% endif %}</td><td>{{ source.product_outcome | e }}</td></tr>{% endfor %}
 </tbody></table>
+{% if input_coverage.producers %}<details>
+<summary>Per-event producer and reference-model ledger ({{ input_coverage.producers | length }} event records)</summary>
+<table class="pure-table pure-table-bordered"><thead><tr><th>Family / sample</th><th>Event</th><th>Reference models</th><th>Resolved coding candidates</th><th>RNA reconstructions</th><th>State</th></tr></thead><tbody>
+{% for producer in input_coverage.producers %}<tr><td>{{ producer.family | e }} / {{ producer.sample or 'Unknown' | e }}</td><td>{{ producer.event_label | e }}</td><td>{{ producer.models if producer.models is not none else 'Unknown' }}</td><td>{{ producer.candidates }}</td><td>{{ producer.rna_reconstructions if producer.rna_reconstructions is not none else 'Unknown' }}</td><td>{{ producer.state or 'Not recorded' | e }}</td></tr>{% endfor %}</tbody></table>
+</details>{% endif %}
 {% for producer in input_coverage.producers %}{% if producer.unresolved %}
-<h3>Unresolved reference models: {{ producer.family }} / {{ producer.sample or 'Unknown' }}</h3>
+<h3>Unresolved reference models: {{ producer.family }} / {{ producer.sample or 'Unknown' }} ({{ producer.event_label | e }})</h3>
 <p>Producer evidence identity: {{ producer.identity | e }}</p><ul>{% for model in producer.unresolved %}
 <li>{{ model.identity | e }} {{ model.context | e }}: {{ model.reason | e }}{% if model.status %} ({{ model.status | e }}){% endif %}</li>{% endfor %}</ul>{% endif %}{% endfor %}
 {% for original in input_coverage.direct %}<p>Recorded Isovar thresholds: {{ original.isovar_filter_thresholds | tojson | e }}. Failed RNA filters alone do not establish final exclusion when DNA fallback is enabled.</p><h3>Original variant outcomes: {{ original.input_id | e }}</h3>
