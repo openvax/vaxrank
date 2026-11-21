@@ -220,3 +220,52 @@ def test_enumeration_retains_missing_candidates_without_invented_predictions():
     assert all(not e.predictions_flat() for e in data.epitopes)
     assert all(e.patient_alleles == (A, B) for e in data.epitopes)
     assert len(complete_candidate_frame(frame, {'protein': 'SIINFEKLAA'}, model)) == 4
+
+
+def test_normalize_observation_gates_hitlist_perturbed_and_excluded_elutions():
+    from vaxrank.ms_lookup import normalize_observation
+
+    base = dict(
+        peptide='SIINFEKL',
+        has_ptm=False,
+        is_non_peptide_ligand=False,
+        is_potential_contaminant=False,
+        mhc_species='Homo sapiens',
+        mhc_class='I',
+        mhc_restriction=A,
+        restriction_evidence='monoallelic',
+        is_monoallelic=True,
+        pmid=33633747,
+        provenance_id='obs-1',
+        source='iedb',
+    )
+    # Unperturbed baseline row remains eligible.
+    unperturbed = normalize_observation(dict(base, condition_category='unperturbed', perturbation='', apm_perturbed=False))
+    assert unperturbed['eligible'] is True
+    assert unperturbed['exclusion_reasons'] == []
+    assert unperturbed['condition_category'] == 'unperturbed'
+
+    # Drug-treated (e.g. flucloxacillin-only) arm is excluded from baseline presentation boost.
+    drug = normalize_observation(dict(base, condition_category='drug_treatment', perturbation='flucloxacillin'))
+    assert drug['eligible'] is False
+    assert 'perturbed_condition' in drug['exclusion_reasons']
+    assert drug['perturbation'] == 'flucloxacillin'
+
+    # APC machinery perturbation (e.g. HLA-DM / ERAP1 knockout) is excluded.
+    apm = normalize_observation(dict(base, condition_category='HLA_DM_perturbation', apm_perturbed=True))
+    assert apm['eligible'] is False
+    assert 'apm_perturbed' in apm['exclusion_reasons']
+    assert 'perturbed_condition' in apm['exclusion_reasons']
+
+    # Explicit control arm from a perturbation study remains eligible.
+    control = normalize_observation(dict(base, condition_category='drug_treatment', is_control_arm=True))
+    assert control['eligible'] is True
+
+    # Excluded elution condition (e.g. blank / filler assay) is gated out.
+    excluded_elution = normalize_observation(dict(base, sample_attribution='elution_conditions_excluded'))
+    assert excluded_elution['eligible'] is False
+    assert 'excluded_elution_condition' in excluded_elution['exclusion_reasons']
+
+    # Perturbed rows still do not award positive MS boost in support_features.
+    feat = support_features([drug, apm, excluded_elution], A)
+    assert feat['resolved'] == 0 and feat['presence'] == 0 and feat['reference'] == 0 and feat['direct'] is False

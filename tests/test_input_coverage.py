@@ -299,4 +299,4 @@ def test_input_coverage_summarizes_producers_before_products_and_keeps_ledger_in
     assert 'Producer summary: Additional variant ORFs / T1-BostonGene; events: 5' in txt
     # Emitted construct appears before the collapsible packing-decisions ledger
     products_html = html.split('<h2 id="products">', 1)[1].split('<h2', 1)[0]
-    assert products_html.index('id="product-peptide_001"') < products_html.index('Packing decisions')
+    assert products_html.index('id="product-peptide_001_GENE0_mut"') < products_html.index('Packing decisions')

@@ -14,6 +14,21 @@ from .ms_evidence import _texts
 
 RECORDS_COLUMN = 'hitlist_ms_records_json'
 
+_UNPERTURBED_CONDITION_CATEGORIES = frozenset({
+    '', 'unperturbed', 'baseline', 'control', 'untreated', 'unknown', 'unannotated',
+})
+_UNPERTURBED_PERTURBATION_TEXTS = frozenset({
+    '', 'none', 'unperturbed', 'untreated', 'control', 'baseline',
+})
+
+
+def _is_truthy_flag(value):
+    if value is True:
+        return True
+    if isinstance(value, str):
+        return value.strip().lower() == 'true'
+    return False
+
 
 def normalize_observation(row):
     """Normalize a Hitlist positive-MS row without inventing source identity."""
@@ -25,6 +40,20 @@ def normalize_observation(row):
         reasons.append('non_peptide_ligand')
     if row.get('is_potential_contaminant') is True:
         reasons.append('potential_contaminant')
+    sample_attribution = text(row.get('sample_attribution'))
+    if sample_attribution == 'elution_conditions_excluded':
+        reasons.append('excluded_elution_condition')
+    condition_category = text(row.get('condition_category'))
+    perturbation = text(row.get('perturbation'))
+    apm_perturbed_raw = row.get('apm_perturbed')
+    apm_perturbed = _is_truthy_flag(apm_perturbed_raw)
+    is_control_arm = _is_truthy_flag(row.get('is_control_arm'))
+    if not is_control_arm:
+        if apm_perturbed:
+            reasons.append('apm_perturbed')
+        if ((condition_category and condition_category.lower() not in _UNPERTURBED_CONDITION_CATEGORIES)
+                or (perturbation and perturbation.lower() not in _UNPERTURBED_PERTURBATION_TEXTS)):
+            reasons.append('perturbed_condition')
     references = []
     pmid = text(row.get('pmid'))
     if pmid:
@@ -58,6 +87,14 @@ def normalize_observation(row):
         source_prediction_qualified=False, quality=1., context_weight=1.,
         source_dataset=text(row.get('source')), source_assay_id=text(row.get('assay_iri')),
         chemical_form_status='unmodified' if row.get('has_ptm') is False else 'modified_or_unknown')
+    if condition_category:
+        result['condition_category'] = condition_category
+    if perturbation:
+        result['perturbation'] = perturbation
+    if apm_perturbed_raw is not None:
+        result['apm_perturbed'] = apm_perturbed
+    if sample_attribution:
+        result['sample_attribution'] = sample_attribution
     # Only explicit reviewed axes qualify. The flat-reader contract normally
     # has none; labels and descriptive count_samples fallbacks are not IDs.
     engineered = row.get('is_engineered_mhc') is True
