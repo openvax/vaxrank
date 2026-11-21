@@ -395,7 +395,7 @@ def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
         attach_antigen_backgrounds(dataset, predictor, patient_backgrounds, source_evidence)
     if cta_bundle is not None:
         from .cta_targeting import apply_cta_targeting
-        apply_cta_targeting(dataset, cta_bundle)
+        apply_cta_targeting(dataset, cta_bundle, target_policy=config.cta_target_policy)
     return dataset
 
 

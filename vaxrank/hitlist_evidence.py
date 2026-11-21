@@ -62,10 +62,21 @@ def hitlist_annotations(sequences, bundle, alleles=None, *, local_evidence=None)
     """Exact public observations; an unqueried sequence has unknown support."""
     columns = ('hitlist_ms_observations', 'hitlist_cta_specific', 'hitlist_avoid_sequence',
                'hitlist_tissue_review_required', 'hitlist_essential_tissue_donors')
-    summaries = ({row['peptide']: row for row in bundle['artifacts']['peptides.parquet']['rows']}
+    peptides_artifact = bundle['artifacts'].get('peptides.parquet', {}) if bundle else {}
+    peptides_cols = set(peptides_artifact.get('columns', ()))
+    summaries = ({row['peptide']: row for row in peptides_artifact.get('rows', ())}
                  if bundle else {})
     source_fields = ('n_ms_observations', 'cta_specific', 'avoid_sequence',
                      'tissue_review_required', 'n_essential_tissue_donors')
+    optional_policy_fields = tuple(
+        (dest, src)
+        for dest, src in (
+            ('hitlist_policy_unsafe_match', 'has_policy_unsafe_match'),
+            ('hitlist_policy_categories', 'policy_categories'),
+            ('hitlist_avoid_reasons', 'avoid_reasons'),
+        )
+        if src in peptides_cols
+    )
     from mhcgnomes import ParseError, parse
     from .allele_validation import parse_prediction_allele
     observations = {}
@@ -94,6 +105,8 @@ def hitlist_annotations(sequences, bundle, alleles=None, *, local_evidence=None)
                 summary = dict(n_ms_observations=len(measured))
         row = dict(zip(columns, (summary.get(k) if summary is not None else None
                                  for k in source_fields)))
+        for dest, src in optional_policy_fields:
+            row[dest] = summary.get(src) if summary is not None else None
         row['hitlist_query_status'] = 'captured' if summary is not None else 'unqueried'
         counts = dict(hitlist_ms_monoallelic=0, hitlist_ms_experimental_restriction=0,
                       hitlist_ms_predicted_restriction=0, hitlist_ms_donor_hla_candidate=0,

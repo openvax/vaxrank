@@ -77,5 +77,10 @@ def source_label(kind, origin=None, contexts=(), *, show_context=False):
 
 
 def antigen_source_label(antigen, source_evidence=None):
-    return source_label(antigen.kind, antigen.origin, coding_contexts(antigen, source_evidence),
+    base = source_label(antigen.kind, antigen.origin, coding_contexts(antigen, source_evidence),
         show_context=('isovar_family', 'variant_orfs') in antigen.source_metadata)
+    if antigen.kind == 'CTA':
+        ts_cat = dict(antigen.source_metadata).get('oncoref_target_selection_category')
+        if ts_cat and ts_cat != 'CTA' and base == 'CTA':
+            return ts_cat
+    return base
