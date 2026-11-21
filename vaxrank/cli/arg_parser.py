@@ -104,9 +104,7 @@ class _ShowPolicyAction(Action):
 
 
 def make_vaxrank_arg_parser():
-    # create common parser with the --version flag
     parent_parser = ArgumentParser('parent', add_help=False)
-    parent_parser.add_argument('--version', action='version', version='Vaxrank %s' % (__version__,))
     parent_parser.add_argument(
         '--print-default-config',
         action=_PrintDefaultConfigAction,
@@ -128,6 +126,17 @@ def make_vaxrank_arg_parser():
             "reports, peptide constructs, or mRNA constructs."),
         parents=[parent_parser],
     )
+    # Replace any upstream --version (e.g. varcode>=11.18.0, openvax/varcode#759)
+    # with Vaxrank's own version flag while preserving conflict_handler='error'.
+    for action in list(arg_parser._actions):
+        if '--version' in action.option_strings:
+            arg_parser._remove_action(action)
+            for group in (arg_parser._optionals, *arg_parser._action_groups):
+                if action in group._group_actions:
+                    group._group_actions.remove(action)
+            for opt in action.option_strings:
+                arg_parser._option_string_actions.pop(opt, None)
+    arg_parser.add_argument('--version', action='version', version='Vaxrank %s' % (__version__,))
     # None distinguishes omission from explicitly passing even the upstream
     # default (e.g. --min-variant-sequence-coverage 2) over a YAML override.
     # Resolve these only in the RNA entry point, after merging configuration.
