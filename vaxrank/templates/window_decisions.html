@@ -1,9 +1,9 @@
 {% autoescape true %}
 {% if window_decisions %}
 <h3>Recorded window decisions</h3>
-<p>Identical displayed decision summaries share a reference. The native dataset retains all alternatives and source evidence.
-Ordering rules, sort keys and alternatives are available with candidate details.</p>
-{% for window in window_decisions %}<section class="window-decision">
+<p class="note">Identical displayed decision summaries share a reference. The native dataset retains all alternatives and source evidence. Ordering rules, sort keys and alternatives are available with candidate details.</p>
+{% macro render_window_decisions(items) %}
+{% for window in items %}<section class="window-decision">
 <h4 id="window-{{ window.identifier }}">{{ window.identifier }} &middot; {{ window.sequence or 'No eligible window' }}</h4>
 <p>Sources: {% for source in window.sources %}<a href="#source-{{ source }}">{{ source }}</a>{% if not loop.last %}, {% endif %}{% endfor %}.
 {% if window.products %}Products: {{ window.products | join(', ') }}.{% endif %}</p>
@@ -27,5 +27,15 @@ Ordering rules, sort keys and alternatives are available with candidate details.
 <td>{{ alternative.target_score | display_epitope_value }} / {{ (alternative.utility if window.utility_selector else alternative.combined_score) | display_epitope_value }}</td><td>{{ (alternative.decision_reason or alternative.ineligibility_reason or 'Eligible; final choice not recorded') | replace('_', ' ') }}
 {% if alternative.selection_rank %}; rank {{ alternative.selection_rank }}{% endif %}
 {% if alternative.ordering_key %}<br>Sort key: {{ alternative.ordering_key | tojson | e }}{% endif %}</td></tr>{% endfor %}</tbody></table>{% endif %}
-{% endif %}</section>{% endfor %}{% endif %}
+{% endif %}</section>{% endfor %}
+{% endmacro %}
+{% if window_decisions | length > 10 and not candidate_details %}
+<details class="audit-details">
+<summary>Window selection audit records ({{ window_decisions | length }} windows)</summary>
+{{ render_window_decisions(window_decisions) }}
+</details>
+{% else %}
+{{ render_window_decisions(window_decisions) }}
+{% endif %}
+{% endif %}
 {% endautoescape %}

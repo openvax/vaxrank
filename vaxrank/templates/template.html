@@ -21,35 +21,44 @@
                 <tr><td>{{ key }}</td><td>{{ val }}</td></tr>
                 {% endfor %}
             </table>
-            <br>
+            {% if design_overview is defined and (design_overview.n_ranked or design_overview.modalities) %}
+            <div class="overview-strip">
+                {% if design_overview.modalities %}<strong>Emitted design:</strong> {{ design_overview.modalities | join(' · ') | e }} &nbsp;&middot;&nbsp; {% endif %}
+                <strong>Candidates:</strong> {% if design_overview.n_selected %}{{ design_overview.n_selected }} selected from {% endif %}{{ design_overview.n_ranked }} ranked{% if design_overview.families %} ({{ design_overview.families | join(', ') | e }}){% endif %}
+            </div>
+            {% endif %}
 
             <nav class="contents" aria-label="Report contents">
-                {% if host_coverage is defined %}<a href="#host-catalogue-coverage">Host ORF coverage</a> &middot; {% endif %}
-                <a href="#input-coverage">Input coverage</a> &middot; <a href="#products">Emitted products</a> &middot;
+                <a href="#input-coverage">Input survey</a> &middot;
+                {% if host_coverage is defined and host_coverage.identity %}<a href="#host-catalogue-coverage">Host ORF coverage</a> &middot; {% endif %}
+                <a href="#ranking">Candidate ranking</a> &middot;
+                <a href="#products">Emitted products</a> &middot;
                 {% if longitudinal_support %}<a href="#longitudinal-support">Longitudinal support</a> &middot; {% endif %}
+                {% if biological_candidates %}<a href="#antigen-biology">Antigen biology</a> &middot; {% endif %}
                 {% if selection_policy is defined %}<a href="#selection-rules">Selection rules</a> &middot; {% endif %}
-                <a href="#ranking">Candidate ranking</a> &middot; <a href="#source-outcomes">Source outcomes</a> &middot;
-                {% if biological_candidates %}<a href="#antigen-biology">Antigen biology</a> &middot;{% endif %}
-                {% if cta_targeting_summary %}<a href="#cta-targeting">CTA regions</a> &middot;{% endif %}
+                {% if cta_targeting_summary %}<a href="#cta-targeting">CTA regions</a> &middot; {% endif %}
+                <a href="#source-outcomes">Source outcomes</a> &middot;
                 {% if candidate_details and variants %}<a href="#candidate-details">Candidate groups</a> &middot;
                 <a href="#shared-evidence">Supporting evidence</a> &middot; {% endif %}
                 <a href="#score-guide">Score guide</a> &middot; <a href="#run-details">Methods and provenance</a>
             </nav>
+
             {% if input_coverage %}{% include "templates/input_coverage.html" %}{% endif %}
-            {% if host_coverage is defined %}{% include "templates/host_coverage.html" %}{% endif %}
+            {% if host_coverage is defined and host_coverage.identity %}{% include "templates/host_coverage.html" %}{% endif %}
+            {% if ranked_candidates is defined %}<section class="appendix">{% include "templates/ranking.html" %}</section>{% endif %}
             <section class="appendix">{% include "templates/products.html" %}</section>
             {% if longitudinal_support %}{% include "templates/longitudinal_support.html" %}{% endif %}
-            {% if selection_policy is defined %}{% include "templates/selection_policy.html" %}{% endif %}
-            {% if ranked_candidates is defined %}{% include "templates/ranking.html" %}{% endif %}
             {% include "templates/antigen_biology.html" %}
+            {% if selection_policy is defined %}<section class="appendix">{% include "templates/selection_policy.html" %}</section>{% endif %}
             {% if input_coverage %}{% include "templates/source_outcomes.html" %}{% endif %}
             {% if candidate_details | default(true) and variants %}
             {% include "templates/candidate_details.html" %}
-
             {% endif %}
             <section class="appendix">{% include "templates/score_guide.html" %}</section>
             <section class="appendix" id="run-details">
             <h2>Methods and provenance</h2>
+            {% if input_coverage and not input_coverage.direct %}<p class="note">Original VCF/BAM stage counts: unknown (not retained in these inputs). Surviving antigen or prediction rows cannot recover that denominator.</p>{% endif %}
+            {% if host_coverage is defined and not host_coverage.identity %}{% include "templates/host_coverage.html" %}{% endif %}
             {% include "templates/source_directory.html" %}
             {% include "templates/prediction_models.html" %}
             {% if input_coverage %}{% include "templates/input_lineage.html" %}{% endif %}
@@ -67,7 +76,8 @@
             {% endfor %}
             {% endif %}
 
-            <h3 id="args">Invocation arguments, including parser defaults</h3>
+            <details class="audit-details">
+            <summary id="args">Invocation arguments, including parser defaults ({{ args | length }} parameters)</summary>
             <p class="note">These describe this report invocation. Resolved selection and assembly settings are shown separately.</p>
             <table class="pure-table pure-table-bordered args">
                 <colgroup>
@@ -78,6 +88,7 @@
                 <tr><td class="arg">{{ key }}</td><td class="arg">{{ val }}</td></tr>
                 {% endfor %}
             </table>
+            </details>
             {% if input_json_file %}
             <br><br><h4>Report generated from saved location: {{ input_json_file }}</h4>
             {% endif %}

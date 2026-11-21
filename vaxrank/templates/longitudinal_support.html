@@ -2,7 +2,8 @@
 <h2>Longitudinal and library support</h2>
 <p><strong>Design scope:</strong> {{ longitudinal_support.design_scope_label | e }}.</p>
 <p class="note">Each column represents one sequencing library (<code>sample_id</code> / <code>library_id</code>); repeated pipelines on the same library remain grouped in one column and are never summed. Below-threshold CTA measurements distinguish missing values from measured zeros, and mutation rows distinguish exact-window RNA support from alternative windows and unmeasured libraries.</p>
-<table class="pure-table pure-table-bordered">
+{% macro longitudinal_table(rows) %}
+<table class="pure-table pure-table-bordered longitudinal-table">
 <thead>
 <tr>
 <th>Target / candidate window</th>
@@ -13,7 +14,7 @@
 </tr>
 </thead>
 <tbody>
-{% for row in longitudinal_support.rows %}
+{% for row in rows %}
 <tr>
 <td><strong>{{ row.gene | e }}</strong> ({{ row.kind | e }}){% if row.transcript_ids %}<br><span class="note">{{ row.transcript_ids | join(', ') | e }}</span>{% endif %}{% if row.window %}<br><code>{{ row.window | e }}</code>{% endif %}<br>{% if row.selected %}Selected: {{ row.selected_products | join(', ') | e }}{% else %}<span class="note">Not emitted in products</span>{% endif %}</td>
 {% for cell in row.cells %}
@@ -24,4 +25,17 @@
 {% endfor %}
 </tbody>
 </table>
+{% endmacro %}
+{% set selected_long = longitudinal_support.rows | selectattr('selected') | list %}
+{% set other_long = longitudinal_support.rows | rejectattr('selected') | list %}
+{% if selected_long and other_long %}
+<h3>Selected targets ({{ selected_long | length }})</h3>
+{{ longitudinal_table(selected_long) }}
+<details class="audit-details">
+<summary>Additional candidates not emitted in products ({{ other_long | length }})</summary>
+{{ longitudinal_table(other_long) }}
+</details>
+{% else %}
+{{ longitudinal_table(longitudinal_support.rows) }}
+{% endif %}
 </section>

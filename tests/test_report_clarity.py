@@ -199,10 +199,47 @@ def test_family_with_evidence_keeps_its_own_block_in_both_formats():
     data["input_coverage"]["families"][0].update(status="Supplied", records=3, ranked=2)
     name = data["input_coverage"]["families"][0]["name"]
     assert "%s: Supplied\n  Recorded sources: 3" % name in render(data, "txt")
-    assert "<td>%s</td><td>Supplied</td>" % name in render(data, "html")
+    html = render(data, "html")
+    assert "<td>%s</td>\n<td>3</td>" % name in html or "<td>%s</td><td>3</td>" % name in html
+    assert "<th>Input evidence</th>" not in html
     listing = [line for line in render(data, "txt").splitlines()
                if line.startswith("No supplied evidence recorded:")]
     assert listing and name not in listing[0]
+
+
+def test_report_leads_with_survey_then_enriched_ranking_before_products_and_appendices():
+    from vaxrank.peptide import PeptideConstructConfig, assemble_peptide_constructs
+
+    first = ranked_pair()[0]
+    second_antigen, _ = candidate(1, sequence='GILGFVFTL', prefix='AA')
+    second_ep = CandidateEpitope(
+        sequence='GILGFVFTL', source_sequence=second_antigen.amino_acids,
+        offset=2, predictions=[prediction(value=120.0)], occurs_in_reference=False,
+        overlaps_targetable=True, per_allele_scores={'HLA-B*27:05': 0.4},
+    )
+    second = (second_antigen, [VaccinePeptide(antigen=second_antigen, epitopes=[second_ep])])
+    ranked = [first, second]
+    products = {'peptide': assemble_peptide_constructs(
+        ranked, PeptideConstructConfig(max_constructs=1))}
+    data = template(ranked, products=products, candidate_details=True)
+    html = render(data, 'html')
+    # Survey -> Candidate ranking -> Emitted products -> Antigen biology -> Selection rules -> Details -> Methods
+    assert (
+        html.index('id="input-coverage"')
+        < html.index('id="ranking"')
+        < html.index('id="products"')
+        < html.index('id="antigen-biology"')
+        < html.index('id="selection-rules"')
+        < html.index('id="candidate-details"')
+        < html.index('id="run-details"')
+    )
+    assert '<th>Input evidence</th>' not in html
+    assert 'Selected candidates (1)' in html
+    assert 'Additional ranked candidates not emitted in products (1)' in html
+    assert 'KRFHATISF · HLA-B*27:05 (78.8 nM)' in html
+    assert html.count('Full antigen labels and source identities are in') == 1
+    txt = render(data, 'txt')
+    assert txt.index('=== Input coverage ===') < txt.index('=== Candidate ranking ===') < txt.index('=== Emitted products ===')
 
 
 def test_blank_patient_id_is_omitted_not_printed_empty():
