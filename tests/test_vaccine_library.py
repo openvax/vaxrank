@@ -178,12 +178,13 @@ def test_construct_name_format_consistent_across_modalities():
     [m] = assemble_mrna_constructs(pairs, options=RNAConstructConfig())
     [p] = assemble_peptide_constructs(pairs, options=PeptideConstructConfig())
 
-    # Both should match <prefix>_NNN with the same numeric width.
-    pattern = re.compile(r"^(mrna|peptide)_\d{3}$")
-    assert pattern.match(m.name), \
-        "mRNA construct name '%s' must match <prefix>_NNN" % m.name
-    assert pattern.match(p.name), \
-        "Peptide construct name '%s' must match <prefix>_NNN" % p.name
+    # Both share the modality-prefixed 3-digit sortable rank prefix; peptide
+    # constructs append a FASTA-safe gene/class suffix for readability.
+    assert re.match(r"^mrna_\d{3}$", m.name), \
+        "mRNA construct name '%s' must match mrna_NNN" % m.name
+    assert re.match(r"^peptide_\d{3}(?:_[A-Za-z0-9-]+)*$", p.name), \
+        "Peptide construct name '%s' must match peptide_NNN_<slug>" % p.name
+    assert p.name == "peptide_001_G_SNV"
 
 
 def test_vaccine_library_get_linker_unknown_raises():

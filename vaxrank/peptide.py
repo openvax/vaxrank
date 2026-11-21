@@ -31,6 +31,7 @@ symmetric-design rationale.
 import csv
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 
 from .assembly_antigens import antigens_for_assembly, pack_antigens, product_gene_names, record_assembly_decisions
@@ -291,11 +292,77 @@ def assemble_peptide_constructs(
             if audit:
                 components['window_selection'] = audit
         constructs.append(PeptideConstruct(
-            name="peptide_%03d" % (len(constructs) + 1),
+            name=_peptide_construct_name(len(constructs) + 1, group),
             sequence=sequence, antigen_names=names, antigens=segments,
             components=components, manufacturability=_manufacturability_for(sequence)))
     record_assembly_decisions(selection_audit, antigens, constructs, target_alleles, exclusions)
     return constructs
+
+
+def _sanitize_name_token(value):
+    return re.sub(r'[^A-Za-z0-9]+', '-', str(value or '')).strip('-')
+
+
+def _source_kind_slug(antigen):
+    """Short, readable antigen-class tag for construct IDs."""
+    sources = getattr(antigen, 'sources', ()) or ()
+    for source in sources:
+        for ctx in source.get('coding_contexts', ()):
+            if ctx.get('kind') in ('extra_orf', 'ncorf'):
+                return 'ncORF'
+    kinds = []
+    for source in sources:
+        kind = str(source.get('kind') or '').strip()
+        if not kind:
+            continue
+        if kind == 'SV':
+            slug = 'SV'
+        elif kind == 'CTA':
+            slug = 'CTA'
+        elif kind == 'mutation':
+            cand = str(source.get('candidate_name') or '')
+            if '(SNV' in cand:
+                slug = 'SNV'
+            elif '(INDEL' in cand:
+                slug = 'INDEL'
+            else:
+                slug = 'mut'
+        else:
+            slug = _sanitize_name_token(kind)
+        if slug and slug not in kinds:
+            kinds.append(slug)
+    if not kinds:
+        return ''
+    return kinds[0] if len(kinds) == 1 else 'mixed'
+
+
+def _peptide_construct_name(index, group):
+    """Build a unique, FASTA- and order-form-safe construct name with gene/class context."""
+    from .vaccine_library import gene_names_from_antigen_names
+
+    prefix = "peptide_%03d" % index
+    genes = []
+    for antigen in group:
+        raw_genes = list(getattr(antigen, 'gene_names', ()) or ())
+        if not raw_genes:
+            raw_genes = gene_names_from_antigen_names([antigen.name])
+        for gene in raw_genes:
+            cleaned = _sanitize_name_token(gene)
+            if cleaned and cleaned not in genes:
+                genes.append(cleaned)
+    if not genes:
+        return prefix
+    if len(genes) <= 2:
+        gene_slug = '-'.join(genes)
+    else:
+        gene_slug = '%s-%s_plus%d' % (genes[0], genes[1], len(genes) - 2)
+    if len(gene_slug) > 36:
+        gene_slug = gene_slug[:36].rstrip('-_')
+    if len(group) == 1:
+        kind_slug = _source_kind_slug(group[0])
+        if kind_slug:
+            return "%s_%s_%s" % (prefix, gene_slug, kind_slug)
+    return "%s_%s" % (prefix, gene_slug)
 
 
 def _modification_label(acetyl, amide, sequence):

@@ -65,10 +65,10 @@ def test_slp_mode_one_construct_per_peptide():
     constructs = assemble_peptide_constructs(pairs, options=PeptideConstructConfig())
     assert len(constructs) == 2
     assert constructs[0].sequence == "KLQGHSAPVLDVIVN"
-    assert constructs[0].name == "peptide_001"
+    assert constructs[0].name == "peptide_001_GENEA_SNV"
     assert constructs[0].antigen_names == ["GENEA (SNV)"]
     assert constructs[1].sequence == "MNNVDEILGRWESPV"
-    assert constructs[1].name == "peptide_002"
+    assert constructs[1].name == "peptide_002_GENEB_SNV"
     assert constructs[0].components['mode'] == 'slp'
 
 
@@ -256,7 +256,7 @@ def test_write_peptide_outputs_fasta_manifest_orderform():
         )
         with open(fasta_path) as f:
             text = f.read()
-        assert ">peptide_001" in text
+        assert ">peptide_001_GENE_SNV" in text
         assert "KLQGHSAPVLDVIVN" in text
 
         with open(manifest_path) as f:
@@ -270,7 +270,7 @@ def test_write_peptide_outputs_fasta_manifest_orderform():
         with open(order_path) as f:
             rows = list(csv.DictReader(f))
         row = rows[0]
-        assert row['name'] == 'peptide_001'
+        assert row['name'] == 'peptide_001_GENE_SNV'
         assert row['n_terminal_modification'] == 'Acetyl'
         assert row['c_terminal_modification'] == 'Amide'
         assert row['displayed_sequence'] == 'Ac-KLQGHSAPVLDVIVN-NH2'
@@ -425,3 +425,48 @@ def test_order_form_default_scale_purity_counterion():
         assert float(row['scale_mg']) == 5.0
         assert float(row['purity_percent']) == 95.0
         assert row['counterion'] == 'TFA'
+
+
+def test_peptide_construct_names_reflect_genes_and_classes():
+    from vaxrank.assembly_antigens import AssemblyAntigen
+    from vaxrank.peptide import _peptide_construct_name
+
+    sv = AssemblyAntigen(
+        name="OTUD7A::FMN1 (SV)",
+        amino_acids="MAAKAGTSLEARSLRPAWPTC",
+        sources=[{"kind": "SV", "gene_name": "OTUD7A::FMN1", "candidate_name": "OTUD7A::FMN1 (SV)"}],
+    )
+    assert _peptide_construct_name(1, [sv]) == "peptide_001_OTUD7A-FMN1_SV"
+
+    ncorf = AssemblyAntigen(
+        name="MBD4 (mutation)",
+        amino_acids="MTSAKKMLLWNWKKWEKMRNK",
+        sources=[{
+            "kind": "mutation",
+            "gene_name": "MBD4",
+            "candidate_name": "MBD4 (mutation)",
+            "coding_contexts": [{"kind": "extra_orf", "orf_type": "uORF"}],
+        }],
+    )
+    assert _peptide_construct_name(2, [ncorf]) == "peptide_002_MBD4_ncORF"
+
+    cta_shared = AssemblyAntigen(
+        name="XAGE1A (CTA) / XAGE1B (CTA)",
+        amino_acids="KSCISQTPGINLDLGSGVKVKIIPK",
+        sources=[
+            {"kind": "CTA", "gene_name": "XAGE1A", "candidate_name": "XAGE1A (CTA)"},
+            {"kind": "CTA", "gene_name": "XAGE1B", "candidate_name": "XAGE1B (CTA)"},
+        ],
+    )
+    assert _peptide_construct_name(6, [cta_shared]) == "peptide_006_XAGE1A-XAGE1B_CTA"
+
+    concat = [
+        AssemblyAntigen("GENEA (SNV)", "AAAAAAAAAAAAAAA", [{"kind": "mutation", "gene_name": "GENEA"}]),
+        AssemblyAntigen("GENEB (SNV)", "CCCCCCCCCCCCCCC", [{"kind": "mutation", "gene_name": "GENEB"}]),
+        AssemblyAntigen("GENEC (CTA)", "DDDDDDDDDDDDDDD", [{"kind": "CTA", "gene_name": "GENEC"}]),
+        AssemblyAntigen("GENED (CTA)", "EEEEEEEEEEEEEEE", [{"kind": "CTA", "gene_name": "GENED"}]),
+    ]
+    assert _peptide_construct_name(1, concat) == "peptide_001_GENEA-GENEB_plus2"
+
+    unnamed = AssemblyAntigen(" (mutation)", "AAAAAAAAAAAAAAA", [{"kind": "mutation", "gene_name": ""}])
+    assert _peptide_construct_name(9, [unnamed]) == "peptide_009"
