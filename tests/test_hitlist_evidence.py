@@ -381,3 +381,103 @@ def test_ms_scaling_cli_keeps_components_and_replays_without_data(
     replayed = EpitopeDataset.load(second / 'candidate_predictions.tsv')
     assert [e.ms_scoring for e in replayed.epitopes] == [e.ms_scoring for e in original.epitopes]
     assert (first / 'vaccine.fasta').read_bytes() == (second / 'vaccine.fasta').read_bytes()
+
+
+def test_hitlist_2124_bundle_policy_columns_and_policy_verification(tmp_path, monkeypatch):
+    from importlib.metadata import version as pkg_version
+    from types import SimpleNamespace
+    from vaxrank.cta_input import load_hitlist_bundle
+
+    bundle = dict(
+        manifest={'kind': 'cta_expression'},
+        artifacts={
+            'peptides.parquet': {
+                'columns': [
+                    'peptide', 'n_ms_observations', 'cta_specific', 'avoid_sequence',
+                    'tissue_review_required', 'n_essential_tissue_donors',
+                    'has_policy_unsafe_match', 'policy_categories', 'avoid_reasons',
+                ],
+                'rows': [
+                    dict(
+                        peptide='SIINFEKL',
+                        n_ms_observations=4,
+                        cta_specific=True,
+                        avoid_sequence=False,
+                        tissue_review_required=False,
+                        n_essential_tissue_donors=0,
+                        has_policy_unsafe_match=False,
+                        policy_categories='["CTA"]',
+                        avoid_reasons='',
+                    ),
+                    dict(
+                        peptide='GILGFVFTL',
+                        n_ms_observations=1,
+                        cta_specific=False,
+                        avoid_sequence=True,
+                        tissue_review_required=False,
+                        n_essential_tissue_donors=0,
+                        has_policy_unsafe_match=True,
+                        policy_categories='["CTA", "Unsafe"]',
+                        avoid_reasons='non_cta_reference_match;policy_unsafe_reference_match',
+                    ),
+                ],
+            },
+            'presentation.parquet': {'columns': [], 'rows': []},
+        },
+    )
+    frame = hitlist_annotations(['SIINFEKL', 'GILGFVFTL'], bundle, [ALLELES[0], ALLELES[0]])
+    assert frame.hitlist_policy_unsafe_match.tolist() == [False, True]
+    assert frame.hitlist_policy_categories.tolist() == ['["CTA"]', '["CTA", "Unsafe"]']
+    assert frame.hitlist_avoid_reasons.tolist() == ['', 'non_cta_reference_match;policy_unsafe_reference_match']
+
+    # Verify load_hitlist_bundle enforces Hitlist 2.1.24 cta_policy agreement
+    artifact_file = tmp_path / 'meta.txt'
+    artifact_file.write_text('ok')
+    digest = hashlib.sha256(artifact_file.read_bytes()).hexdigest()
+    base_manifest = {
+        'kind': 'cta_expression',
+        'expression': {
+            'oncoref_version': pkg_version('oncoref'),
+            'input': {'sha256': 'a' * 64},
+            'level': 'gene',
+            'id_column': 'gene_id',
+            'tpm_column': 'TPM',
+            'units': 'TPM',
+            'ensembl_release': 115,
+            'cta_policy': {
+                'selector': 'target_selection',
+                'policy_id': 'oncoref.target-selection.test.1',
+            },
+        },
+        'artifacts': {'meta.txt': {'sha256': digest}},
+    }
+    monkeypatch.setattr('hitlist.evidence_bundle.verify_evidence_bundle', lambda d: base_manifest)
+    contract = SimpleNamespace(
+        measurement_level='gene', id_column='gene_id', value_column='TPM', expression_unit='TPM',
+    )
+    matching_admission = SimpleNamespace(
+        input_contract=contract,
+        annotation_version='115',
+        input_sha256='a' * 64,
+        target_reference={'target_selection': {'policy_id': 'oncoref.target-selection.test.1'}},
+    )
+    loaded = load_hitlist_bundle(tmp_path, matching_admission)
+    assert loaded['manifest']['expression']['cta_policy']['policy_id'] == 'oncoref.target-selection.test.1'
+
+    mismatch_policy = SimpleNamespace(
+        input_contract=contract,
+        annotation_version='115',
+        input_sha256='a' * 64,
+        target_reference={'target_selection': {'policy_id': 'oncoref.target-selection.other'}},
+    )
+    with pytest.raises(ValueError, match='different target_selection policy IDs'):
+        load_hitlist_bundle(tmp_path, mismatch_policy)
+
+    legacy_admission = SimpleNamespace(
+        input_contract=contract,
+        annotation_version='115',
+        input_sha256='a' * 64,
+        target_reference=None,
+    )
+    with pytest.raises(ValueError, match='requires target_selection CTA admission'):
+        load_hitlist_bundle(tmp_path, legacy_admission)

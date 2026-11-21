@@ -273,6 +273,8 @@ def _assembly_identity(args, ranked, options, context):
         epitopes.pop('ms_evidence', None)
     if epitopes.get('cta_sequence_bundle') is None:
         epitopes.pop('cta_sequence_bundle', None)
+    if epitopes.get('cta_target_policy') is None:
+        epitopes.pop('cta_target_policy', None)
     if 'epitopes' in policy:
         policy['epitopes'] = epitopes
     definition = (graph, configuration, context, policy)

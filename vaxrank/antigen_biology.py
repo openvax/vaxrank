@@ -149,6 +149,15 @@ def antigen_biology(antigen, *, source_evidence=None, peptides=()):
                 targeting.append(row)
     if antigen.kind == 'CTA' and not targeting:
         facts.append(('Unsafe containment', 'Not assessed with the current OncoRef sequence bundle'))
+    if antigen.kind == 'CTA':
+        meta = dict(antigen.source_metadata)
+        ts_cat = meta.get('oncoref_target_selection_category')
+        ts_policy = meta.get('oncoref_target_selection_policy_id')
+        if ts_cat:
+            label = ts_cat + (f' ({ts_policy})' if ts_policy else '')
+            facts.append(('OncoRef target class', label))
+        elif ts_policy:
+            facts.append(('OncoRef target policy', ts_policy))
     return dict(kind=antigen_source_label(antigen, source_evidence),
                 gene=antigen.display_gene_name, identifier=antigen.display_identifier,
                 facts=list(dict.fromkeys(facts)), junctions=junctions, comparisons=comparisons,

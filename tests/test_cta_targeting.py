@@ -363,3 +363,196 @@ def test_admission_only_saved_cta_retains_reference_policy(bundle, monkeypatch, 
                         lambda path: SimpleNamespace(identity='oncoref:different'))
     with pytest.raises(ValueError, match='Saved CTA targeting retains'):
         report_config([report], EpitopeConfig(cta_sequence_bundle='/different'))
+
+
+def _target_selection_fixture():
+    import hashlib
+    context = ReferenceContext.from_genome(EnsemblRelease(115))
+    reference = dict(
+        taxon_id=9606, assembly_accession=context.assembly_accession,
+        annotation_source='Ensembl', annotation_release='115',
+        identifier_namespaces={'gene': 'Ensembl gene', 'transcript': 'Ensembl transcript',
+                               'protein': 'Ensembl protein'}, reference_id='fixture-reference',
+    )
+    genes = {
+        'CTA_GENE': ('ENSG00000185686', 'PRAME', 'SIINFEKLGILGFVFTL', 'allow', True),
+        'RESCUED_CTA': ('ENSG00000046774', 'MAGEC2', 'MNPQRSTVWYACDEFGH', 'review', False),
+        'CA_ONLY': ('ENSG00000186919', 'ZACN', 'KLMNPQRSTVWYACDEF', 'allow', True),
+        'UNSCREENED': ('ENSG00000184478', 'OR56A3', 'ACDEFGHIKLMNPQRST', 'allow', True),
+        'REVIEW_GENE': ('ENSG00000213973', 'ZNF99', 'VWXYZZZZZZZZZZZZZ'.replace('X', 'A').replace('Z', 'L'), 'allow', True),
+        'NEWLY_UNSAFE': ('ENSG00000122136', 'OBP2A', 'AASIINFEKLGKK', 'allow', True),
+    }
+    rows = []
+    for rec_id, (gid, sym, seq, role, qualified) in genes.items():
+        rows.append(dict(
+            record_id=rec_id,
+            sequence=seq,
+            sequence_sha256=hashlib.sha256(seq.encode()).hexdigest(),
+            shared_sequence=role,
+            direct_target_candidate=qualified,
+            valid_segments=[dict(start=0, end=len(seq))],
+            occurrences=[dict(
+                gene_id=gid, gene_name=sym, transcript_id='ENST00000000001.1',
+                direct_target_candidate=qualified, shared_sequence=role,
+            )],
+        ))
+
+    def segments(**kwargs):
+        for row in rows:
+            for interval in row['valid_segments']:
+                yield dict(**interval, sequence=row['sequence'][interval['start']:interval['end']],
+                           record_id=row['record_id'], shared_sequence=row['shared_sequence'],
+                           occurrences=row['occurrences'])
+
+    bundle = SimpleNamespace(
+        identity='oncoref:fixture-ts', manifest={'reference': reference},
+        coverage={'fixture': True}, records=lambda: iter(rows), segments=segments,
+    )
+    ts_index = dict(
+        policy_id='oncoref.target-selection.test.1',
+        reference_id='fixture-reference',
+        oncoref_version='1.43.0',
+        by_gene={
+            'ENSG00000185686': dict(
+                entity_id='e1', protein_group_label='PRAME', category='CTA', subtype='',
+                classification='CTA', decision_reason='Cancer and reproductive qualify',
+                cta_tier='core',
+                representative_sequence_sha256s=frozenset({rows[0]['sequence_sha256']}),
+                representative_transcripts=frozenset({'ENST00000000001.1'}),
+            ),
+            'ENSG00000046774': dict(
+                entity_id='e2', protein_group_label='MAGEC2', category='CTA', subtype='',
+                classification='CTA', decision_reason='Cancer and reproductive qualify',
+                cta_tier='core',
+                representative_sequence_sha256s=frozenset({rows[1]['sequence_sha256']}),
+                representative_transcripts=frozenset({'ENST00000000001.1'}),
+            ),
+            'ENSG00000186919': dict(
+                entity_id='e3', protein_group_label='ZACN', category='Cancer Antigen only', subtype='',
+                classification='Cancer Antigen only',
+                decision_reason='Cancer tenfold qualifies; reproductive does not',
+                cta_tier='',
+                representative_sequence_sha256s=frozenset({rows[2]['sequence_sha256']}),
+                representative_transcripts=frozenset({'ENST00000000001.1'}),
+            ),
+            'ENSG00000184478': dict(
+                entity_id='e4', protein_group_label='OR56A3', category='Other', subtype='Unscreened tissue',
+                classification='Other:Unscreened tissue',
+                decision_reason='Normal home is olfactory epithelium',
+                cta_tier='',
+                representative_sequence_sha256s=frozenset({rows[3]['sequence_sha256']}),
+                representative_transcripts=frozenset({'ENST00000000001.1'}),
+            ),
+            'ENSG00000213973': dict(
+                entity_id='e5', protein_group_label='ZNF99', category='Other', subtype='Review',
+                classification='Other:Review',
+                decision_reason='Normal-expression evidence blocks admission',
+                cta_tier='',
+                representative_sequence_sha256s=frozenset({rows[4]['sequence_sha256']}),
+                representative_transcripts=frozenset({'ENST00000000001.1'}),
+            ),
+            'ENSG00000122136': dict(
+                entity_id='e6', protein_group_label='OBP2A', category='Unsafe', subtype='',
+                classification='Unsafe',
+                decision_reason='Published normal-tissue expression',
+                cta_tier='',
+                representative_sequence_sha256s=frozenset({rows[5]['sequence_sha256']}),
+                representative_transcripts=frozenset({'ENST00000000001.1'}),
+            ),
+        },
+    )
+    return bundle, ts_index
+
+
+def test_target_selection_admits_rescued_cta_and_blocks_other_and_unsafe(tmp_path):
+    from vaxrank.antigen_biology import antigen_biology
+    from vaxrank.coding_context import antigen_source_label
+
+    bundle, ts_index = _target_selection_fixture()
+    expr = tmp_path / 'expr.tsv'
+    expr.write_text(
+        'feature_id\tpatient_tpm\n'
+        'ENSG00000185686\t20.0\n'
+        'ENSG00000046774\t51.8\n'
+        'ENSG00000186919\t25.3\n'
+        'ENSG00000184478\t3.9\n'
+        'ENSG00000213973\t8.8\n'
+        'ENSG00000122136\t16.4\n'
+    )
+    scope = InputScope(
+        patient_id='p1', reference_assembly='GRCh38', annotation='ensembl:115',
+        host_taxon_id=9606, mhc_alleles=('HLA-A*02:01',),
+    )
+
+    cta_only = admit_expression(
+        expr, contract(), CTAAdmissionPolicy(2.0, 'TPM'), bundle, scope,
+        target_policy='target_selection', target_selection_index=ts_index,
+    )
+    by_id = {d.input_identifier: d for d in cta_only.decisions}
+    assert by_id['ENSG00000185686'].status == 'admitted'
+    assert by_id['ENSG00000046774'].status == 'admitted'  # Rescued MAGEC2 CTA
+    assert by_id['ENSG00000186919'].status == 'not_current_cta'  # Cancer Antigen only excluded in CTA-only
+    assert by_id['ENSG00000184478'].status == 'blocked_target_selection'
+    assert by_id['ENSG00000184478'].gene_identity['target_selection_classification'] == 'Other:Unscreened tissue'
+    assert by_id['ENSG00000213973'].status == 'blocked_target_selection'
+    assert by_id['ENSG00000213973'].gene_identity['target_selection_classification'] == 'Other:Review'
+    assert by_id['ENSG00000122136'].status == 'unsafe_reference'
+    assert cta_only.target_reference['target_policy'] == 'target_selection'
+    assert cta_only.target_reference['target_selection']['policy_id'] == 'oncoref.target-selection.test.1'
+
+    with_ca = admit_expression(
+        expr, contract(), CTAAdmissionPolicy(2.0, 'TPM'), bundle, scope,
+        target_policy='target_selection_cancer_antigens', target_selection_index=ts_index,
+    )
+    ca_by_id = {d.input_identifier: d for d in with_ca.decisions}
+    assert ca_by_id['ENSG00000186919'].status == 'admitted'
+    assert ca_by_id['ENSG00000184478'].status == 'blocked_target_selection'
+    assert ca_by_id['ENSG00000213973'].status == 'blocked_target_selection'
+    assert ca_by_id['ENSG00000122136'].status == 'unsafe_reference'
+    zacn = ca_by_id['ENSG00000186919'].assessment.antigen
+    prame = ca_by_id['ENSG00000185686'].assessment.antigen
+    assert antigen_source_label(zacn) == 'Cancer Antigen only'
+    assert antigen_source_label(prame) == 'CTA'
+    view = antigen_biology(zacn)
+    assert ('OncoRef target class', 'Cancer Antigen only (oncoref.target-selection.test.1)') in view['facts']
+
+
+def test_target_selection_containment_excludes_newly_unsafe_and_reviews_other():
+    bundle, ts_index = _target_selection_fixture()
+    data = dataset()
+    # SIINFEKL is in PRAME (CTA) and OBP2A (newly Unsafe under target_selection!)
+    # GILGFVFTL is only in PRAME (CTA)
+    # ACDEFGHIK is in OR56A3 (Other:Unscreened tissue under target_selection -> review)
+    # LMNPQRSTV is in OR56A3 (Other:Unscreened tissue -> review)
+    apply_cta_targeting(data, bundle, target_policy='target_selection', target_selection_index=ts_index)
+    statuses = [targeting_evidence(e)['status'] for e in data.epitopes]
+    assert statuses == ['excluded', 'eligible', 'review', 'review']
+    assert [e.is_targetable for e in data.epitopes] == [False, True, False, False]
+    assert data.epitopes[0].occurs_in_non_CTA_reference is True
+    assert data.epitopes[0].self_reference_match.sources[0].gene_name == 'OBP2A'
+    assert data.epitopes[2].occurs_in_non_CTA_reference is False
+    assert targeting_evidence(data.epitopes[1])['target_policy'] == 'target_selection'
+    assert targeting_evidence(data.epitopes[1])['target_selection_policy_id'] == 'oncoref.target-selection.test.1'
+
+
+def test_target_policy_config_validation_and_replay_consistency():
+    from msgspec.structs import replace as replace_config
+    from vaxrank.external_rescoring import report_config
+
+    with pytest.raises(ValueError, match='Unknown cta_target_policy'):
+        EpitopeConfig(cta_sequence_bundle='current', cta_target_policy='bogus')
+    with pytest.raises(ValueError, match='cta_target_policy requires cta_sequence_bundle'):
+        EpitopeConfig(cta_target_policy='target_selection')
+
+    bundle, ts_index = _target_selection_fixture()
+    first = dataset()
+    apply_cta_targeting(first, bundle, target_policy='target_selection', target_selection_index=ts_index)
+    first.config = replace_config(
+        first.config, cta_sequence_bundle='current', cta_target_policy='target_selection')
+    report = SimpleNamespace(dataset=first, source_format='epitopes')
+    resolved = report_config([report], EpitopeConfig(score_expr='2.0'))
+    assert resolved.cta_sequence_bundle == 'current'
+    assert resolved.cta_target_policy == 'target_selection'
+    with pytest.raises(ValueError, match='Saved CTA targeting retains its target policy'):
+        report_config([report], EpitopeConfig(
+            cta_sequence_bundle='current', cta_target_policy='target_selection_cancer_antigens'))

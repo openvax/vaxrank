@@ -31,7 +31,7 @@ def validate_cta_args(args):
         if getattr(args, 'hitlist_evidence_bundle', None):
             raise ValueError('--hitlist-evidence-bundle requires --input-cta-expression')
         explicit = getattr(args, '_explicit_cli_args', ())
-        if any(name.startswith('cta_') and name != 'cta_sequence_bundle' for name in explicit):
+        if any(name.startswith('cta_') and name not in ('cta_sequence_bundle', 'cta_target_policy') for name in explicit):
             raise ValueError('Declare CTA expression options per input in --input-manifest')
     required = ('cta_expression_level', 'cta_id_column', 'cta_value_column',
                 'cta_expression_unit', 'cta_sample_id', 'cta_expression_source',
@@ -152,7 +152,7 @@ class CTAExpressionSource:
 
     @classmethod
     def load(cls, path, *, options, scope, genome, manifest_path=None, declarations=None, host_reference=None,
-             sequence_bundle=None, target_reference=None):
+             sequence_bundle=None, target_reference=None, target_policy=None):
         if host_reference is not None:
             scope = host_reference.validate(scope, genome=genome, location=str(path))
         scope = resolve_host_scope(scope, genome, location=str(path))
@@ -181,7 +181,8 @@ class CTAExpressionSource:
                 raise ValueError('Current CTA sequence policy cannot be combined with legacy admission overrides')
             from .cta_targeting import admit_expression, load_bundle
             target_reference = target_reference or load_bundle(sequence_bundle)
-            admission = admit_expression(path, contract, policy, target_reference, scope)
+            admission = admit_expression(
+                path, contract, policy, target_reference, scope, target_policy=target_policy)
         else:
             admission = admit_cta_expression(path, input_contract=contract, admission_policy=policy,
                                         exclusion_policy=exclusions, genome=genome, host_reference=host_reference,
@@ -216,6 +217,16 @@ def load_hitlist_bundle(path, admission):
     if (expression['input']['sha256'] != admission.input_sha256
             or any(expression.get(k) != v for k, v in expected.items())):
         raise ValueError('Hitlist bundle expression/reference contract differs from this input')
+    bundle_cta_policy = expression.get('cta_policy')
+    target_ref = getattr(admission, 'target_reference', None) or {}
+    admission_ts = target_ref.get('target_selection')
+    if admission_ts is not None:
+        if bundle_cta_policy is None or bundle_cta_policy.get('selector') != 'target_selection':
+            raise ValueError('Hitlist bundle CTA policy differs from target_selection CTA admission')
+        if bundle_cta_policy.get('policy_id') != admission_ts.get('policy_id'):
+            raise ValueError('Hitlist bundle and CTA admission use different target_selection policy IDs')
+    elif bundle_cta_policy is not None and bundle_cta_policy.get('selector') == 'target_selection':
+        raise ValueError('Hitlist target_selection CTA bundle requires target_selection CTA admission')
     artifacts = {}
     files = {}
     for name in manifest['artifacts']:
@@ -332,9 +343,14 @@ def predict_cta_source(source, predictor, *, genome, epitope_config=None, host_r
     dataset.selection['cta_expression_admission'] = to_native_json(admission)
     if getattr(admission, 'target_reference', None) is not None:
         reference = admission.target_reference
-        dataset.selection.setdefault('source_evidence', {})[reference['bundle_id']] = dict(
+        ref_record = dict(
             schema='vaxrank.oncoref_target_reference.v1', manifest=reference['manifest'],
             coverage=reference['coverage'])
+        if reference.get('target_policy') is not None:
+            ref_record['target_policy'] = reference['target_policy']
+        if reference.get('target_selection') is not None:
+            ref_record['target_selection'] = reference['target_selection']
+        dataset.selection.setdefault('source_evidence', {})[reference['bundle_id']] = ref_record
     if bundle is not None:
         dataset.selection['hitlist_evidence_bundle'] = bundle
     if local_evidence is not None:

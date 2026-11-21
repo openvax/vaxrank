@@ -168,6 +168,7 @@ class EpitopeConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     comparison_reference: str = 'annotation_reference'
     patient_background_baseline: str = 'focal'
     cta_sequence_bundle: Optional[str] = None
+    cta_target_policy: Optional[str] = None
 
     @property
     def allele_policy(self):
@@ -190,6 +191,11 @@ class EpitopeConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
             raise ValueError('patient_background_baseline must be focal or supplied_somatic_haplotype')
         if self.comparison_reference == 'annotation_reference' and self.patient_background_baseline != 'focal':
             raise ValueError('A patient-background reversion policy requires comparison_reference=patient_background')
+        if self.cta_target_policy is not None:
+            from .cta_targeting import validate_target_policy
+            validate_target_policy(self.cta_target_policy)
+            if self.cta_sequence_bundle is None:
+                raise ValueError('cta_target_policy requires cta_sequence_bundle')
         if self.selection_policy is not None:
             from topiary import resolve_selection_policy
             policy = resolve_selection_policy(self.selection_policy)

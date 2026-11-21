@@ -555,7 +555,8 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
                     scope=declared, genome=genome, manifest_path=manifest_path, declarations=declarations,
                     host_reference=host_reference,
                     sequence_bundle=epitope_config.cta_sequence_bundle,
-                    target_reference=resolve_cta_bundle())
+                    target_reference=resolve_cta_bundle(),
+                    target_policy=epitope_config.cta_target_policy)
                 provenance = source.provenance
             else:
                 source = sequences[input_index]
@@ -654,19 +655,24 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
 def report_config(reports, epitope_config=None):
     """Resolve an explicit policy or require agreement between saved policies."""
     from msgspec.structs import replace as replace_config
-    from .cta_targeting import recorded_bundle_ids
+    from .cta_targeting import recorded_bundle_ids, recorded_target_policies
     identities = set().union(*(recorded_bundle_ids(r.dataset)
         for r in reports if r.dataset is not None))
     if len(identities) > 1:
         raise ValueError('Saved CTA targeting uses different sequence bundle identities; '
                          'predict the CTA inputs with one reference before combining them.')
+    recorded_policies = set().union(*(recorded_target_policies(r.dataset)
+        for r in reports if r.dataset is not None))
+    if len(recorded_policies) > 1:
+        raise ValueError('Saved CTA targeting uses different target policies; '
+                         'predict the CTA inputs with one target policy before combining them.')
     if epitope_config is None:
         from .epitope_config import EpitopeConfig
         configs = [r.dataset.config for r in reports
                    if r.dataset is not None and r.dataset.config is not None]
         # A path/current alias locates a bundle; frozen evidence above defines
         # its identity. Equivalent copies must not become different policies.
-        comparable = [replace_config(cfg, cta_sequence_bundle=None) for cfg in configs]
+        comparable = [replace_config(cfg, cta_sequence_bundle=None, cta_target_policy=None) for cfg in configs]
         if comparable and any(cfg != comparable[0] for cfg in comparable):
             raise ValueError("Saved inputs use different scoring policies; supply an explicit epitope config")
         epitope_config = configs[0] if configs else EpitopeConfig()
@@ -692,7 +698,18 @@ def report_config(reports, epitope_config=None):
             if len(saved_cta_bundles) > 1 and (not identities or None in identities):
                 raise ValueError('Saved CTA targeting lacks a common frozen sequence reference identity')
             requested = next((r.dataset.config.cta_sequence_bundle for r in saved_cta_reports), None)
-        epitope_config = replace_config(epitope_config, cta_sequence_bundle=requested)
+        saved_cta_policies = {r.dataset.config.cta_target_policy for r in saved_cta_reports}
+        requested_policy = epitope_config.cta_target_policy
+        if requested_policy is not None and requested_policy not in saved_cta_policies:
+            if not recorded_policies or {requested_policy} != recorded_policies:
+                raise ValueError('Saved CTA targeting retains its target policy. '
+                                 'Create new CTA inputs to change the OncoRef target policy.')
+        elif requested_policy is None:
+            if len(saved_cta_policies) > 1:
+                raise ValueError('Saved CTA targeting uses different target policies')
+            requested_policy = next((r.dataset.config.cta_target_policy for r in saved_cta_reports), None)
+        epitope_config = replace_config(
+            epitope_config, cta_sequence_bundle=requested, cta_target_policy=requested_policy)
     return epitope_config
 
 
