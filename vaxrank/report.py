@@ -236,6 +236,13 @@ class TemplateDataCreator(object):
         self.host_reference = host_reference
         self.prediction_configuration = args_for_report.get('_effective_prediction_configuration', {})
         self.processing_enabled = args_for_report.get('processing_aware_annotation')
+        self.proxy_expression_summary = args_for_report.get('_proxy_expression_summary')
+        self.proxy_expression_cancer_type = args_for_report.get('proxy_expression_cancer_type')
+        self.dna_only_mode = bool(
+            args_for_report.get('allow_dna_only_fallback')
+            and not args_for_report.get('bam')
+            and any(args_for_report.get(k) for k in ('vcf', 'maf', 'variant', 'json_variants'))
+        )
 
         # ``vaccine_type`` is rendered in the patient-info block so
         # the reader can tell at a glance what's being designed.
@@ -388,13 +395,32 @@ class TemplateDataCreator(object):
                 self.patient_info.num_somatic_variants)
             patient_info['Somatic variants with predicted coding effects'] = (
                 self.patient_info.num_coding_effect_variants)
-            patient_info[
-                'Somatic variants with predicted coding effects and RNA support'
-            ] = self.patient_info.num_variants_with_rna_support
-            patient_info[
-                'Somatic variants with predicted coding effects, RNA support and '
-                'predicted MHC ligands'
-            ] = self.patient_info.num_variants_with_vaccine_peptides
+            if self.dna_only_mode:
+                patient_info[
+                    'Somatic variants with predicted coding effects and predicted MHC ligands (DNA-only)'
+                ] = self.patient_info.num_variants_with_vaccine_peptides
+            else:
+                patient_info[
+                    'Somatic variants with predicted coding effects and RNA support'
+                ] = self.patient_info.num_variants_with_rna_support
+                patient_info[
+                    'Somatic variants with predicted coding effects, RNA support and '
+                    'predicted MHC ligands'
+                ] = self.patient_info.num_variants_with_vaccine_peptides
+        if self.proxy_expression_summary:
+            patient_info['Expression source (cohort proxy, not patient RNA)'] = (
+                '%s whole-gene median clean TPM (%s)'
+                % (
+                    self.proxy_expression_summary['cancer_code'],
+                    self.proxy_expression_summary['source_label'],
+                )
+            )
+        elif self.proxy_expression_cancer_type:
+            patient_info['Expression source (cohort proxy, not patient RNA)'] = (
+                '%s whole-gene median clean TPM (OncoRef)' % self.proxy_expression_cancer_type
+            )
+        elif self.dna_only_mode:
+            patient_info['Expression source'] = 'DNA-only translation (no patient RNA-seq BAM)'
         return patient_info
 
     def _variant_data(self, variant, top_vaccine_peptide):
@@ -434,6 +460,16 @@ class TemplateDataCreator(object):
             ('RNA reads supporting variant allele', mutant_protein_fragment.n_alt_reads),
             ('RNA reads supporting reference allele', mutant_protein_fragment.n_ref_reads),
         ])
+        proxy_code = getattr(mutant_protein_fragment, 'proxy_expression_cancer_code', '') or ''
+        proxy_tpm = getattr(mutant_protein_fragment, 'proxy_expression_tpm', None)
+        if proxy_code and proxy_tpm is not None:
+            q1 = getattr(mutant_protein_fragment, 'proxy_expression_q1_tpm', None)
+            q3 = getattr(mutant_protein_fragment, 'proxy_expression_q3_tpm', None)
+            src = getattr(mutant_protein_fragment, 'proxy_expression_source', '') or 'OncoRef'
+            iqr = (' (IQR %.1f–%.1f)' % (float(q1), float(q3))) if (q1 is not None and q3 is not None) else ''
+            variant_data['Cohort proxy expression (not patient RNA)'] = (
+                '%s: %.1f TPM%s · %s' % (proxy_code, float(proxy_tpm), iqr, src)
+            )
         # DNA support for the call itself, where the source reports a
         # depth to derive it from. A fraction alone cannot say how well a
         # variant is backed: 0.45 from two reads and 0.45 from two hundred
@@ -919,7 +955,21 @@ class TemplateDataCreator(object):
                 rna_parts.append(f'{text} ({sample_id})' if sample_id else text)
         elif getattr(top, 'mutant_protein_fragment', None) is not None:
             frag = top.mutant_protein_fragment
-            if getattr(frag, 'n_alt_fragments', None) is not None:
+            proxy_code = getattr(frag, 'proxy_expression_cancer_code', '') or ''
+            proxy_tpm = getattr(frag, 'proxy_expression_tpm', None)
+            if getattr(frag, 'n_alt_fragments', None) is not None and int(frag.n_alt_fragments) > 0:
+                rna_parts.append('%d alt frags' % int(frag.n_alt_fragments))
+            elif getattr(frag, 'n_alt_reads', None) is not None and int(frag.n_alt_reads) > 0:
+                rna_parts.append('%d alt reads' % int(frag.n_alt_reads))
+            elif proxy_code and proxy_tpm is not None:
+                proxy_gene = getattr(frag, 'proxy_expression_gene_name', '') or ''
+                gene_tag = (
+                    ' [%s]' % proxy_gene
+                    if proxy_gene and proxy_gene != (getattr(frag, 'gene_name', '') or '')
+                    else ''
+                )
+                rna_parts.append('Proxy %s%s: %.1f TPM (OncoRef)' % (proxy_code, gene_tag, float(proxy_tpm)))
+            elif getattr(frag, 'n_alt_fragments', None) is not None:
                 rna_parts.append('%d alt frags' % int(frag.n_alt_fragments))
             elif getattr(frag, 'n_alt_reads', None) is not None:
                 rna_parts.append('%d alt reads' % int(frag.n_alt_reads))
@@ -1169,9 +1219,14 @@ class TemplateDataCreator(object):
                             evidence_parts.append('%s (%s): %s' % (scope_text, ev.scope, ', '.join(items)))
                     elif peptide.mutant_protein_fragment is not None:
                         frag = peptide.mutant_protein_fragment
+                        proxy_code = getattr(frag, 'proxy_expression_cancer_code', '') or ''
+                        proxy_tpm = getattr(frag, 'proxy_expression_tpm', None)
                         items = ['%d alt reads' % frag.n_alt_reads]
                         if frag.n_alt_fragments is not None:
                             items.append('%d alt fragments' % frag.n_alt_fragments)
+                        if proxy_code and proxy_tpm is not None:
+                            items.append('Proxy %s cohort: %.1f TPM (OncoRef; not patient RNA)' % (
+                                proxy_code, float(proxy_tpm)))
                         evidence_parts.append(', '.join(items))
                     for rec in peptide.antigen.tumor_specificity.evidence_records:
                         if rec.numeric_value is not None and rec.unit:

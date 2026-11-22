@@ -137,6 +137,18 @@ def make_vaxrank_arg_parser():
             for opt in action.option_strings:
                 arg_parser._option_string_actions.pop(opt, None)
     arg_parser.add_argument('--version', action='version', version='Vaxrank %s' % (__version__,))
+    # Allow DNA-only runs (--allow-dna-only-fallback / --proxy-expression-cancer-type)
+    # without requiring a dummy --bam file (openvax/vaxrank#907). Missing --bam
+    # without DNA-only opt-in is validated cleanly in check_args().
+    for action in arg_parser._actions:
+        if '--bam' in action.option_strings:
+            action.required = False
+            action.default = None
+            action.help = (
+                "BAM file containing tumor RNAseq reads. Optional when "
+                "--allow-dna-only-fallback or --proxy-expression-cancer-type is set."
+            )
+            break
     # None distinguishes omission from explicitly passing even the upstream
     # default (e.g. --min-variant-sequence-coverage 2) over a YAML override.
     # Resolve these only in the RNA entry point, after merging configuration.
@@ -289,9 +301,20 @@ def add_advanced_args(arg_parser):
         "--allow-dna-only-fallback",
         action="store_true",
         default=False,
-        help="When a variant has no RNA support, attempt to construct vaccine "
-             "peptides from DNA annotation alone using varcode's MutantTranscript. "
-             "These peptides will have zero supporting RNA reads.")
+        help="When a variant has no RNA support (or when --bam is omitted), "
+             "construct vaccine peptides from DNA annotation alone using "
+             "varcode's MutantTranscript. These peptides have zero supporting "
+             "patient RNA reads.")
+    advanced_group.add_argument(
+        "--proxy-expression-cancer-type",
+        default=None,
+        metavar="CANCER_TYPE",
+        help="Human OncoRef cancer type code or name (e.g. SKCM, melanoma, BRCA, "
+             "LUAD, SARC_OS) whose whole-gene cohort median expression (clean TPM) "
+             "is used as a cohort expression proxy for DNA-only runs without --bam. "
+             "Implies --allow-dna-only-fallback, defaults combined_score_expr to "
+             "'sqrt(proxy_expression_tpm) * target_epitope_score' unless overridden, "
+             "and stays explicitly labeled as cohort proxy expression (never patient RNA).")
     add_prediction_cache_arg(advanced_group)
     advanced_group.add_argument(
         "--tumor-sample-name",
@@ -964,6 +987,34 @@ def check_args(args):
     if getattr(args, 'input_json_file', None) and getattr(args, 'output_epitopes', None):
         raise ValueError('Legacy ranked JSON has no complete native prediction dataset. '
                          'Use --input-epitopes for replayable native evidence export.')
+
+    has_direct_variants = any(
+        getattr(args, name, None) for name in ('vcf', 'maf', 'variant', 'json_variants')
+    )
+    proxy_cancer = getattr(args, 'proxy_expression_cancer_type', None)
+    if proxy_cancer:
+        if getattr(args, 'bam', None):
+            raise ValueError(
+                "--proxy-expression-cancer-type cannot be combined with --bam. "
+                "Omit --bam when using whole-gene cohort proxy expression for DNA-only runs."
+            )
+        if not has_direct_variants:
+            raise ValueError(
+                "--proxy-expression-cancer-type requires direct somatic variant input "
+                "(--vcf, --maf, --variant, or --json-variants)."
+            )
+        # Explicit cohort proxy expression opts into DNA-only translation.
+        args.allow_dna_only_fallback = True
+    if (
+        has_direct_variants
+        and not getattr(args, 'bam', None)
+        and not getattr(args, 'allow_dna_only_fallback', False)
+    ):
+        raise ValueError(
+            "No --bam file supplied. Pass --bam for tumor RNA-seq support, or pass "
+            "--allow-dna-only-fallback (optionally with --proxy-expression-cancer-type) "
+            "to translate somatic variants from DNA annotation alone."
+        )
 
     # ``--output-dir`` is contractually a directory; the file-path
     # form was removed when single-file outputs went away. Reject

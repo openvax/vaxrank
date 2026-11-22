@@ -12,6 +12,7 @@
 
 
 import logging
+from dataclasses import replace
 from typing import Optional
 
 from typing import Union
@@ -45,6 +46,7 @@ def run_vaxrank(
     vaccine_config: Optional[VaccineConfig] = None,
     manufacturability_config: Optional[ManufacturabilityConfig] = None,
     allow_dna_only_fallback: bool = False,
+    proxy_expression_lookup=None,
     epitope_dataset=None,
     policy_evaluations=None,
     defer_window_selection=True,
@@ -127,6 +129,7 @@ def run_vaxrank(
         vaccine_config=vaccine_config,
         manufacturability_config=manufacturability_config,
         allow_dna_only_fallback=allow_dna_only_fallback,
+        proxy_expression_lookup=proxy_expression_lookup,
         epitope_dataset=epitope_dataset,
         policy_evaluations=policy_evaluations,
         defer_window_selection=defer_window_selection,
@@ -155,6 +158,7 @@ def create_vaccine_peptides_dict(
     vaccine_config: Optional[VaccineConfig] = None,
     manufacturability_config: Optional[ManufacturabilityConfig] = None,
     allow_dna_only_fallback: bool = False,
+    proxy_expression_lookup=None,
     epitope_dataset=None,
     policy_evaluations=None,
     defer_window_selection=True,
@@ -213,6 +217,7 @@ def create_vaccine_peptides_dict(
             vaccine_config=vaccine_config,
             manufacturability_config=manufacturability_config,
             allow_dna_only_fallback=allow_dna_only_fallback,
+            proxy_expression_lookup=proxy_expression_lookup,
             epitope_dataset=epitope_dataset,
             policy_evaluations=policy_evaluations,
             defer_window_selection=defer_window_selection,
@@ -242,6 +247,7 @@ def vaccine_peptides_for_variant(
     vaccine_config: Optional[VaccineConfig] = None,
     manufacturability_config: Optional[ManufacturabilityConfig] = None,
     allow_dna_only_fallback: bool = False,
+    proxy_expression_lookup=None,
     epitope_dataset=None,
     policy_evaluations=None,
     defer_window_selection=True,
@@ -298,9 +304,60 @@ def vaccine_peptides_for_variant(
                 "DNA-only fallback produced no protein fragment for %s",
                 variant.short_description)
             return []
-        logger.info(
-            "Using DNA-only fallback for %s (no RNA support)",
-            variant.short_description)
+        if proxy_expression_lookup is not None:
+            from .proxy_expression import resolve_proxy_expression_gene
+
+            gene_id, proxy_gene_name, is_upstream_complex = resolve_proxy_expression_gene(
+                long_protein_fragment
+            )
+            proxy_gene_name = proxy_gene_name or long_protein_fragment.gene_name
+            proxy = proxy_expression_lookup.lookup(
+                gene_id=gene_id,
+                gene_name=proxy_gene_name,
+            )
+            role_note = (
+                f" (5' upstream gene {proxy_gene_name})"
+                if is_upstream_complex and proxy_gene_name
+                else ""
+            )
+            if proxy is not None:
+                long_protein_fragment = replace(
+                    long_protein_fragment,
+                    proxy_expression_tpm=proxy.tpm,
+                    proxy_expression_q1_tpm=proxy.q1_tpm,
+                    proxy_expression_q3_tpm=proxy.q3_tpm,
+                    proxy_expression_cancer_code=proxy.cancer_code,
+                    proxy_expression_source=proxy_expression_lookup.source_label + role_note,
+                    proxy_expression_gene_name=proxy_gene_name or "",
+                )
+                logger.info(
+                    "Using DNA-only fallback for %s (no patient RNA; OncoRef %s proxy %.2f TPM%s)",
+                    variant.short_description,
+                    proxy.cancer_code,
+                    proxy.tpm,
+                    role_note,
+                )
+            else:
+                long_protein_fragment = replace(
+                    long_protein_fragment,
+                    proxy_expression_tpm=0.0,
+                    proxy_expression_cancer_code=proxy_expression_lookup.cancer_code,
+                    proxy_expression_source=(
+                        proxy_expression_lookup.source_label + role_note
+                        + " (gene absent from cohort panel)"
+                    ),
+                    proxy_expression_gene_name=proxy_gene_name or "",
+                )
+                logger.info(
+                    "Using DNA-only fallback for %s (no patient RNA; gene %s absent from OncoRef %s panel, proxy=0.0 TPM)",
+                    variant.short_description,
+                    proxy_gene_name,
+                    proxy_expression_lookup.cancer_code,
+                )
+        else:
+            logger.info(
+                "Using DNA-only fallback for %s (no RNA support)",
+                variant.short_description)
     else:
         return []
 

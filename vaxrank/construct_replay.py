@@ -180,6 +180,13 @@ def _canonical_native(value):
     if (metadata == dict(__module__='vaxrank.vaccine_antigen', __name__='VaccineAntigen')
             and result.get('source_protein_offset', 0) == 0):
         result.pop('source_protein_offset', None)
+    if metadata == dict(__module__='vaxrank.mutant_protein_fragment', __name__='MutantProteinFragment'):
+        for key in ('proxy_expression_tpm', 'proxy_expression_q1_tpm', 'proxy_expression_q3_tpm'):
+            if result.get(key) is None:
+                result.pop(key, None)
+        for key in ('proxy_expression_cancer_code', 'proxy_expression_source', 'proxy_expression_gene_name'):
+            if result.get(key, '') == '':
+                result.pop(key, None)
     if metadata in (
             dict(__module__='vaxrank.vaccine_antigen', __name__='VaccineAntigen'),
             dict(__module__='vaxrank.mutant_protein_fragment', __name__='MutantProteinFragment')):
