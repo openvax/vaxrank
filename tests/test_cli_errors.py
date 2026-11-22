@@ -457,20 +457,11 @@ def test_final_outputs_block_lists_what_was_written(tmp_path, capsys):
     assert str(out / "run_summary.txt") in err
 
 
-def test_vaxrank_version_replaces_upstream_parser_version(monkeypatch, capsys):
-    """varcode>=11.18.0 adds --version in make_variants_parser (openvax/varcode#759)."""
+def test_vaxrank_version_flag_outputs_vaxrank_version(capsys):
+    """varcode>=12.0.1 omits --version in make_variants_parser (openvax/varcode#759)."""
     from vaxrank.cli import arg_parser
     from vaxrank.version import __version__
 
-    real_make = arg_parser.make_isovar_arg_parser
-
-    def make_with_upstream_version(*args, **kwargs):
-        parser = real_make(*args, **kwargs)
-        if '--version' not in parser._option_string_actions:
-            parser.add_argument('--version', action='version', version='varcode 11.18.0')
-        return parser
-
-    monkeypatch.setattr(arg_parser, 'make_isovar_arg_parser', make_with_upstream_version)
     parser = arg_parser.make_vaxrank_arg_parser()
     with pytest.raises(SystemExit) as exit_info:
         parser.parse_args(['--version'])

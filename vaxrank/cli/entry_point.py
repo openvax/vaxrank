@@ -125,8 +125,39 @@ def filter_unannotatable_variants(variants):
             variants[0].genome.reference_name,
             ", ".join(sorted(skipped_contigs)),
         )
+        if isinstance(VariantCollection, type) and isinstance(variants, VariantCollection):
+            valid_set = set(valid)
+            return variants.filter(lambda v: v in valid_set)
         return VariantCollection(valid)
     return variants
+
+
+def maybe_combine_cis_snvs(variants, args):
+    """Optionally combine phased cis in-codon SNVs into MNVs via varcode (#898)."""
+    if not getattr(args, "combine_cis_snvs", False) or len(variants) == 0:
+        return variants
+    from varcode.transforms import combine_cis_snvs
+
+    sample = getattr(args, "tumor_sample_name", None)
+    if sample is None:
+        samples = list(getattr(variants, "samples", ()))
+        if len(samples) == 1:
+            sample = samples[0]
+        else:
+            raise ValueError(
+                "--combine-cis-snvs requires --tumor-sample-name when the "
+                "input has %d VCF sample(s) (found: %s)"
+                % (len(samples), ", ".join(samples) if samples else "none")
+            )
+    combined = combine_cis_snvs(variants, sample=sample)
+    if len(combined) != len(variants):
+        logger.info(
+            "Combined cis in-codon SNVs into MNVs for sample %s: %d -> %d variants",
+            sample,
+            len(variants),
+            len(combined),
+        )
+    return combined
 
 
 def annotate_predictions_with_processing(ranked_vaccine_peptides,
@@ -1745,6 +1776,7 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
     if loaded_variants is None:
         loaded_variants = variant_collection_from_args(args)
     variants = filter_unannotatable_variants(loaded_variants)
+    variants = maybe_combine_cis_snvs(variants, args)
     if getattr(args, 'host_reference', None):
         raise ValueError('Use --host-reference with native antigen inputs or saved --input-epitopes')
     from ..input_scope import validate_prediction_species, scope_dict
