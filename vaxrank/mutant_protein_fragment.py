@@ -13,6 +13,7 @@
 
 import logging
 import hashlib
+import json
 from dataclasses import dataclass, replace
 from typing import Any, Optional
 
@@ -63,6 +64,39 @@ def find_mutation_region(reference_protein, mutant_protein):
         return min_len, len(mutant_protein)
 
     return start, mut_i
+
+
+def _compact_candidate_provenance(candidate):
+    """Retain candidate provenance without per-base genomic coordinate arrays.
+
+    Varcode's ``RealizedTranscriptProduct.evidence`` carries a per-base
+    ``genomic_positions`` list with one entry per cDNA nucleotide (e.g. >200k
+    integers for ``TTN`` across baseline + mutant), while ``exon_runs`` already
+    records the exact exon coordinate intervals. Replacing ``genomic_positions``
+    with its length and SHA-256 keeps deterministic provenance matching while
+    avoiding multi-megabyte JSON bloat per variant (openvax/vaxrank#908).
+    """
+    record = varcode_candidate_provenance(candidate)
+    evidence = record.get("evidence")
+    outcomes = evidence.get("outcomes") if isinstance(evidence, dict) else None
+    if isinstance(outcomes, list):
+        for outcome in outcomes:
+            if not isinstance(outcome, dict):
+                continue
+            for side in ("baseline", "mutant"):
+                product = outcome.get(side)
+                if not isinstance(product, dict):
+                    continue
+                product_ev = product.get("evidence")
+                if not isinstance(product_ev, dict):
+                    continue
+                positions = product_ev.get("genomic_positions")
+                if isinstance(positions, (list, tuple)):
+                    encoded = json.dumps(positions, separators=(",", ":")).encode("ascii")
+                    product_ev.pop("genomic_positions")
+                    product_ev["genomic_positions_count"] = len(positions)
+                    product_ev["genomic_positions_sha256"] = hashlib.sha256(encoded).hexdigest()
+    return record
 
 
 def _dna_protein_candidates(variant, effects=None):
@@ -124,7 +158,7 @@ def _dna_protein_candidates(variant, effects=None):
                 reference_protein_sha256=hashlib.sha256(reference.encode("ascii")).hexdigest(),
                 mutation_start=start,
                 mutation_end=end,
-                candidate_path=[varcode_candidate_provenance(c) for c in path],
+                candidate_path=[_compact_candidate_provenance(c) for c in path],
             )
             yield outcomes, effect, protein, provenance
 
@@ -350,6 +384,16 @@ class MutantProteinFragment(DataclassSerializable):
     # region, where clipping the local mutation offset loses the window start.
     protein_start_offset: Optional[int] = None
     rna_support: tuple[RNAFeatureEvidence, ...] = ()
+    # Whole-gene cohort proxy expression from OncoRef (DNA-only runs without
+    # patient tumor RNA-seq). Kept strictly separate from patient RNA read
+    # counts (n_alt_reads stays 0) so cohort priors are never confused with
+    # patient-observed expression.
+    proxy_expression_tpm: Optional[float] = None
+    proxy_expression_q1_tpm: Optional[float] = None
+    proxy_expression_q3_tpm: Optional[float] = None
+    proxy_expression_cancer_code: str = ""
+    proxy_expression_source: str = ""
+    proxy_expression_gene_name: str = ""
 
     def __post_init__(self):
         self.rna_support = validate_rna_support(self.rna_support, len(self.amino_acids))

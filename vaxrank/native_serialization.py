@@ -12,6 +12,7 @@
 
 """Allowlisted JSON serialization for native epitope object graphs."""
 
+import hashlib
 import json
 from functools import lru_cache
 
@@ -326,11 +327,57 @@ def _migrate_state(class_object, state):
         % (name or "<unnamed>",))
 
 
+def _compact_genomic_positions(value):
+    """Replace per-base ``genomic_positions`` arrays inside Varcode evidence dicts.
+
+    ``RealizedTranscriptProduct.evidence['genomic_positions']`` carries one
+    integer per cDNA nucleotide (up to ~220k ints for ``TTN`` across baseline
+    and mutant), bloating native serialized ``annotated_effect`` payloads to
+    multiple megabytes per variant even when ``exon_runs`` is already present
+    (openvax/vaxrank#908, openvax/topiary#624). Replacing it with its count
+    and SHA-256 preserves exact round-trip matching with
+    ``MutantProteinFragment.dna_effect_selection``.
+    """
+    if isinstance(value, list):
+        changed = False
+        for item in value:
+            if _compact_genomic_positions(item):
+                changed = True
+        return changed
+    if not isinstance(value, dict):
+        return False
+    changed = False
+    if "genomic_positions" in value and "exon_runs" in value:
+        raw = value["genomic_positions"]
+        seq = None
+        if isinstance(raw, list):
+            seq = raw
+        elif (
+            isinstance(raw, dict)
+            and raw.get(_CLASS_FIELD) == {"__module__": "builtins", "__name__": "tuple"}
+            and isinstance(raw.get(_VALUE_FIELD), list)
+        ):
+            seq = raw[_VALUE_FIELD]
+        if seq is not None:
+            encoded = json.dumps(seq, separators=(",", ":")).encode("ascii")
+            value.pop("genomic_positions")
+            value["genomic_positions_count"] = len(seq)
+            value["genomic_positions_sha256"] = hashlib.sha256(encoded).hexdigest()
+            changed = True
+    for item in value.values():
+        if _compact_genomic_positions(item):
+            changed = True
+    return changed
+
+
 def to_native_json(value):
     """Encode one native object after validating its complete class graph."""
     payload = to_json(value)
+    parsed = _json_loads(payload)
+    if '"genomic_positions"' in payload and _compact_genomic_positions(parsed):
+        payload = json.dumps(parsed, allow_nan=False)
     restored = _decode_native_repr(
-        _json_loads(payload), _native_serializable_classes())
+        parsed, _native_serializable_classes())
     if type(restored) is not type(value):
         raise ValueError(
             "Native payload decoded to %s, expected %s"

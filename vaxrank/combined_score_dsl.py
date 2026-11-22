@@ -151,6 +151,8 @@ _FUNCTIONS = {
     'pow': pow,
 }
 
+PROXY_EXPRESSION_BINDINGS = frozenset({"proxy_expression_tpm"})
+
 SOURCE_AGNOSTIC_BINDINGS = RNA_BINDINGS | SHARED_RNA_BINDINGS | frozenset({
     "target_epitope_score",
     "self_epitope_score",
@@ -298,6 +300,11 @@ def combined_score_bindings(vp):
         'n_mutant_amino_acids': float(
             frag.mutant_amino_acid_end_offset
             - frag.mutant_amino_acid_start_offset),
+        'proxy_expression_tpm': (
+            float(frag.proxy_expression_tpm)
+            if getattr(frag, 'proxy_expression_tpm', None) is not None
+            else None
+        ),
     })
     return bindings
 
@@ -358,6 +365,16 @@ def evaluate_combined_score(expr_or_tree, vaccine_peptide):
             "Supply a single library scope with required whole-library denominators; "
             "choose longitudinal aggregation separately."
             % (sorted(missing_shared), len(shared_records))
+        )
+    missing_proxy = [
+        name for name in combined_score_binding_names(tree) & PROXY_EXPRESSION_BINDINGS
+        if bindings.get(name) is None
+    ]
+    if missing_proxy:
+        raise ValueError(
+            "Unavailable cohort proxy expression binding(s) %s. Supply "
+            "--proxy-expression-cancer-type (e.g. SKCM, melanoma, BRCA) to attach "
+            "OncoRef whole-gene cohort proxy expression." % sorted(missing_proxy)
         )
     namespace = dict(_FUNCTIONS)
     namespace.update(bindings)

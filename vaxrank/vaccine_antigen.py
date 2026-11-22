@@ -536,6 +536,19 @@ class VaccineAntigen(DataclassSerializable):
         source_identifier = str(
             getattr(variant, "short_description", "") or variant or ""
         )
+        proxy_meta = ()
+        proxy_code = getattr(fragment, "proxy_expression_cancer_code", "") or ""
+        proxy_tpm = getattr(fragment, "proxy_expression_tpm", None)
+        if proxy_code or proxy_tpm is not None:
+            entries = []
+            if proxy_code:
+                entries.append(("proxy_expression_cancer_code", str(proxy_code)))
+            if proxy_tpm is not None:
+                entries.append(("proxy_expression_tpm", f"{float(proxy_tpm):.4f}"))
+            proxy_source = getattr(fragment, "proxy_expression_source", "") or ""
+            if proxy_source:
+                entries.append(("proxy_expression_source", str(proxy_source)))
+            proxy_meta = tuple(entries)
         return cls(
             kind=ANTIGEN_KIND_SV if isinstance(variant, StructuralVariant) else ANTIGEN_KIND_MUTATION,
             origin=AntigenOrigin(variants=(VariantOrigin.from_variant(variant),) if isinstance(variant, Variant) else (),
@@ -558,6 +571,7 @@ class VaccineAntigen(DataclassSerializable):
             transcript_ids=transcript_ids,
             protein_ids=protein_ids,
             source_identifier=source_identifier,
+            source_metadata=proxy_meta,
             rna_support=getattr(fragment, "rna_support", ()),
         )
 

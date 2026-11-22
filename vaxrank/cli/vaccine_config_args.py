@@ -21,8 +21,12 @@ from ..config.loader import (
 )
 from ..manufacturability_config import ManufacturabilityConfig
 from ..shared_sequence_rna import SHARED_SEQUENCE_RNA_POLICIES
-from ..vaccine_config import VaccineConfig
-from ..vaccine_config import LENS_ANTIGEN_SOURCES
+from ..vaccine_config import (
+    LENS_ANTIGEN_SOURCES,
+    PROXY_EXPRESSION_COMBINED_SCORE_EXPR,
+    SOURCE_AGNOSTIC_COMBINED_SCORE_EXPR,
+    VaccineConfig,
+)
 from ..antigen_allocation import (
     ANTIGEN_SELECTION_TYPES, ANTIGEN_SELECTION_CHOICES, normalize_selection_type, expand_selection_types,
 )
@@ -234,6 +238,16 @@ def vaccine_config_from_args(args : argparse.Namespace, merged_config=None) -> V
             for source in sorted(LENS_ANTIGEN_SOURCES)
             if source in selected_sources
         )
+
+    if "combined_score_expr" not in vaccine_config_kwargs:
+        if getattr(args, "proxy_expression_cancer_type", None):
+            vaccine_config_kwargs["combined_score_expr"] = PROXY_EXPRESSION_COMBINED_SCORE_EXPR
+        elif (
+            getattr(args, "allow_dna_only_fallback", False)
+            and not getattr(args, "bam", None)
+            and any(getattr(args, name, None) for name in ("vcf", "maf", "variant", "json_variants"))
+        ):
+            vaccine_config_kwargs["combined_score_expr"] = SOURCE_AGNOSTIC_COMBINED_SCORE_EXPR
 
     vaccine_config = msgspec.convert(vaccine_config_kwargs, VaccineConfig)
     return vaccine_config

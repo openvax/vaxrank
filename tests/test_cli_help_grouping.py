@@ -26,12 +26,12 @@ def test_a_saved_run_wins_over_pipeline_flags():
 
 
 def test_error_says_which_mode_a_flag_selected(capsys):
-    """``--vcf`` with a LENS report fails on ``--bam``; say why the VCF mode applied."""
+    """``--vcf`` with a LENS report fails on missing run requirements; say why the VCF mode applied."""
     with pytest.raises(SystemExit) as raised:
         parse_vaxrank_args(["--input-lens", "x.tsv", "--vcf", "y.vcf"])
     assert raised.value.code == 2
     err = capsys.readouterr().err
-    assert "required: --bam" in err
+    assert "required: --mhc-predictor" in err
     assert "Read as a variant and RNA run because --vcf was given." in err
 
 

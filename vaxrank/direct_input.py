@@ -145,6 +145,10 @@ def prepare_direct_report(args, reports, epitope_config, *, prepared_input=None)
     for field in fields:
         frame[field] = frame.prediction_id.map(
             {key: getattr(fragment, field) for key, fragment in dataset.mutation_fragments.items()})
+    if any(getattr(f, 'proxy_expression_cancer_code', '') for f in dataset.mutation_fragments.values()):
+        for field in ('proxy_expression_tpm', 'proxy_expression_cancer_code', 'proxy_expression_source'):
+            frame[field] = frame.prediction_id.map(
+                {key: getattr(fragment, field) for key, fragment in dataset.mutation_fragments.items()})
     for name, value in provenance_columns(provenance).items():
         frame[name] = value
     for field in ('gene_id', 'transcript_ids', 'protein_ids', 'species', 'source_identifier'):

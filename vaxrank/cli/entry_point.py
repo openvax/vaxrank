@@ -1182,6 +1182,20 @@ def write_run_summary(args, patient_info, source, products=None):
             lines.append("Added prediction namespace: %s" % prefix)
         if getattr(args, 'external_peptide_only', False):
             lines.append("New prediction context: peptide only (flanks excluded)")
+        if getattr(args, 'proxy_expression_cancer_type', None):
+            proxy_summary = getattr(args, '_proxy_expression_summary', None)
+            if proxy_summary:
+                lines.append(
+                    "Expression proxy: OncoRef whole-gene cohort median TPM — %s (%s; not patient RNA)"
+                    % (proxy_summary['cancer_code'], proxy_summary['source_label'])
+                )
+            else:
+                lines.append(
+                    "Expression proxy: OncoRef whole-gene cohort median TPM — %s (not patient RNA)"
+                    % args.proxy_expression_cancer_type
+                )
+        elif has_direct_input(args) and not getattr(args, 'bam', None):
+            lines.append("Expression source: DNA-only translation (no patient RNA-seq BAM supplied)")
         if provenance:
             for source_input in provenance:
                 scope = source_input.scope
@@ -1546,9 +1560,11 @@ def _run_parsed_cli(args, args_list):
     # the VCF/BAM pipeline path and the external-input path.
     check_args(args)
     validate_input_paths(args)
-    # Only the BAM pipeline rejects unparseable alleles later (species check);
-    # external-input runs accept them, so they must not start failing here.
-    if getattr(args, 'bam', None):
+    # Direct variant/RNA runs validate alleles up front; external-input runs
+    # accept unparseable allele strings from legacy third-party tables.
+    if getattr(args, 'bam', None) or any(
+        getattr(args, name, None) for name in ('vcf', 'maf', 'variant', 'json_variants')
+    ):
         validate_allele_arguments(args)
     # Decide now, not after the pipeline, so an explicit request for a missing
     # optional install fails in the first second.
@@ -1723,6 +1739,34 @@ def main(args_list=None):
         exit_with_user_error(error, args_list)
 
 
+def _dna_only_isovar_results(variants):
+    """Build RNA-free IsovarResult shells for DNA-only direct runs without a BAM."""
+    from isovar import IsovarResult, ReadEvidence
+
+    results = []
+    for variant in variants:
+        effects = variant.effects()
+        predicted_effect = effects.top_priority_effect() if effects else None
+        read_evidence = ReadEvidence(
+            trimmed_base1_start=variant.start,
+            trimmed_ref=getattr(variant, 'ref', '') or '',
+            trimmed_alt=getattr(variant, 'alt', '') or '',
+            ref_reads=[],
+            alt_reads=[],
+            other_reads=[],
+        )
+        results.append(
+            IsovarResult(
+                variant=variant,
+                read_evidence=read_evidence,
+                predicted_effect=predicted_effect,
+                sorted_protein_sequences=[],
+                filter_values={"rna_support": False},
+            )
+        )
+    return results
+
+
 def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_override=None, loaded_variants=None):
     from .isovar_config_args import resolve_isovar_args
 
@@ -1785,6 +1829,31 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
         references.append(args.genome)
     args._input_species_scope = scope_dict(validate_prediction_species(
         args, references, mhc_alleles_from_args(args), 'Direct prediction'))
+    proxy_expression_lookup = None
+    proxy_cancer = getattr(args, 'proxy_expression_cancer_type', None)
+    if proxy_cancer:
+        from ..proxy_expression import (
+            OncoRefProxyExpressionLookup,
+            validate_human_host_for_proxy_expression,
+        )
+        validate_human_host_for_proxy_expression(
+            args._input_species_scope.get('host_taxon_id'),
+            proxy_cancer,
+        )
+        proxy_expression_lookup = OncoRefProxyExpressionLookup(proxy_cancer)
+        args._proxy_expression_summary = {
+            'requested': proxy_cancer,
+            'cancer_code': proxy_expression_lookup.cancer_code,
+            'source_cohort': proxy_expression_lookup.source_cohort,
+            'source_label': proxy_expression_lookup.source_label,
+            'n_reference_samples': proxy_expression_lookup.n_reference_samples,
+        }
+        logger.info(
+            "Loaded OncoRef whole-gene cohort proxy expression for %s (%s); "
+            "clearly labeled as cohort proxy expression, never patient RNA.",
+            proxy_expression_lookup.cancer_code,
+            proxy_expression_lookup.source_label,
+        )
     from ..prediction_policy import configured_prediction_models
     predictors_list = configured_prediction_models(args, mhc_alleles_from_args(args))
     args._candidate_prediction_mode = 'direct inference'
@@ -1808,18 +1877,24 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
         from ..construct_replay import pipeline_native_dataset
         epitope_dataset = pipeline_native_dataset(args, variants, epitope_config,
                                                  patient_background=prepared_background)
-    with timed_step(
-            logger, "Collecting RNA reads and assembling protein sequences for %d variant(s)",
-            "Assembled RNA-supported sequences for %d variant(s) in %.0fs", len(variants)):
-        isovar_results = run_isovar(
-            variants=variants,
-            germline_variants=germline_variants_from_args(args, variants),
-            alignment_file=alignment_file_from_args(args),
-            read_collector=read_collector_from_args(args),
-            protein_sequence_creator=protein_sequence_creator,
-            filter_thresholds=filter_threshold_dict_from_args(args),
-            **phasing_parameters_from_args(args, variants),
-        )
+    if getattr(args, 'bam', None):
+        with timed_step(
+                logger, "Collecting RNA reads and assembling protein sequences for %d variant(s)",
+                "Assembled RNA-supported sequences for %d variant(s) in %.0fs", len(variants)):
+            isovar_results = run_isovar(
+                variants=variants,
+                germline_variants=germline_variants_from_args(args, variants),
+                alignment_file=alignment_file_from_args(args),
+                read_collector=read_collector_from_args(args),
+                protein_sequence_creator=protein_sequence_creator,
+                filter_thresholds=filter_threshold_dict_from_args(args),
+                **phasing_parameters_from_args(args, variants),
+            )
+    else:
+        with timed_step(
+                logger, "Annotating %d somatic variant(s) in DNA-only mode (no --bam supplied)",
+                "Annotated %d somatic variant(s) in DNA-only mode in %.0fs", len(variants)):
+            isovar_results = _dna_only_isovar_results(variants)
 
     if args.output_isovar_csv:
         df = isovar_results_to_dataframe(isovar_results)
@@ -1852,6 +1927,7 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
         vaccine_config=vaccine_config,
         manufacturability_config=manufacturability_config,
         allow_dna_only_fallback=getattr(args, 'allow_dna_only_fallback', False),
+        proxy_expression_lookup=proxy_expression_lookup,
         **({'epitope_dataset': epitope_dataset} if epitope_dataset is not None else {}),
         **({'defer_window_selection': False} if capture_native else {}),
         **({'policy_evaluations': policy_evaluations} if epitope_config.selection_policy else {}),
