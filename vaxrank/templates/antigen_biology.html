@@ -1,13 +1,20 @@
 {% if biological_candidates %}
 <section id="antigen-biology" class="appendix">
 <h2>Antigen biology and targeting</h2>
-<p class="note">Highest-ranked candidate window per source. Highlighted residues or junctions mark the altered region. Reference translation evidence and patient RNA support are shown separately; comparisons show recorded references or computed backgrounds, not observed patient-normal protein.</p>
+<p class="note">Highest-ranked candidate window per source. Sequence legend: <span class="mutant">mutant / altered</span> &middot; <span class="targetable">CTA targetable (non-Unsafe)</span> &middot; <span class="junction">|</span> junction &middot; <span class="self-excluded">Unsafe / self overlap (excluded)</span> &middot; <span class="vaccine-window">selected vaccine window</span>. Reference translation evidence and patient RNA support are shown separately; comparisons show recorded references or computed backgrounds, not observed patient-normal protein.</p>
 {% macro render_biology_cards(cards) %}
 {% for antigen in cards %}
 <article class="antigen-biology">
 <h3>{{ antigen.rank }}. {{ antigen.gene | e }} <span class="source-kind">{{ antigen.kind | e }}</span></h3>
 {% if antigen.facts %}<dl class="biology-facts">{% for label, value in antigen.facts %}<dt>{{ label | e }}</dt><dd>{{ value | e }}</dd>{% endfor %}</dl>{% endif %}
-<div class="biology-sequence">{{ antigen.sequence_html }} <small>source aa {{ antigen.sequence_start }}–{{ antigen.sequence_end }}</small></div>
+<div class="biology-sequence">{{ antigen.sequence_html }} <small>window aa {{ antigen.sequence_start }}–{{ antigen.sequence_end }}</small></div>
+{% if antigen.excluded_intervals %}<p class="note"><span class="badge badge-unsafe">Window Unsafe/self overlap (excluded)</span> {{ antigen.excluded_aa }} aa at window coordinates {% for start, end in antigen.excluded_intervals %}[{{ start }}, {{ end }}){% if not loop.last %}, {% endif %}{% endfor %}{% if antigen.excluded_genes %} ({{ antigen.excluded_genes | join(', ') | e }}){% endif %}.</p>{% endif %}
+{% if antigen.full_protein %}{% set fp = antigen.full_protein %}
+<div class="protein-context">
+<p class="note"><strong>{% if fp.cropped %}Source protein context (aa {{ fp.display_start }}–{{ fp.display_end }} of {{ fp.length }} aa){% else %}Full source protein ({{ fp.length }} aa){% endif %}:</strong> selected window boxed (aa {{ antigen.sequence_start }}–{{ antigen.sequence_end }}){% if fp.full_excluded_aa %} &middot; {{ fp.full_excluded_aa }}/{{ fp.length }} aa overlap Unsafe/self proteins{% if fp.full_excluded_genes %} ({{ fp.full_excluded_genes[:6] | join(', ') | e }}{% if fp.full_excluded_genes | length > 6 %}, &hellip;{% endif %}){% endif %}; {{ fp.window_excluded_aa }}/{{ antigen.sequence | length }} aa in selected window{% else %} &middot; 0/{{ fp.length }} aa overlap Unsafe/self proteins{% endif %}.</p>
+<div class="protein-sequence">{{ fp.sequence_html }}</div>
+</div>
+{% endif %}
 {% for junction in antigen.junctions %}
 <p class="junction-description"><strong>{{ junction.left | e }} → {{ junction.right | e }}</strong>
 {% for start, end in junction.boundaries %} · {% if start == end %}junction after source aa {{ antigen.sequence_start - 1 + start }}{% else %}split codon at source aa {{ antigen.sequence_start + start }}{% endif %}{% endfor %}</p>

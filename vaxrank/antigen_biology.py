@@ -1,9 +1,154 @@
 """Compact, source-grounded views of antigen biology for every report format."""
 
+import hashlib
+
 from Bio.Align import PairwiseAligner
 
 from .coding_context import antigen_source_label, isovar_candidates
-from .report_display import marked_sequence
+from .report_display import (
+    _clip_intervals,
+    _merge_intervals,
+    _subtract_intervals,
+    effective_target_intervals,
+    marked_sequence,
+    protein_context_key,
+)
+
+
+def resolve_cta_protein_contexts(ranked_variants_with_vaccine_peptides, source_evidence=None, *,
+                                 include_keys=None):
+    """Resolve SHA-256-verified full CTA proteins and exact 8-mer+ Unsafe overlaps.
+
+    Runs one batched OncoRef containment pass only when CTAs carry a matching
+    ``oncoref_sequence_bundle`` record and ``oncoref`` is installed. Fails open
+    to an empty dict when offline or when no matching bundle is present.
+    """
+    cta_items = []
+    bundle_ids = set()
+    policies = set()
+    for _, peptides in ranked_variants_with_vaccine_peptides:
+        if not peptides:
+            continue
+        for peptide in peptides:
+            antigen = peptide.antigen
+            if antigen.kind != 'CTA':
+                continue
+            key = protein_context_key(antigen)
+            if include_keys is not None and key not in include_keys:
+                continue
+            meta = dict(antigen.source_metadata)
+            bundle_id = meta.get('oncoref_sequence_bundle')
+            if not bundle_id:
+                continue
+            bundle_ids.add(bundle_id)
+            if meta.get('oncoref_target_policy'):
+                policies.add(meta['oncoref_target_policy'])
+            cta_items.append((key, antigen))
+    if not cta_items or len(bundle_ids) != 1:
+        return {}
+    recorded_bundle_id = next(iter(bundle_ids))
+    if not policies and source_evidence:
+        for rec in source_evidence.values():
+            if (isinstance(rec, dict)
+                    and rec.get('schema') == 'vaxrank.oncoref_target_reference.v1'
+                    and rec.get('target_policy')):
+                policies.add(rec['target_policy'])
+    target_policy = next(iter(policies)) if len(policies) == 1 else None
+
+    try:
+        from .cta_targeting import load_bundle, load_target_selection, peptide_containment
+        bundle = load_bundle('current')
+    except Exception:
+        return {}
+    if getattr(bundle, 'identity', None) != recorded_bundle_id:
+        return {}
+
+    wanted_pids = {pid for _, antigen in cta_items for pid in antigen.protein_ids}
+    wanted_shas = {antigen.source_protein_sha256 for _, antigen in cta_items if antigen.source_protein_sha256}
+    seq_by_pid = {}
+    seq_by_sha = {}
+    for rec in bundle.records():
+        rid = rec.get('record_id')
+        seq = rec.get('sequence') or ''
+        sha = rec.get('sequence_sha256') or hashlib.sha256(seq.encode()).hexdigest()
+        if rid in wanted_pids:
+            seq_by_pid[rid] = (seq, sha)
+        if sha in wanted_shas and sha not in seq_by_sha:
+            seq_by_sha[sha] = seq
+
+    resolved = {}
+    kmers = set()
+    for key, antigen in cta_items:
+        if key in resolved:
+            continue
+        full_seq = None
+        for pid in antigen.protein_ids:
+            cand = seq_by_pid.get(pid)
+            if cand is None:
+                continue
+            seq, sha = cand
+            if antigen.source_protein_sha256 and sha != antigen.source_protein_sha256:
+                continue
+            lo = antigen.source_protein_offset
+            hi = lo + len(antigen.amino_acids)
+            if seq[lo:hi] == antigen.amino_acids:
+                full_seq = seq
+                break
+        if full_seq is None and antigen.source_protein_sha256:
+            seq = seq_by_sha.get(antigen.source_protein_sha256)
+            lo = antigen.source_protein_offset
+            hi = lo + len(antigen.amino_acids)
+            if seq is not None and seq[lo:hi] == antigen.amino_acids:
+                full_seq = seq
+        resolved[key] = (antigen, full_seq)
+        scan_seq = full_seq if full_seq is not None else antigen.amino_acids
+        for i in range(max(0, len(scan_seq) - 7)):
+            kmers.add(scan_seq[i:i + 8])
+
+    if not kmers:
+        return {}
+    try:
+        ts = load_target_selection() if target_policy in ('target_selection', 'target_selection_cancer_antigens') else None
+        hits = peptide_containment(kmers, bundle, target_policy=target_policy, target_selection_index=ts)
+    except Exception:
+        return {}
+
+    contexts = {}
+    for key, (antigen, full_seq) in resolved.items():
+        scan_seq = full_seq if full_seq is not None else antigen.amino_acids
+        win_start = antigen.source_protein_offset if full_seq is not None else 0
+        win_end = win_start + len(antigen.amino_acids)
+        full_excl = []
+        full_genes = set()
+        win_excl = []
+        win_genes = set()
+        for i in range(max(0, len(scan_seq) - 7)):
+            kmer = scan_seq[i:i + 8]
+            matches = hits.get(kmer, ())
+            excl_matches = [m for m in matches if m.get('role') == 'exclude']
+            if not excl_matches:
+                continue
+            iv_s, iv_e = i, i + 8
+            full_excl.append((iv_s, iv_e))
+            genes = {
+                occ.get('gene_name') or occ.get('gene_id')
+                for m in excl_matches
+                for occ in m.get('occurrences', ())
+                if occ.get('shared_sequence', m.get('role')) == 'exclude'
+                and (occ.get('gene_name') or occ.get('gene_id'))
+            }
+            full_genes.update(genes)
+            if iv_s >= win_start and iv_e <= win_end:
+                win_excl.append((iv_s - win_start, iv_e - win_start))
+                win_genes.update(genes)
+        contexts[key] = dict(
+            full_sequence=full_seq,
+            full_excluded_intervals=_merge_intervals(full_excl) if full_seq is not None else (),
+            full_excluded_genes=tuple(sorted(full_genes)) if full_seq is not None else (),
+            window_excluded_intervals=_merge_intervals(win_excl),
+            window_excluded_genes=tuple(sorted(win_genes)),
+        )
+    return contexts
 
 
 def sequence_difference(tumor, reference, start=0, end=None):
@@ -32,7 +177,18 @@ def sequence_difference(tumor, reference, start=0, end=None):
                 reference_end=len(right[:high].replace('-', '')))
 
 
-def antigen_biology(antigen, *, source_evidence=None, peptides=()):
+def _format_excluded_title(genes):
+    if genes:
+        return 'Excluded: overlaps Unsafe/self-reference protein (' + ', '.join(genes[:6]) + (
+            ', ...' if len(genes) > 6 else '') + ')'
+    return 'Excluded: overlaps Unsafe or self-reference protein'
+
+
+def _interval_aa_count(intervals):
+    return sum(end - start for start, end in intervals if end > start)
+
+
+def antigen_biology(antigen, *, source_evidence=None, peptides=(), protein_context=None):
     """Summarize recorded source facts, keeping RNA and translation separate.
 
     Comparison sequences come only from producer exports or retained peptide
@@ -42,6 +198,7 @@ def antigen_biology(antigen, *, source_evidence=None, peptides=()):
     from .antigen_origin import biology_origin
     candidates = isovar_candidates(antigen)
     facts, comparisons, junctions = [], [], []
+    source_full_sequence = None
     identities = [value for key, value in antigen.source_metadata if key == 'isovar_evidence_id']
     evidence = (source_evidence or {}).get(identities[0], {}) if len(identities) == 1 else {}
     result = evidence.get('isovar_result', {})
@@ -78,6 +235,8 @@ def antigen_biology(antigen, *, source_evidence=None, peptides=()):
         high = low + len(antigen.amino_acids)
         if original is not None and original[low:high] != antigen.amino_acids:
             original = None  # Merged origins have no uniquely recorded window mapping.
+        if original is not None and source_full_sequence is None:
+            source_full_sequence = original
         support = candidate.get('occurrence_rna_support', candidate.get('rna_support')) or {}
         if support.get('fragments') is not None:
             facts.append(('Patient RNA', '%s fragments%s' % (support['fragments'],
@@ -158,12 +317,73 @@ def antigen_biology(antigen, *, source_evidence=None, peptides=()):
             facts.append(('OncoRef target class', label))
         elif ts_policy:
             facts.append(('OncoRef target policy', ts_policy))
+
+    all_epitopes = [e for p in peptides for e in p.epitopes]
+    ctx = protein_context or {}
+    eff = effective_target_intervals(
+        antigen,
+        all_epitopes,
+        extra_excluded=ctx.get('window_excluded_intervals', ()),
+        extra_genes=ctx.get('window_excluded_genes', ()),
+    )
+    css_class = 'targetable' if antigen.kind == 'CTA' else 'mutant'
+    excluded_title = _format_excluded_title(eff['excluded_genes'])
+    sequence_html = marked_sequence(
+        antigen.amino_acids,
+        eff['target'],
+        css_class=css_class,
+        excluded_intervals=eff['excluded'],
+        excluded_title=excluded_title,
+    )
+
+    full_seq = ctx.get('full_sequence') or source_full_sequence
+    full_protein_view = None
+    if full_seq and len(full_seq) > len(antigen.amino_acids):
+        win_start = antigen.source_protein_offset
+        win_end = win_start + len(antigen.amino_acids)
+        if full_seq[win_start:win_end] == antigen.amino_acids:
+            shifted_win_excl = tuple((s + win_start, e + win_start) for s, e in eff['excluded'])
+            full_excl = _merge_intervals(
+                tuple(ctx.get('full_excluded_intervals', ())) + shifted_win_excl
+            )
+            full_genes = tuple(sorted(set(ctx.get('full_excluded_genes', ())) | set(eff['excluded_genes'])))
+            if antigen.kind == 'CTA':
+                full_target = _subtract_intervals([(0, len(full_seq))], full_excl)
+            else:
+                shifted_win_target = tuple((s + win_start, e + win_start) for s, e in eff['target'])
+                full_target = _subtract_intervals(shifted_win_target, full_excl)
+            cropped = len(full_seq) > 450
+            disp_start = max(0, win_start - 100) if cropped else 0
+            disp_end = min(len(full_seq), win_end + 100) if cropped else len(full_seq)
+            full_protein_view = dict(
+                length=len(full_seq),
+                display_start=disp_start + 1,
+                display_end=disp_end,
+                cropped=cropped,
+                sequence_html=marked_sequence(
+                    full_seq[disp_start:disp_end],
+                    _clip_intervals(full_target, disp_start, disp_end),
+                    css_class=css_class,
+                    excluded_intervals=_clip_intervals(full_excl, disp_start, disp_end),
+                    excluded_title=_format_excluded_title(full_genes),
+                    window_intervals=[(win_start - disp_start, win_end - disp_start)],
+                ),
+                full_excluded_aa=_interval_aa_count(full_excl),
+                full_excluded_genes=full_genes,
+                window_excluded_aa=_interval_aa_count(eff['excluded']),
+                window_excluded_genes=eff['excluded_genes'],
+            )
+
     return dict(kind=antigen_source_label(antigen, source_evidence),
                 gene=antigen.display_gene_name, identifier=antigen.display_identifier,
                 facts=list(dict.fromkeys(facts)), junctions=junctions, comparisons=comparisons,
                 sequence=antigen.amino_acids,
-                sequence_html=marked_sequence(antigen.amino_acids,
-                    [] if antigen.kind == 'CTA' else [(i.start, i.end) for i in antigen.targetable_mask.intervals]),
+                sequence_html=sequence_html,
+                target_intervals=eff['target'],
+                excluded_intervals=eff['excluded'],
+                excluded_genes=eff['excluded_genes'],
+                excluded_aa=_interval_aa_count(eff['excluded']),
+                full_protein=full_protein_view,
                 sequence_start=antigen.source_protein_offset + 1,
                 sequence_end=antigen.source_protein_offset + len(antigen.amino_acids),
                 targeting=targeting,

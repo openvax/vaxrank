@@ -29,6 +29,10 @@ p { line-height: 1.45; }
 .badge-tp { background: #e6eff6; color: #214e6b; border: 1px solid #b5cfe0; font-weight: normal; }
 .badge-clean { background: #edf5ef; color: #246135; border: 1px solid #b8d8c0; font-weight: normal; }
 .badge-review { background: #fff0d9; color: #8c4a00; border: 1px solid #e6b873; }
+.badge-unsafe { background: #fde8e8; color: #9b1c1c; border: 1px solid #e8a5a5; }
+.somatic-callout { margin: 0.8em 0 1.2em; padding: 0.6em 0.8em; background: #f8fbfd; border-left: 3px solid #245d7a; }
+.somatic-callout > h3 { margin-top: 0; }
+.somatic-row td:first-child { border-left: 3px solid #245d7a; }
 details.audit-details { margin: 0.9em 0; }
 details.audit-details > summary { cursor: pointer; font-weight: bold; color: #245d7a; padding: 0.35em 0.55em; background: #f2f6f8; border: 1px solid #cdd8e0; border-radius: 3px; }
 details:not([open]) > :not(summary) { display: none; }
@@ -52,6 +56,9 @@ ol.main, ol.peptides { padding-left: 1.3em; }
 .peptide { margin: 2em 0; }
 .candidate-sequence { font-family: monospace; overflow-wrap: anywhere; word-wrap: break-word; }
 .mutant { background: #fff0a8; border-bottom: 2px solid #bb5e00; }
+.targetable { background: #dff3e4; border-bottom: 2px solid #2a7a42; }
+.self-excluded { background: #fde0e0; color: #8c1d18; border-bottom: 2px dashed #b42318; }
+.vaccine-window { border-top: 2px solid #245d7a; border-bottom: 2px solid #245d7a; padding: 1px 0; font-weight: bold; }
 .epitopes { font-size: 10px; }
 .epitopes td, .epitopes th { word-break: break-all; padding: 0.4em; }
 .signature { width: 70%; margin-top: 2em; }
@@ -96,7 +103,9 @@ a { color: #245d7a; }
 .score-calculations th:first-child { width: 18%; }
 .score-calculations th:nth-child(2) { width: 43%; }
 /* The default biological overview keeps source evidence beside its sequence. */
-.antigen-biology { margin: 1.2em 0 1.8em; border-top: 1px solid #ccd6dc; padding-top: .5em; page-break-inside: avoid; }
+.antigen-biology { margin: 1.2em 0 1.8em; border-top: 1px solid #ccd6dc; padding-top: .5em; }
+.protein-context { margin: 0.5em 0; padding: 0.45em 0.6em; background: #f8fafb; border: 1px solid #d5dfe6; page-break-inside: avoid; }
+.protein-sequence { font-family: monospace; font-size: 9.5pt; line-height: 1.75; overflow-wrap: anywhere; word-break: break-all; }
 #antigen-biology > .note, .comparison-label { page-break-after: avoid; }
 .source-kind { font-size: .8em; font-weight: normal; color: #34596a; }
 .biology-facts { display: grid; grid-template-columns: 13em 1fr; gap: .25em 1em; font-size: .9em; }

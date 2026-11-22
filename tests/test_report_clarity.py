@@ -297,3 +297,85 @@ def test_variant_report_includes_overlapping_genes_only_when_multiple_or_differe
     assert multi_data['Overlapping genes'] == 'GENE_A, GENE_B'
     keys = list(multi_data.keys())
     assert keys.index('Overlapping genes') == keys.index('Gene name') + 1
+
+
+def test_cta_and_mutation_highlighting_strictly_exclude_unsafe_self_overlaps_and_callout_somatic():
+    from vaxrank.antigen_biology import antigen_biology
+    from vaxrank.peptide import PeptideConstructConfig, assemble_peptide_constructs
+    from vaxrank.report_display import effective_target_intervals
+    from vaxrank.vaccine_antigen import (
+        SelfReferenceMatch,
+        SelfReferenceSource,
+        TumorSpecificityAttestation,
+        VaccineAntigen,
+    )
+
+    cta_seq = 'MKYSEKISYVYMKRNYKAMTKLGFK'
+    cta = VaccineAntigen(
+        kind='CTA',
+        amino_acids=cta_seq,
+        targetable_mask=TargetableMask((AminoAcidInterval(0, len(cta_seq)),)),
+        tumor_specificity=TumorSpecificityAttestation(
+            status='admitted', evidence_kind='cta_expression', evidence_source='test',
+        ),
+        gene_name='SSX1',
+        gene_id='ENSG00000126752',
+        source_identifier='SSX1:test',
+        source_protein_offset=39,
+    )
+    eligible_ep = CandidateEpitope(
+        sequence='KYSEKISYV', source_sequence=cta_seq, offset=1,
+        predictions=[prediction(value=40.0)], occurs_in_reference=True,
+        occurs_in_non_CTA_reference=False, overlaps_targetable=True,
+        per_allele_scores={'HLA-B*27:05': 0.9},
+        self_reference_match=SelfReferenceMatch('KYSEKISYV', False, 'CTA', source_provenance_complete=True),
+    )
+    unsafe_ep = CandidateEpitope(
+        sequence='EKISYVYMK', source_sequence=cta_seq, offset=4,
+        predictions=[prediction(value=25.0)], occurs_in_reference=True,
+        occurs_in_non_CTA_reference=True, overlaps_targetable=False,
+        per_allele_scores={'HLA-B*27:05': 0.95},
+        self_reference_match=SelfReferenceMatch(
+            'EKISYVYMK', True, 'CTA',
+            sources=(SelfReferenceSource(gene_id='ENSG00000188167', gene_name='SSX7'),),
+            source_provenance_complete=True,
+        ),
+    )
+    eff = effective_target_intervals(cta, [eligible_ep, unsafe_ep])
+    # Eligible [1, 10) minus Unsafe [4, 13) -> [1, 4) strictly non-overlapping with excluded [4, 13)
+    assert eff['target'] == ((1, 4),)
+    assert eff['excluded'] == ((4, 13),)
+    assert eff['excluded_genes'] == ('SSX7',)
+
+    cta_vp = VaccinePeptide(antigen=cta, epitopes=[eligible_ep, unsafe_ep])
+    mut_source, mut_peptides = ranked_pair()[0]
+    ranked = [(cta, [cta_vp]), (mut_source, mut_peptides)]
+    products = {'peptide': assemble_peptide_constructs(ranked, PeptideConstructConfig())}
+    data = template(ranked, products=products)
+    html = render(data, 'html')
+
+    # Mixed CTA + somatic run highlights top somatic targets separately AND marks windows
+    assert 'Top somatic &amp; non-CTA targets (1 of 1 ranked)' in html
+    assert 'class="targetable">KYS</span><span class="self-excluded"' in html
+    assert 'Unsafe/self overlap: 9 aa (SSX7)' in html
+    assert 'KRFHAT<span class="mutant">I</span>SF' in html
+
+    # Full protein context renders boxed vaccine window and Unsafe/self exclusion strictly outside targetable
+    full_seq = ('A' * 39) + cta_seq + ('G' * 20)
+    bio = antigen_biology(
+        cta,
+        peptides=[cta_vp],
+        protein_context=dict(
+            full_sequence=full_seq,
+            full_excluded_intervals=((43, 52),),
+            full_excluded_genes=('SSX7',),
+            window_excluded_intervals=((4, 13),),
+            window_excluded_genes=('SSX7',),
+        ),
+    )
+    assert bio['full_protein'] is not None
+    assert bio['full_protein']['length'] == len(full_seq)
+    assert bio['full_protein']['full_excluded_aa'] == 9
+    assert 'class="vaccine-window"' in bio['full_protein']['sequence_html']
+    assert 'class="self-excluded"' in bio['full_protein']['sequence_html']
+    assert 'class="targetable"' in bio['full_protein']['sequence_html']
