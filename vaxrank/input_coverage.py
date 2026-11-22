@@ -341,10 +341,10 @@ def record_direct_coverage(dataset, results, loaded_variants, *, window_selectio
         window_selection_performed=window_selection_performed,
         isovar_filter_thresholds=filter_thresholds,
         counts=dict(loaded=len(loaded_variants), annotatable=len(properties),
-                    coding_effect=sum(p['is_coding_nonsynonymous'] for p in properties),
-                    coding_with_rna_protein=sum(p['is_coding_nonsynonymous'] and p['rna_support']
+                    coding_effect=sum(bool(p['is_coding_nonsynonymous']) for p in properties),
+                    coding_with_rna_protein=sum(bool(p['is_coding_nonsynonymous'] and p['rna_support'])
                                                for p in properties),
-                    with_candidate_windows=(sum(p['has_vaccine_peptide'] for p in properties)
+                    with_candidate_windows=(sum(bool(p['has_vaccine_peptide']) for p in properties)
                                             if window_selection_performed else None)),
         variant_outcomes=properties, annotation_unavailable=unavailable)
     identity = 'direct-coverage:' + canonical_digest(observation)

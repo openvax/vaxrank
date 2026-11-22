@@ -379,3 +379,55 @@ def test_cta_and_mutation_highlighting_strictly_exclude_unsafe_self_overlaps_and
     assert 'class="vaccine-window"' in bio['full_protein']['sequence_html']
     assert 'class="self-excluded"' in bio['full_protein']['sequence_html']
     assert 'class="targetable"' in bio['full_protein']['sequence_html']
+
+
+def test_direct_coverage_and_variant_counts_handle_none_coding_effect():
+    from dataclasses import dataclass
+    from types import SimpleNamespace
+    from vaxrank.input_coverage import record_direct_coverage
+    from vaxrank.vaxrank_results import VaxrankResults
+
+    @dataclass(frozen=True)
+    class _Var:
+        contig: str
+        start: int
+        ref: str
+        alt: str
+
+    v1 = _Var(contig='1', start=100, ref='A', alt='T')
+    v2 = _Var(contig='1', start=200, ref='G', alt='C')
+    iso_coding = SimpleNamespace(
+        variant=v1, top_gene_name='TP53',
+        predicted_effect_modifies_protein_sequence=True,
+        has_mutant_protein_sequence_from_rna=True,
+        num_alt_fragments=10, num_ref_fragments=5,
+        filter_values={'min_num_alt_reads': True},
+    )
+    iso_unannotatable = SimpleNamespace(
+        variant=v2, top_gene_name='',
+        predicted_effect_modifies_protein_sequence=None,
+        has_mutant_protein_sequence_from_rna=False,
+        num_alt_fragments=0, num_ref_fragments=0,
+        filter_values={'min_num_alt_reads': False},
+    )
+    results = VaxrankResults(
+        isovar_results=[iso_coding, iso_unannotatable],
+        variant_to_vaccine_peptides_dict={v1: ['vp']},
+        ranked_vaccine_peptides=[(v1, ['vp'])],
+    )
+    counts = results.variant_counts()
+    assert counts['num_total_variants'] == 2
+    assert counts['num_coding_effect_variants'] == 1
+    assert counts['num_variants_with_rna_support'] == 1
+    assert counts['num_variants_with_vaccine_peptides'] == 1
+
+    dataset = SimpleNamespace(
+        provenance=(SimpleNamespace(input_id='vcf_bam:test'),),
+        selection={},
+    )
+    obs = record_direct_coverage(dataset, results, [v1, v2], window_selection_performed=True)
+    assert obs['counts']['loaded'] == 2
+    assert obs['counts']['coding_effect'] == 1
+    assert obs['counts']['coding_with_rna_protein'] == 1
+    assert obs['counts']['with_candidate_windows'] == 1
+    assert obs['variant_outcomes'][1]['is_coding_nonsynonymous'] is None
