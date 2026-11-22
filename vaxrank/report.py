@@ -1577,7 +1577,11 @@ class TemplateDataCreator(object):
             'cta_targeting_summary': [value for value in self.source_evidence.values()
                 if value.get('schema') == 'vaxrank.cta_targeting_summary.v1'],
             'patient_summary': {key: value for key, value in patient_info.items()
-                                if key in {'Patient ID', 'Vaccine type', 'MHC alleles'}},
+                                if key in {
+                                    'Patient ID', 'Vaccine type', 'MHC alleles',
+                                    'Expression source',
+                                    'Expression source (cohort proxy, not patient RNA)',
+                                }},
             'prediction_models': model_inventory(self.ranked_variants_with_vaccine_peptides,
                 self.processing_predictions_by_key, self.processing_enabled),
             'variants': variants,

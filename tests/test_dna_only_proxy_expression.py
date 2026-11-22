@@ -58,7 +58,13 @@ def _walk_keys(obj):
 
 def test_dna_effect_selection_compacts_genomic_positions(human_genome_grch37):
     variant = varcode.Variant("7", 140453136, "A", "T", human_genome_grch37)  # BRAF V600E
-    fragment = MutantProteinFragment.from_variant_dna(variant, protein_sequence_length=35)
+    # Pass explicit effects (mirroring vaccine_peptides_for_variant) so
+    # annotated_effect is also populated and validated through to_native_json.
+    fragment = MutantProteinFragment.from_variant_dna(
+        variant,
+        protein_sequence_length=35,
+        effects=[variant.effects().top_priority_effect()],
+    )
     assert fragment is not None
     selection = fragment.dna_effect_selection
     assert selection is not None
@@ -69,10 +75,14 @@ def test_dna_effect_selection_compacts_genomic_positions(human_genome_grch37):
     assert "genomic_positions_sha256" in keys
     assert "exon_runs" in keys
 
+    native_payload = to_native_json(fragment)
+    assert '"genomic_positions"' not in native_payload
+    assert '"genomic_positions_sha256"' in native_payload
+
     # Exact deterministic round-trip matching still works after both JSON codecs
     for restored in (
         MutantProteinFragment.from_json(fragment.to_json()),
-        from_native_json(to_native_json(fragment), MutantProteinFragment),
+        from_native_json(native_payload, MutantProteinFragment),
     ):
         assert restored.dna_effect_selection == selection
         eff = restored.predicted_effect()
