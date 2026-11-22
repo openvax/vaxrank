@@ -6,6 +6,9 @@ Reference comparisons are not measurements of patient-normal protein.
 {{ antigen.rank }}. {{ antigen.gene }} — {{ antigen.kind }}
 {% for label, value in antigen.facts %}{{ label }}: {{ value }}
 {% endfor %}Tumor: {{ antigen.sequence }} [source aa {{ antigen.sequence_start }}–{{ antigen.sequence_end }}]
+{% if antigen.excluded_intervals %}Window Unsafe/self overlap (excluded): {{ antigen.excluded_aa }} aa at {% for start, end in antigen.excluded_intervals %}[{{ start }}, {{ end }}){% if not loop.last %}, {% endif %}{% endfor %}{% if antigen.excluded_genes %} ({{ antigen.excluded_genes | join(', ') }}){% endif %}
+{% endif %}{% if antigen.full_protein %}Full source protein ({{ antigen.full_protein.length }} aa): {{ antigen.full_protein.full_excluded_aa }}/{{ antigen.full_protein.length }} aa overlap Unsafe/self proteins{% if antigen.full_protein.full_excluded_genes %} ({{ antigen.full_protein.full_excluded_genes[:6] | join(', ') }}){% endif %}; {{ antigen.full_protein.window_excluded_aa }}/{{ antigen.sequence | length }} aa in selected window.
+{% endif %}
 {% for junction in antigen.junctions %}Junction: {{ junction.left }} -> {{ junction.right }}{% for start, end in junction.boundaries %}; {% if start == end %}after source aa {{ antigen.sequence_start - 1 + start }}{% else %}split codon at source aa {{ antigen.sequence_start + start }}{% endif %}{% endfor %}
 {% endfor %}{% for comparison in antigen.comparisons %}{{ comparison.label }}:
 {% for start in range(0, comparison.tumor | length, 65) %}Tumor  {{ comparison.tumor[start:start + 65] }}

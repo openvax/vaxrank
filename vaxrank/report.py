@@ -37,10 +37,12 @@ from .report_grouping import (group_report_evidence, prediction_origins, predict
 from .prediction_input import finite_prediction_value
 from .processing import PEPSICKLE_PREDICTOR_NAME, resolve_peptide_offset
 from .report_display import (
+    effective_target_intervals,
     epitope_display,
     marked_sequence,
     model_inventory,
-    product_target_intervals,
+    product_sequence_highlights,
+    protein_context_key,
     reference_affinity_values,
     run_provenance_arguments,
 )
@@ -867,8 +869,11 @@ class TemplateDataCreator(object):
         return databases
 
     @staticmethod
-    def _candidate_ranking_highlights(top):
+    def _candidate_ranking_highlights(top, *, source_evidence=None, protein_context=None):
         """Compact per-candidate ranking evidence for the executive ranking table."""
+        from .antigen_biology import _format_excluded_title, _interval_aa_count
+        from .antigen_origin import biology_origin
+        from .coding_context import isovar_candidates
         from .normal_observations import summarize_normal_assessment
 
         target_eps = list(getattr(top, 'target_epitopes', ()) or ())
@@ -938,9 +943,39 @@ class TemplateDataCreator(object):
                 normal_badge = 'Normal DNA clean'
                 normal_flag = 'clean'
 
-        intervals = (
-            [] if top.antigen.kind == 'CTA'
-            else [(i.start, i.end) for i in top.antigen.targetable_mask.intervals]
+        variant_label = ''
+        if top.antigen.kind != 'CTA':
+            frag = getattr(top, 'mutant_protein_fragment', None)
+            if frag is not None and getattr(frag, 'variant', None) is not None:
+                variant_label = frag.variant.short_description
+            else:
+                candidates = isovar_candidates(top.antigen)
+                identities = [value for key, value in top.antigen.source_metadata if key == 'isovar_evidence_id']
+                ev_rec = (source_evidence or {}).get(identities[0], {}) if len(identities) == 1 else {}
+                origin = biology_origin(top.antigen, result=ev_rec.get('isovar_result', {}),
+                                        candidates=candidates, peptides=[top])
+                if origin is not None and origin.variants:
+                    v = origin.variants[0]
+                    if v.contig and v.start is not None:
+                        variant_label = '%s:%s %s→%s' % (v.contig, v.start, v.ref or '∅', v.alt or '∅')
+                    elif v.sv_type:
+                        variant_label = '%s:%s' % (v.variant_type, v.sv_type)
+
+        ctx = protein_context or {}
+        eff = effective_target_intervals(
+            top.antigen,
+            getattr(top, 'epitopes', ()) or (),
+            extra_excluded=ctx.get('window_excluded_intervals', ()),
+            extra_genes=ctx.get('window_excluded_genes', ()),
+        )
+        is_cta = top.antigen.kind == 'CTA'
+        css_class = 'targetable' if is_cta else 'mutant'
+        window_html = marked_sequence(
+            top.amino_acids,
+            eff['target'],
+            css_class=css_class,
+            excluded_intervals=eff['excluded'],
+            excluded_title=_format_excluded_title(eff['excluded_genes']),
         )
         return dict(
             target_score=_sanitize(getattr(top, 'target_epitope_score', 0.0)),
@@ -950,13 +985,18 @@ class TemplateDataCreator(object):
             rna_summary=' · '.join(rna_parts),
             normal_badge=normal_badge,
             normal_flag=normal_flag,
-            window_html=marked_sequence(top.amino_acids, intervals),
+            variant_label=variant_label,
+            is_cta=is_cta,
+            excluded_genes=eff['excluded_genes'],
+            excluded_aa=_interval_aa_count(eff['excluded']),
+            window_html=window_html,
         )
 
-    def _ranked_candidates(self):
+    def _ranked_candidates(self, *, protein_contexts=None):
         """Compact ranking with selection links and key per-candidate evidence."""
         from .assembly_antigens import emitted_antigens_for_candidate
         from .input_coverage import report_source_key
+        protein_contexts = protein_contexts or {}
         products = [p for group in self.products.values() for p in group]
         if not products:
             unmapped_label = 'No products emitted'
@@ -973,7 +1013,11 @@ class TemplateDataCreator(object):
             top = peptides[0]
             selected = {name for peptide in peptides for name, antigens in emitted_antigens_for_candidate(
                 peptide.antigen, peptide.amino_acids, peptide.epitopes, products).items() if antigens}
-            highlights = self._candidate_ranking_highlights(top)
+            highlights = self._candidate_ranking_highlights(
+                top,
+                source_evidence=self.source_evidence,
+                protein_context=protein_contexts.get(protein_context_key(top.antigen)),
+            )
             rows.append(dict(rank=len(rows) + 1, gene=top.antigen.display_gene_name,
                 source_key=report_source_key(source),
                 identifier=(source.short_description if isinstance(source, Variant) else top.antigen.display_identifier),
@@ -985,22 +1029,28 @@ class TemplateDataCreator(object):
                 **highlights))
         return rows
 
-    def _biological_candidates(self):
+    def _biological_candidates(self, *, protein_contexts=None):
         from .antigen_biology import antigen_biology
         from .input_coverage import report_source_key
+        protein_contexts = protein_contexts or {}
         rows = []
         for source, peptides in self.ranked_variants_with_vaccine_peptides:
             if not peptides:
                 continue
-            row = antigen_biology(peptides[0].antigen, source_evidence=self.source_evidence,
-                                  peptides=peptides[:1])
+            row = antigen_biology(
+                peptides[0].antigen,
+                source_evidence=self.source_evidence,
+                peptides=peptides[:1],
+                protein_context=protein_contexts.get(protein_context_key(peptides[0].antigen)),
+            )
             row['rank'] = len(rows) + 1
             row['source_key'] = report_source_key(source)
             rows.append(row)
         return rows
 
-    def _product_data(self):
+    def _product_data(self, *, protein_contexts=None):
         """Small template view of the products already written by the CLI."""
+        from .antigen_biology import _format_excluded_title
         from .assembly_antigens import (
             _source_gene_label, group_source_proteins, source_matches_candidate, summarize_products,
         )
@@ -1148,8 +1198,14 @@ class TemplateDataCreator(object):
             rows = []
             for product in products:
                 antigens = []
-                target_intervals = product_target_intervals(product, self.ranked_variants_with_vaccine_peptides)
+                highlights = product_sequence_highlights(
+                    product, self.ranked_variants_with_vaccine_peptides,
+                    protein_contexts=protein_contexts,
+                )
                 product_intervals = []
+                product_excluded = []
+                product_excluded_genes = set()
+                all_cta = bool(product.antigens)
                 for antigen_index, antigen in enumerate(product.antigens, 1):
                     sources = antigen.get('sources', ())
                     context_labels = list(dict.fromkeys(source_label(source) for source in sources))
@@ -1178,10 +1234,19 @@ class TemplateDataCreator(object):
                             formatted = format_normal_product_summary(norm)
                             normal_summary_lines.append(formatted['text_line'])
                             normal_summary_details.append(formatted)
-                    intervals = target_intervals[antigen['name']]
+                    info = highlights[antigen['name']]
+                    intervals = info['target']
+                    excluded = info['excluded']
+                    excluded_genes = info['excluded_genes']
+                    all_cta = all_cta and info['is_cta']
                     if intervals is not None:
                         product_intervals.extend((start + antigen['start_aa'], end + antigen['start_aa'])
                                                  for start, end in intervals)
+                    if excluded:
+                        product_excluded.extend((start + antigen['start_aa'], end + antigen['start_aa'])
+                                                for start, end in excluded)
+                        product_excluded_genes.update(excluded_genes)
+                    css_class = 'targetable' if info['is_cta'] else 'mutant'
                     antigens.append(dict(name=antigen['name'], sequence=antigen['aa'],
                         display_name=genes or 'Antigen %d' % antigen_index,
                         source_keys=list(dict.fromkeys(report_source_key(key)
@@ -1196,16 +1261,40 @@ class TemplateDataCreator(object):
                         representative=(dict(name=sources[0]['candidate_name'],
                             source_keys=list(dict.fromkeys(report_source_key(key)
                                 for key, _ in matching_candidates(sources[0])))) if sources else None),
-                        sequence_html=marked_sequence(antigen['aa'], intervals or ()),
+                        sequence_html=marked_sequence(
+                            antigen['aa'],
+                            intervals or (),
+                            css_class=css_class,
+                            excluded_intervals=excluded,
+                            excluded_title=_format_excluded_title(excluded_genes),
+                        ),
                         target_coordinates_known=intervals is not None,
                         target_intervals=intervals,
+                        excluded_intervals=excluded,
+                        excluded_genes=excluded_genes,
                         start=antigen['start_aa'], end=antigen['end_aa'], length=len(antigen['aa']),
                         sources=len(sources) if 'sources' in antigen else None,
                         genes=genes if genes != antigen['name'].rsplit(' (', 1)[0] else '',
                         transcripts=len({t for s in sources for t in s['transcript_ids']}) if 'sources' in antigen else None))
+                prod_css = 'targetable' if (modality == 'peptide' and all_cta) else 'mutant'
+                prod_excl_title = _format_excluded_title(sorted(product_excluded_genes))
                 rows.append(dict(name=product.name, sequence=product.sequence, length=len(product.sequence),
-                    sequence_html=marked_sequence(product.sequence, product_intervals) if modality == 'peptide' else None,
-                    protein_html=marked_sequence(product.cds_aa, product_intervals) if modality == 'mrna' else None,
+                    sequence_html=(
+                        marked_sequence(
+                            product.sequence, product_intervals,
+                            css_class=prod_css,
+                            excluded_intervals=product_excluded,
+                            excluded_title=prod_excl_title,
+                        ) if modality == 'peptide' else None
+                    ),
+                    protein_html=(
+                        marked_sequence(
+                            product.cds_aa, product_intervals,
+                            css_class=prod_css,
+                            excluded_intervals=product_excluded,
+                            excluded_title=prod_excl_title,
+                        ) if modality == 'mrna' else None
+                    ),
                     display_name=' / '.join(dict.fromkeys(a['display_name'] for a in antigens)) or product.name,
                     unit='aa' if modality == 'peptide' else 'nt',
                     protein=product.cds_aa if modality == 'mrna' else None,
@@ -1405,9 +1494,31 @@ class TemplateDataCreator(object):
             version = getattr(module, '__version__')
             package_versions[name] = version
 
+        from .antigen_biology import resolve_cta_protein_contexts
+        from .assembly_antigens import emitted_antigens_for_candidate
+        all_products = [p for group in self.products.values() for p in group]
+        cta_include_keys = set()
+        for _, peptides in self.ranked_variants_with_vaccine_peptides:
+            if not peptides:
+                continue
+            if peptides[0].antigen.kind == 'CTA':
+                cta_include_keys.add(protein_context_key(peptides[0].antigen))
+            for peptide in peptides:
+                if peptide.antigen.kind == 'CTA' and any(
+                    emitted_antigens_for_candidate(
+                        peptide.antigen, peptide.amino_acids, peptide.epitopes, all_products
+                    ).values()
+                ):
+                    cta_include_keys.add(protein_context_key(peptide.antigen))
+        protein_contexts = resolve_cta_protein_contexts(
+            self.ranked_variants_with_vaccine_peptides,
+            self.source_evidence,
+            include_keys=cta_include_keys,
+        )
+
         self.template_data.update({
             'patient_info': patient_info,
-            'biological_candidates': self._biological_candidates(),
+            'biological_candidates': self._biological_candidates(protein_contexts=protein_contexts),
             'cta_targeting_summary': [value for value in self.source_evidence.values()
                 if value.get('schema') == 'vaxrank.cta_targeting_summary.v1'],
             'patient_summary': {key: value for key, value in patient_info.items()
@@ -1416,8 +1527,8 @@ class TemplateDataCreator(object):
                 self.processing_predictions_by_key, self.processing_enabled),
             'variants': variants,
             'package_versions': package_versions,
-            'ranked_candidates': self._ranked_candidates(),
-            'product_groups': self._product_data(),
+            'ranked_candidates': self._ranked_candidates(protein_contexts=protein_contexts),
+            'product_groups': self._product_data(protein_contexts=protein_contexts),
             'candidate_details': self.candidate_details,
         })
         from .input_coverage import coverage_view
@@ -1448,6 +1559,20 @@ class TemplateDataCreator(object):
             rrow['qualified_only_earlier'] = bool(lrow.get('qualified_only_earlier')) if lrow else False
         for brow in self.template_data['biological_candidates']:
             brow['selected'] = brow.get('source_key') in selected_keys
+        has_cta = any(r.get('is_cta') for r in ranked_rows)
+        non_cta_rows = [r for r in ranked_rows if not r.get('is_cta')]
+        if has_cta and non_cta_rows:
+            selected_non_cta = [r for r in non_cta_rows if r.get('selected')]
+            unselected_non_cta = [r for r in non_cta_rows if not r.get('selected')]
+            extra_slots = max(0, 10 - len(selected_non_cta))
+            top_somatic = sorted(
+                selected_non_cta + unselected_non_cta[:extra_slots],
+                key=lambda r: r['rank'],
+            )
+        else:
+            top_somatic = []
+        self.template_data['top_somatic_candidates'] = top_somatic
+        self.template_data['total_somatic_candidates'] = len(non_cta_rows)
         modality_summary = [
             '%d %s construct%s' % (
                 g['counts']['constructs'], g['modality'], '' if g['counts']['constructs'] == 1 else 's'
