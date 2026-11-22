@@ -2,12 +2,22 @@
 <h2>Source outcomes</h2>
 <p>Each recorded source is retained here, including sources that never produced a ranked window. Rows group sources with the same recorded outcome and context; every member links to its full identity. Reasons can overlap;
 they are not disjoint losses. “No ranked window” does not identify a biological absence. Product mappings are listed in the ranking and product sections.</p>
+{% macro source_groups_table(groups) %}
 <table class="pure-table pure-table-bordered"><thead><tr><th>Source / gene</th><th>Family</th><th>Stage / recorded reason</th><th>Product outcome</th></tr></thead><tbody>
-{% for source in input_coverage.source_groups %}<tr><td>{{ source.members | length }} source record(s){% if source.gene %}<br>{{ source.gene | e }}{% endif %}{% if source.context %}<br>{{ source.context | e }}{% endif %}<br>{{ source.origin | e }}<br>
+{% for source in groups %}<tr><td>{{ source.members | length }} source record(s){% if source.gene %}<br>{{ source.gene | e }}{% endif %}{% if source.context %}<br>{{ source.context | e }}{% endif %}<br>{{ source.origin | e }}<br>
 {% for member in source.members %}<a href="#source-{{ member.identifier }}">{{ member.identifier }}</a>{% if member.rank %} (rank {{ member.rank }}){% endif %}{% if not loop.last %}; {% endif %}{% endfor %}</td><td>{{ source.family }}</td>
 <td>{{ source.stage }}{% for reason in source.reasons %}<br>{{ reason | e }}{% endfor %}
 {% if source.retained_epitopes is not none %}<br>{{ source.retained_epitopes }} retained epitope records{% endif %}</td><td>{{ source.product_outcome | e }}</td></tr>{% endfor %}
 </tbody></table>
+{% endmacro %}
+{% if input_coverage.source_groups | length > 25 %}
+<details class="audit-details">
+<summary>Per-source outcome ledger ({{ input_coverage.source_groups | length }} source groups)</summary>
+{{ source_groups_table(input_coverage.source_groups) }}
+</details>
+{% else %}
+{{ source_groups_table(input_coverage.source_groups) }}
+{% endif %}
 {% if input_coverage.producers %}<details>
 <summary>Per-event producer and reference-model ledger ({{ input_coverage.producers | length }} event records)</summary>
 <table class="pure-table pure-table-bordered"><thead><tr><th>Family / sample</th><th>Event</th><th>Reference models</th><th>Resolved coding candidates</th><th>RNA reconstructions</th><th>State</th></tr></thead><tbody>
@@ -22,8 +32,18 @@ they are not disjoint losses. “No ranked window” does not identify a biologi
 {% for row in original.variant_outcomes %}<tr><td>{{ row.gene_name | e }} {{ row.contig }}:{{ row.start }} {{ row.ref }}&gt;{{ row.alt }}</td>
 {% for key in ('is_coding_nonsynonymous', 'rna_support', 'has_vaccine_peptide') %}<td>{{ ('Yes' if row[key] else 'No') if row[key] is not none else 'Not assessed at this stage' }}</td>{% endfor %}<td>{% if row.isovar_filter_results %}{% for name, passed in row.isovar_filter_results.items() %}{{ name | e }}: {{ 'Pass' if passed else 'Fail' }}<br>{% endfor %}{% else %}Not recorded{% endif %}</td></tr>{% endfor %}
 {% for row in original.annotation_unavailable %}<tr><td>{{ row.contig }}:{{ row.start }} {{ row.ref }}&gt;{{ row.alt }}</td><td colspan="4">Annotation result unavailable</td></tr>{% endfor %}</tbody></table>{% endfor %}
-{% for expression in input_coverage.expression %}<h3>CTA expression admission: {{ expression.identity | e }}</h3>
+{% for expression in input_coverage.expression %}
+{% if expression.decisions | length > 10 %}
+<details class="audit-details">
+<summary>CTA expression admission: {{ expression.contract.sample_id | e }} ({{ expression.admitted_count | default(0) }} admitted / {{ expression.decisions | length }} CTA features)</summary>
+{% if expression.omitted_not_cta_count %}<p class="note">{{ expression.omitted_not_cta_count }} non-CTA background features omitted.</p>{% endif %}
+<table class="pure-table pure-table-bordered"><thead><tr><th>Feature / gene</th><th>Expression ({{ expression.contract.expression_unit }})</th><th>Recorded decision</th></tr></thead><tbody>
+{% for row in expression.decisions %}<tr><td>{{ row.input_identifier | e }} {{ row.gene_name | e }}</td><td>{{ row.value if row.value is not none else 'Unknown' }}</td><td>{{ row.status | e }}</td></tr>{% endfor %}</tbody></table>
+</details>
+{% else %}
+<h3>CTA expression admission: {{ expression.identity | e }}</h3>
 {% if expression.omitted_not_cta_count %}<p class="note">{{ expression.omitted_not_cta_count }} non-CTA background features omitted.</p>{% endif %}
 {% if expression.decisions %}<table class="pure-table pure-table-bordered"><thead><tr><th>Feature / gene</th><th>Expression ({{ expression.contract.expression_unit }})</th><th>Recorded decision</th></tr></thead><tbody>
-{% for row in expression.decisions %}<tr><td>{{ row.input_identifier | e }} {{ row.gene_name | e }}</td><td>{{ row.value if row.value is not none else 'Unknown' }}</td><td>{{ row.status | e }}</td></tr>{% endfor %}</tbody></table>{% endif %}{% endfor %}
+{% for row in expression.decisions %}<tr><td>{{ row.input_identifier | e }} {{ row.gene_name | e }}</td><td>{{ row.value if row.value is not none else 'Unknown' }}</td><td>{{ row.status | e }}</td></tr>{% endfor %}</tbody></table>{% endif %}
+{% endif %}{% endfor %}
 </section>

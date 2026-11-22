@@ -17,12 +17,21 @@ p { line-height: 1.45; }
     padding: 0.8em; background: #f2f6f8; border-left: 3px solid #326681; }
 .sequence-cell { font-family: monospace; word-break: break-all; }
 .candidate-ranking { table-layout: fixed; }
-.candidate-ranking th:nth-child(1) { width: 7%; }
-.candidate-ranking th:nth-child(2) { width: 25%; }
-.candidate-ranking th:nth-child(3) { width: 13%; }
-.candidate-ranking th:nth-child(4) { width: 32%; }
+.candidate-ranking th:nth-child(1) { width: 6%; }
+.candidate-ranking th:nth-child(2) { width: 20%; }
+.candidate-ranking th:nth-child(3) { width: 30%; }
+.candidate-ranking th:nth-child(4) { width: 24%; }
 .candidate-ranking th { word-break: normal; overflow-wrap: normal; }
-.candidate-ranking th:nth-child(5) { width: 23%; }
+.candidate-ranking th:nth-child(5) { width: 20%; }
+.overview-strip { margin: 0.6em 0 0.9em; padding: 0.55em 0.8em; background: #eef4f8; border-left: 3px solid #326681; font-size: 12px; }
+.badge { display: inline-block; padding: 0.1em 0.42em; border-radius: 3px; font-size: 10px; font-weight: bold; vertical-align: middle; margin-left: 0.25em; }
+.badge-ms { background: #dff2e3; color: #19632b; border: 1px solid #9bd1a7; }
+.badge-tp { background: #e6eff6; color: #214e6b; border: 1px solid #b5cfe0; font-weight: normal; }
+.badge-clean { background: #edf5ef; color: #246135; border: 1px solid #b8d8c0; font-weight: normal; }
+.badge-review { background: #fff0d9; color: #8c4a00; border: 1px solid #e6b873; }
+details.audit-details { margin: 0.9em 0; }
+details.audit-details > summary { cursor: pointer; font-weight: bold; color: #245d7a; padding: 0.35em 0.55em; background: #f2f6f8; border: 1px solid #cdd8e0; border-radius: 3px; }
+details:not([open]) > :not(summary) { display: none; }
 .product-antigens { table-layout: fixed; }
 .product-antigens th:nth-child(1) { width: 30%; }
 .product-antigens th:nth-child(2) { width: 35%; }
@@ -74,8 +83,12 @@ a { color: #245d7a; }
 @page { @bottom-right { content: counter(page) " / " counter(pages); font-size: 9px; color: #465765; } }
 .variant, .peptide-data { font-size: 11px; }
 .variant td, .peptide-data td { padding: 0.3em 0.5em; }
-.candidate-ranking { page-break-inside: avoid; }
-.manufacturability { page-break-inside: avoid; }
+.manufacturability { page-break-inside: avoid; margin-top: 0.4em; font-size: 11px; }
+.mfg-grid { display: flex; flex-wrap: wrap; gap: 0.25em 1em; margin: 0.25em 0 0; padding: 0.35em 0.55em; background: #f6f8fa; border: 1px solid #d5dfe6; }
+.mfg-item { white-space: nowrap; }
+.mfg-key { color: #465765; }
+.longitudinal-table { font-size: 9px; table-layout: auto; }
+.longitudinal-table th, .longitudinal-table td { padding: 0.25em 0.3em; }
 .source-directory th:first-child { width: 10%; }
 .evidence-groups th:first-child { width: 14%; }
 .evidence-groups th:nth-child(2) { width: 40%; }

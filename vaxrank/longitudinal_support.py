@@ -614,10 +614,15 @@ def build_longitudinal_support_view(
             and bool(qualifying_timepoints)
             and not latest_qualified
         )
+        from .input_coverage import report_source_key
+        source_keys = list(dict.fromkeys(
+            report_source_key(src) for src, _ in entry["peptides"]
+        ))
         rows.append(dict(
             gene=entry["gene"],
             gene_id=entry["gene_id"],
             kind=kind,
+            source_keys=source_keys,
             transcript_ids=entry["transcript_ids"],
             window=window,
             selected=bool(entry["selected_products"]),

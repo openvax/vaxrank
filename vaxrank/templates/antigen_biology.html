@@ -1,9 +1,9 @@
 {% if biological_candidates %}
-<section id="antigen-biology">
+<section id="antigen-biology" class="appendix">
 <h2>Antigen biology and targeting</h2>
-<p class="note">Each source shows its highest-ranked candidate window. Highlighted residues or junctions define the altered region. CTA targeting is assessed per peptide in the tables below. Reference translation evidence and patient RNA support are shown separately.
-Comparisons show recorded reference sequences or computed backgrounds, not observed patient-normal protein.</p>
-{% for antigen in biological_candidates %}
+<p class="note">Highest-ranked candidate window per source. Highlighted residues or junctions mark the altered region. Reference translation evidence and patient RNA support are shown separately; comparisons show recorded references or computed backgrounds, not observed patient-normal protein.</p>
+{% macro render_biology_cards(cards) %}
+{% for antigen in cards %}
 <article class="antigen-biology">
 <h3>{{ antigen.rank }}. {{ antigen.gene | e }} <span class="source-kind">{{ antigen.kind | e }}</span></h3>
 {% if antigen.facts %}<dl class="biology-facts">{% for label, value in antigen.facts %}<dt>{{ label | e }}</dt><dd>{{ value | e }}</dd>{% endfor %}</dl>{% endif %}
@@ -23,12 +23,28 @@ Ref    {{ comparison.reference[start:start + 65] | e }}</pre>{% endfor %}
 </tbody></table>{% if antigen.targeting | length > 8 %}<p class="note">Showing 8 of {{ antigen.targeting | length }} assessed peptides in this window; all tested positions are summarized below. Exact protein accessions remain in the native evidence and workbook.</p>{% endif %}{% endif %}
 </article>
 {% endfor %}
+{% endmacro %}
+{% set selected_bio = biological_candidates | selectattr('selected') | list %}
+{% set other_bio = biological_candidates | rejectattr('selected') | list %}
+{% if selected_bio and other_bio %}
+<h3>Selected targets ({{ selected_bio | length }})</h3>
+{{ render_biology_cards(selected_bio) }}
+<details class="audit-details">
+<summary>Additional ranked candidates not emitted in products ({{ other_bio | length }})</summary>
+{{ render_biology_cards(other_bio) }}
+</details>
+{% else %}
+{{ render_biology_cards(biological_candidates) }}
+{% endif %}
 </section>
 {% endif %}
 {% if cta_targeting_summary %}
-<section id="cta-targeting">
+<section id="cta-targeting" class="appendix">
 <h2>CTA regions assessed against OncoRef</h2>
 <p class="note">Positions below are peptide starts in the source protein, grouped by peptide length. Unsafe containment excludes a peptide from CTA targeting. Eligible peptides still undergo the shared expression, prediction and ranking rules. Unmeasured peptide lengths and reference coverage gaps remain unassessed.</p>
+{% if cta_targeting_summary | length > 10 %}
+<details class="audit-details">
+<summary>Per-protein OncoRef CTA containment ledger ({{ cta_targeting_summary | length }} CTA proteins)</summary>
 {% for source in cta_targeting_summary %}
 <h3>{{ source.gene | e }}</h3>
 {% if source.gene_id %}<p class="note">{{ source.gene_id | e }}</p>{% endif %}
@@ -36,5 +52,15 @@ Ref    {{ comparison.reference[start:start + 65] | e }}</pre>{% endfor %}
 {% for row in source.rows %}<tr><td>{{ row.length }} aa</td><td>{{ row.starts }}</td><td>{% if row.status == 'excluded' %}Do not target: Unsafe containment{% elif row.status == 'eligible' %}Eligible under sequence policy{% elif row.status == 'review' %}Review: unresolved occurrence{% else %}Unassessed{% endif %}</td><td>{{ row.matches | e }}</td></tr>{% endfor %}
 </tbody></table>
 {% endfor %}
+</details>
+{% else %}
+{% for source in cta_targeting_summary %}
+<h3>{{ source.gene | e }}</h3>
+{% if source.gene_id %}<p class="note">{{ source.gene_id | e }}</p>{% endif %}
+<table class="pure-table"><thead><tr><th>Peptide length</th><th>Start positions (1-based)</th><th>Sequence policy</th><th>Unsafe / review proteins</th></tr></thead><tbody>
+{% for row in source.rows %}<tr><td>{{ row.length }} aa</td><td>{{ row.starts }}</td><td>{% if row.status == 'excluded' %}Do not target: Unsafe containment{% elif row.status == 'eligible' %}Eligible under sequence policy{% elif row.status == 'review' %}Review: unresolved occurrence{% else %}Unassessed{% endif %}</td><td>{{ row.matches | e }}</td></tr>{% endfor %}
+</tbody></table>
+{% endfor %}
+{% endif %}
 </section>
 {% endif %}

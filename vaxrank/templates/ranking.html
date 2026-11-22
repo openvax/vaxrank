@@ -1,13 +1,32 @@
 <h2 id="ranking">Candidate ranking</h2>
-<p>Ranked source windows and their combined scores. These windows are candidates for assembly; final sequences and placements are listed under Emitted products.</p>
+<p class="note">Ranked source windows with key scoring, RNA/expression, and top HLA epitope evidence. Exact emitted sequences and placements follow under <a href="#products">Emitted products</a>.</p>
 {% if ranked_candidates %}
+{% macro ranking_table(rows) %}
 <table class="pure-table pure-table-bordered candidate-ranking">
-<thead><tr><th>Rank</th><th>Source / gene</th><th>Combined score</th><th>Top candidate window</th><th>Linked products</th></tr></thead>
-<tbody>{% for candidate in ranked_candidates %}<tr>
-<td>{% if candidate_details %}<a href="#candidate-{{ candidate.rank }}">{{ candidate.rank }}</a>{% else %}{{ candidate.rank }}{% endif %}</td><td>{{ candidate.gene }} ({{ candidate.kind }})<br><a href="#source-{{ candidate.source_id }}">{{ candidate.source_id }}</a></td>
-<td>{{ candidate.score }}</td><td class="sequence-cell">{{ candidate.window }}{% if candidate.window_count > 1 %}<br><span class="note">{{ candidate.window_count }} retained windows</span>{% endif %}</td>
-<td>{{ candidate.products }}{% for outcome in candidate.assembly_outcomes %}<br>{{ outcome.modality }}: {{ outcome.outcome | replace('_', ' ') }}{% if outcome.shared %}; shared exact sequence{% endif %}{% endfor %}
-{% for decision in candidate.window_decisions %}<br><a href="#window-{{ decision }}">Window decision {{ decision }}</a>{% endfor %}</td>
+<thead><tr><th>Rank</th><th>Target / source</th><th>Score &amp; ranking evidence</th><th>Top candidate window</th><th>Linked products</th></tr></thead>
+<tbody>{% for candidate in rows %}<tr>
+<td>{% if candidate_details %}<a href="#candidate-{{ candidate.rank }}">{{ candidate.rank }}</a>{% else %}{{ candidate.rank }}{% endif %}</td>
+<td><strong>{{ candidate.gene | e }}</strong> <span class="source-kind">({{ candidate.kind | e }})</span>
+<br><a href="#source-{{ candidate.source_id }}">{{ candidate.source_id }}</a>{% if candidate.qualifying_timepoints %} <span class="badge badge-tp">{{ candidate.qualifying_timepoints | join(', ') | e }}</span>{% endif %}{% if candidate.qualified_only_earlier %} <span class="badge badge-review">Earlier TP only</span>{% endif %}{% if candidate.normal_badge %} <span class="badge badge-{{ candidate.normal_flag }}">{{ candidate.normal_badge | e }}</span>{% endif %}</td>
+<td><strong>{{ candidate.score }}</strong>{% if candidate.target_score is defined %} <span class="note">(epitope {{ candidate.target_score }})</span>{% endif %}{% if candidate.ms_supported %} <span class="badge badge-ms">MS</span>{% endif %}
+{% if candidate.rna_summary %}<br><span class="note">RNA: {{ candidate.rna_summary | e }}</span>{% endif %}
+{% if candidate.top_epitope %}<br><span class="note">Top: <code>{{ candidate.top_epitope | e }}</code>{% if candidate.epitope_count > 1 %} (+{{ candidate.epitope_count - 1 }}){% endif %}</span>{% endif %}</td>
+<td class="sequence-cell">{{ candidate.window | e }}{% if candidate.window_count > 1 %}<br><span class="note">{{ candidate.window_count }} retained windows</span>{% endif %}</td>
+<td>{% if candidate.selected_products %}{% for prod in candidate.selected_products %}<a href="#product-{{ prod | e }}"><code>{{ prod | e }}</code></a>{% if not loop.last %}<br>{% endif %}{% endfor %}{% else %}{{ candidate.products | e }}{% endif %}{% for outcome in candidate.assembly_outcomes %}<br><span class="note">{{ outcome.modality }}: {{ outcome.outcome | replace('_', ' ') }}{% if outcome.shared %}; shared exact sequence{% endif %}</span>{% endfor %}
+{% for decision in candidate.window_decisions %}<br><a href="#window-{{ decision }}" class="note">Window {{ decision }}</a>{% endfor %}</td>
 </tr>{% endfor %}</tbody></table>
-{% if not candidate_details %}<p>Use <code>--report-candidate-details</code> to include grouped source windows and epitope tables.</p>{% endif %}
+{% endmacro %}
+{% set selected_rows = ranked_candidates | selectattr('selected') | list %}
+{% set other_rows = ranked_candidates | rejectattr('selected') | list %}
+{% if selected_rows and other_rows %}
+<h3>Selected candidates ({{ selected_rows | length }})</h3>
+{{ ranking_table(selected_rows) }}
+<details class="audit-details">
+<summary>Additional ranked candidates not emitted in products ({{ other_rows | length }})</summary>
+{{ ranking_table(other_rows) }}
+</details>
+{% else %}
+{{ ranking_table(ranked_candidates) }}
+{% endif %}
+{% if not candidate_details %}<p class="note">Use <code>--report-candidate-details</code> to include grouped source windows and full epitope tables.</p>{% endif %}
 {% else %}<p>No candidates passed ranking.</p>{% endif %}

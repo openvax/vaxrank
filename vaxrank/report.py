@@ -866,8 +866,95 @@ class TemplateDataCreator(object):
 
         return databases
 
+    @staticmethod
+    def _candidate_ranking_highlights(top):
+        """Compact per-candidate ranking evidence for the executive ranking table."""
+        from .normal_observations import summarize_normal_assessment
+
+        target_eps = list(getattr(top, 'target_epitopes', ()) or ())
+        epitope_count = len(target_eps)
+        ms_supported = any((getattr(e, 'ms_increment', 0.0) or 0.0) > 0 for e in target_eps)
+        top_epitope = ''
+        if target_eps:
+            best = max(target_eps, key=lambda e: float(getattr(e, 'epitope_score', 0.0) or 0.0))
+            allele = ''
+            per_allele = getattr(best, 'per_allele_scores', None) or {}
+            if per_allele:
+                allele = max(per_allele.items(), key=lambda kv: float(kv[1] or 0.0))[0]
+            metric = ''
+            preds = list(best.predictions_flat()) if hasattr(best, 'predictions_flat') else []
+            if not allele and preds:
+                allele = getattr(preds[0], 'allele', '') or ''
+            aff = [p for p in preds if p.kind == 'pMHC_affinity' and (not allele or p.allele == allele)
+                   and p.value is not None]
+            pres = [p for p in preds if p.kind == 'pMHC_presentation' and (not allele or p.allele == allele)
+                    and p.percentile_rank is not None]
+            if aff:
+                metric = '%.1f nM' % min(float(p.value) for p in aff)
+            elif pres:
+                metric = 'rank %.3g%%' % min(float(p.percentile_rank) for p in pres)
+            parts = [best.sequence]
+            if allele:
+                parts.append(allele)
+            top_epitope = ' · '.join(parts) + (f' ({metric})' if metric else '')
+
+        rna_parts = []
+        rna_support = getattr(top.antigen, 'rna_support', ()) or ()
+        if rna_support:
+            ev = rna_support[0]
+            vals = ev.measurement.get('values', {})
+            sample_id = ev.measurement.get('sample_id') or ''
+            if vals.get('fragments') is not None:
+                text = '%d frags' % int(vals['fragments'])
+            elif vals.get('reads') is not None:
+                text = '%d reads' % int(vals['reads'])
+            else:
+                text = ''
+            if text:
+                rna_parts.append(f'{text} ({sample_id})' if sample_id else text)
+        elif getattr(top, 'mutant_protein_fragment', None) is not None:
+            frag = top.mutant_protein_fragment
+            if getattr(frag, 'n_alt_fragments', None) is not None:
+                rna_parts.append('%d alt frags' % int(frag.n_alt_fragments))
+            elif getattr(frag, 'n_alt_reads', None) is not None:
+                rna_parts.append('%d alt reads' % int(frag.n_alt_reads))
+        ts = getattr(top.antigen, 'tumor_specificity', None)
+        if ts is not None:
+            for rec in getattr(ts, 'evidence_records', ()) or ():
+                if rec.numeric_value is not None and rec.unit and rec.evidence_kind == 'patient_expression':
+                    rna_parts.append('%.1f %s' % (float(rec.numeric_value), rec.unit))
+                    break
+
+        normal_badge = ''
+        normal_flag = ''
+        normals = getattr(top.antigen, 'normal_observations', ()) or ()
+        if normals and ts is not None:
+            summary = summarize_normal_assessment(ts, normals)
+            if (summary['normal_dna_state'] == 'observed_alt_support'
+                    or summary['normal_rna_state'] == 'observed_alt_support'):
+                normal_badge = 'Normal review'
+                normal_flag = 'review'
+            elif summary['normal_dna_state'] == 'zero_alt_at_adequate_coverage':
+                normal_badge = 'Normal DNA clean'
+                normal_flag = 'clean'
+
+        intervals = (
+            [] if top.antigen.kind == 'CTA'
+            else [(i.start, i.end) for i in top.antigen.targetable_mask.intervals]
+        )
+        return dict(
+            target_score=_sanitize(getattr(top, 'target_epitope_score', 0.0)),
+            epitope_count=epitope_count,
+            top_epitope=top_epitope,
+            ms_supported=ms_supported,
+            rna_summary=' · '.join(rna_parts),
+            normal_badge=normal_badge,
+            normal_flag=normal_flag,
+            window_html=marked_sequence(top.amino_acids, intervals),
+        )
+
     def _ranked_candidates(self):
-        """Compact ranking with selection links from actual emitted products."""
+        """Compact ranking with selection links and key per-candidate evidence."""
         from .assembly_antigens import emitted_antigens_for_candidate
         from .input_coverage import report_source_key
         products = [p for group in self.products.values() for p in group]
@@ -886,24 +973,29 @@ class TemplateDataCreator(object):
             top = peptides[0]
             selected = {name for peptide in peptides for name, antigens in emitted_antigens_for_candidate(
                 peptide.antigen, peptide.amino_acids, peptide.epitopes, products).items() if antigens}
+            highlights = self._candidate_ranking_highlights(top)
             rows.append(dict(rank=len(rows) + 1, gene=top.antigen.display_gene_name,
                 source_key=report_source_key(source),
                 identifier=(source.short_description if isinstance(source, Variant) else top.antigen.display_identifier),
                 kind=antigen_source_label(top.antigen, self.source_evidence), score=_sanitize(top.combined_score),
                 window=top.amino_acids, window_count=len(peptides),
                 products=', '.join(sorted(selected)) if selected else unmapped_label,
-                selected_products=sorted(selected)))
+                selected_products=sorted(selected),
+                selected=bool(selected),
+                **highlights))
         return rows
 
     def _biological_candidates(self):
         from .antigen_biology import antigen_biology
+        from .input_coverage import report_source_key
         rows = []
-        for _, peptides in self.ranked_variants_with_vaccine_peptides:
+        for source, peptides in self.ranked_variants_with_vaccine_peptides:
             if not peptides:
                 continue
             row = antigen_biology(peptides[0].antigen, source_evidence=self.source_evidence,
                                   peptides=peptides[:1])
             row['rank'] = len(rows) + 1
+            row['source_key'] = report_source_key(source)
             rows.append(row)
         return rows
 
@@ -1333,11 +1425,44 @@ class TemplateDataCreator(object):
             getattr(self.patient_info, 'input_coverage', None), self.source_evidence,
             self.template_data['ranked_candidates'], self.products)
         from .longitudinal_support import build_longitudinal_support_view
-        self.template_data['longitudinal_support'] = build_longitudinal_support_view(
+        longitudinal = build_longitudinal_support_view(
             self.ranked_variants_with_vaccine_peptides,
             self.products,
             self.selection,
             self.patient_info,
+        )
+        self.template_data['longitudinal_support'] = longitudinal
+        ranked_rows = self.template_data['ranked_candidates']
+        selected_keys = {r['source_key'] for r in ranked_rows if r.get('selected_products')}
+        self.template_data['has_selected_candidates'] = bool(selected_keys)
+        longitudinal_by_key = {}
+        if longitudinal:
+            for lrow in longitudinal.get('rows', ()):
+                for key in lrow.get('source_keys', ()):
+                    longitudinal_by_key.setdefault(key, lrow)
+        for rrow in ranked_rows:
+            lrow = longitudinal_by_key.get(rrow['source_key'])
+            rrow['qualifying_timepoints'] = (
+                list(lrow.get('qualifying_timepoints') or ()) if lrow else []
+            )
+            rrow['qualified_only_earlier'] = bool(lrow.get('qualified_only_earlier')) if lrow else False
+        for brow in self.template_data['biological_candidates']:
+            brow['selected'] = brow.get('source_key') in selected_keys
+        modality_summary = [
+            '%d %s construct%s' % (
+                g['counts']['constructs'], g['modality'], '' if g['counts']['constructs'] == 1 else 's'
+            )
+            for g in self.template_data['product_groups'] if g['counts']['constructs']
+        ]
+        supplied_families = [
+            f['name'] for f in self.template_data['input_coverage']['families']
+            if f['status'] == 'Supplied' and (f['records'] or f['ranked'] or f['represented'])
+        ]
+        self.template_data['design_overview'] = dict(
+            n_ranked=len(ranked_rows),
+            n_selected=len(selected_keys),
+            modalities=modality_summary,
+            families=supplied_families,
         )
         from .reference_coverage import coverage_view as host_coverage_view
         self.template_data['host_coverage'] = host_coverage_view(
