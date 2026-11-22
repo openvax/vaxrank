@@ -117,7 +117,7 @@ def make_vaxrank_arg_parser():
     parent_parser.add_argument('--show-policy', action=_ShowPolicyAction, metavar='NAME',
                                help='Print the composed bundled policy, formulas and evidence requirements; exit.')
 
-    # inherit commandline options from Isovar
+    # inherit commandline options from Isovar (varcode>=12.0.1 omits --version by default)
     arg_parser = make_isovar_arg_parser(
         prog="vaxrank",
         description=(
@@ -126,16 +126,6 @@ def make_vaxrank_arg_parser():
             "reports, peptide constructs, or mRNA constructs."),
         parents=[parent_parser],
     )
-    # Replace any upstream --version (e.g. varcode>=11.18.0, openvax/varcode#759)
-    # with Vaxrank's own version flag while preserving conflict_handler='error'.
-    for action in list(arg_parser._actions):
-        if '--version' in action.option_strings:
-            arg_parser._remove_action(action)
-            for group in (arg_parser._optionals, *arg_parser._action_groups):
-                if action in group._group_actions:
-                    group._group_actions.remove(action)
-            for opt in action.option_strings:
-                arg_parser._option_string_actions.pop(opt, None)
     arg_parser.add_argument('--version', action='version', version='Vaxrank %s' % (__version__,))
     # Allow DNA-only runs (--allow-dna-only-fallback / --proxy-expression-cancer-type)
     # without requiring a dummy --bam file (openvax/vaxrank#907). Missing --bam
@@ -322,6 +312,14 @@ def add_advanced_args(arg_parser):
         help="Name of the tumor sample column in the VCF FORMAT fields, used "
              "to read DNA VAF (FORMAT/AF, falling back to AD). Required for "
              "multi-sample VCFs; auto-picked when only one sample is present.")
+    advanced_group.add_argument(
+        "--combine-cis-snvs",
+        action="store_true",
+        default=False,
+        help="Combine phased cis in-codon SNVs from the input VCF into MNVs via "
+             "varcode.transforms.combine_cis_snvs before annotation (uses "
+             "--tumor-sample-name or the sole VCF sample; useful for phased "
+             "DNA-only fallback or caller-phased MNVs).")
 
 
 def add_output_args(arg_parser):

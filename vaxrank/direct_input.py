@@ -64,6 +64,9 @@ def direct_input_scope(args, epitope_config, *, pooled=False):
     if scope.mhc_alleles is None and not manifest:
         scope = combine_scopes(scope, scope_from_mapping({'mhc_alleles': alleles}, 'Direct alleles'), 'Direct alleles')
     variants = variant_collection_from_args(args)
+    if getattr(args, 'combine_cis_snvs', False):
+        from .cli.entry_point import filter_unannotatable_variants, maybe_combine_cis_snvs
+        variants = maybe_combine_cis_snvs(filter_unannotatable_variants(variants), args)
     context = load_reference_context(getattr(args, 'reference_context', None))
     if context is not None:
         scope = combine_scopes(scope, scope_from_mapping({
