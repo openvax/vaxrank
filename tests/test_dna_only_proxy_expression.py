@@ -211,7 +211,10 @@ def test_dna_only_cli_runs_without_bam_and_scores_nonzero(tmp_path):
 # OncoRef whole-gene cohort proxy expression & 5' upstream complex variants
 # ---------------------------------------------------------------------------
 
-def test_oncoref_proxy_expression_lookup_and_guards():
+def test_oncoref_proxy_expression_lookup_and_guards(monkeypatch):
+    import oncoref
+    import pandas as pd
+
     lookup = OncoRefProxyExpressionLookup("melanoma")
     assert lookup.cancer_code == "SKCM"
     sf3b1 = lookup.lookup(gene_id="ENSG00000115524.12", gene_name="SF3B1")
@@ -222,8 +225,13 @@ def test_oncoref_proxy_expression_lookup_and_guards():
     with pytest.raises(ValueError, match="Unknown cancer type"):
         OncoRefProxyExpressionLookup("NOT_A_REAL_CANCER_TYPE")
 
+    monkeypatch.setattr(
+        oncoref,
+        "cancer_reference_expression",
+        lambda code: pd.DataFrame(),
+    )
     with pytest.raises(ValueError, match="no whole-gene reference expression"):
-        OncoRefProxyExpressionLookup("BCC")
+        OncoRefProxyExpressionLookup("SKCM")
 
     validate_human_host_for_proxy_expression(9606, "SKCM")
     with pytest.raises(ValueError, match="human OncoRef"):

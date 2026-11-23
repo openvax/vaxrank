@@ -1,6 +1,112 @@
 """Small, evidence-preserving views for the human-readable report."""
 
+import re
+
 from markupsafe import Markup, escape
+
+
+_LONG_ALLELE_RE = re.compile(r'([ACGTNacgtn]{17,})')
+_HGVS_LONG_DEL_RE = re.compile(r'(del)([ACGTNacgtn]{17,})')
+
+
+def compact_allele(allele, max_bases=16):
+    """Compact long nucleotide allele strings for human-readable report tables.
+
+    Short alleles (<= ``max_bases``) are returned unchanged. Longer DNA runs
+    keep a 6-base prefix and exact base count so table columns stay legible
+    without discarding length information (full alleles stay in CSV/JSON).
+    """
+    if not allele:
+        return allele
+    text = str(allele)
+    if len(text) <= max_bases:
+        return text
+    if all(ch in 'ACGTNacgtn' for ch in text):
+        return '%s…(%dbp)' % (text[:6], len(text))
+    return text
+
+
+def compact_variant_label(label, max_bases=16):
+    """Shorten long raw nucleotide runs inside HGVS/variant display labels."""
+    if not label:
+        return label
+    text = str(label)
+    if len(text) <= max_bases + 20:
+        return text
+    text = _HGVS_LONG_DEL_RE.sub(
+        lambda m: 'del (%d bp)' % len(m.group(2)),
+        text,
+    )
+    return _LONG_ALLELE_RE.sub(
+        lambda m: '%s…(%dbp)' % (m.group(1)[:6], len(m.group(1)))
+        if len(m.group(1)) > max_bases else m.group(1),
+        text,
+    )
+
+
+_MFG_CONTINUOUS_LABELS = {
+    'cterm_7mer_gravy_score': 'C-term GRAVY',
+    'max_7mer_gravy_score': 'Max GRAVY',
+}
+
+_MFG_FLAG_LABELS = {
+    'difficult_n_terminal_residue': 'Difficult N-term',
+    'c_terminal_cysteine': 'C-term Cys',
+    'c_terminal_proline': 'C-term Pro',
+    'cysteine_count': 'Cys',
+    'n_terminal_asparagine': 'N-term Asn',
+    'n_terminal_methionine': 'N-term Met',
+    'aspartate_proline_bond_count': 'Asp-Pro',
+}
+
+
+def _parse_number(value):
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        return float(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def compact_manufacturability(mfg):
+    """Return concise ``(label, display_value)`` pairs for compact peptide tables.
+
+    GRAVY scores and any non-zero synthesis flags are always shown explicitly.
+    When all known synthesis flags are zero, they collapse to a single
+    ``('Flags', 'all 0')`` summary so actual synthesis hazards stand out instead
+    of getting buried in seven zero lines per peptide. Full exact fields stay
+    in ``order_form.csv``, ``manifest.json``, and the ASCII report.
+    """
+    if not mfg:
+        return ()
+    items = []
+    seen_flags = 0
+    nonzero_flags = []
+    for key, value in mfg.items():
+        num = _parse_number(value)
+        if key in _MFG_CONTINUOUS_LABELS:
+            if num is not None:
+                disp = ('%.2f' % num).rstrip('0').rstrip('.')
+                if disp in ('', '-0'):
+                    disp = '0'
+            else:
+                disp = str(value)
+            items.append((_MFG_CONTINUOUS_LABELS[key], disp))
+        elif key in _MFG_FLAG_LABELS:
+            seen_flags += 1
+            is_nonzero = (num != 0.0) if num is not None else bool(value)
+            if is_nonzero:
+                nonzero_flags.append((_MFG_FLAG_LABELS[key], str(value)))
+        else:
+            items.append((key.replace('_', ' '), str(value)))
+    if nonzero_flags:
+        items.extend(nonzero_flags)
+    elif seen_flags:
+        items.append(('Flags', 'all 0'))
+    return tuple(items)
 
 
 _RUN_PROVENANCE_ARGUMENT_NAMES = frozenset({

@@ -23,6 +23,29 @@ Emitted antigen sequences by type: {% for kind, count in group.assembly_decision
 {% if group.assembly_decisions.allocation %}{% for goal in group.assembly_decisions.allocation.unmet_goals %}<p class="note">{{ goal.kind }} representation goal: requested {{ goal.requested }}, emitted {{ goal.emitted }}; {{ goal.reason | replace('_', ' ') }} ({{ goal.available }} eligible unique sequences).</p>{% endfor %}{% endif %}
 {% else %}<p class="note">Historical assembly ordering, deduplication and capacity decisions were not recorded. Product mappings below describe the saved result.</p>{% endif %}{% endif %}
 {% if group.files %}<p class="note">Product files: {% for file in group.files %}<code>{{ file }}</code>{% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
+{% set ns = namespace(all_simple_peptides=(group.modality == 'peptide' and group.products | length > 0)) %}
+{% for product in group.products %}
+{% if product.unit != 'aa' or product.antigens | length != 1 or product.junction or product.protein %}
+{% set ns.all_simple_peptides = false %}
+{% else %}
+{% set ag = product.antigens[0] %}
+{% if (ag.sources is not none and ag.sources > 1) or ag.origin_summaries or (ag.normal_details | default(())) or (ag.normal_summaries | default(())) %}
+{% set ns.all_simple_peptides = false %}
+{% endif %}
+{% endif %}
+{% endfor %}
+{% if ns.all_simple_peptides %}
+<table class="pure-table pure-table-bordered compact-peptides">
+<thead><tr><th>Product / target</th><th>Manufactured sequence</th><th>Sources &amp; regions</th>{% if include_manufacturability %}<th>Manufacturability</th>{% endif %}</tr></thead>
+<tbody>{% for product in group.products %}{% set antigen = product.antigens[0] %}
+<tr id="product-{{ product.name | e }}">
+<td><strong>{{ product.display_name | e }}</strong> &middot; {{ product.length }} {{ product.unit }}<br><span class="note"><code>{{ product.name | e }}</code></span>{% for label in antigen.context_labels %}<br><span class="note">{{ label | e }}</span>{% endfor %}<br><span class="note">{% if product.n_terminal_acetylation or product.c_terminal_amidation %}N-Ac: {{ 'yes' if product.n_terminal_acetylation else 'no' }}; C-NH2: {{ 'yes' if product.c_terminal_amidation else 'no' }}{% else %}Unmodified free termini{% endif %}{% if product.window_decisions %} &middot; {% for decision in product.window_decisions %}<a href="#window-{{ decision }}">{{ decision }}</a>{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}</span></td>
+<td class="sequence-cell">{{ product.sequence_html or antigen.sequence_html }}{% if not antigen.target_coordinates_known %}<br><span class="note">Target coordinates unavailable or differ across sources.</span>{% endif %}{% if antigen.excluded_intervals %}<br><span class="badge badge-unsafe">Unsafe/self overlap (excluded)</span> <span class="note">{% for start, end in antigen.excluded_intervals %}[{{ start }}, {{ end }}){% if not loop.last %}, {% endif %}{% endfor %}{% if antigen.excluded_genes %} ({{ antigen.excluded_genes | join(', ') | e }}){% endif %}</span>{% endif %}</td>
+<td>{% if antigen.source_ids %}Sources: {% for source in antigen.source_ids %}<a href="#source-{{ source }}">{{ source }}</a>{% if not loop.last %}, {% endif %}{% endfor %}<br>{% endif %}<span class="note">{{ antigen.sources if antigen.sources is not none else "unavailable" }} mapping{{ "" if antigen.sources == 1 else "s" }}; {{ antigen.transcripts if antigen.transcripts is not none else "unavailable" }} transcript{{ "" if antigen.transcripts == 1 else "s" }}</span>{% if antigen.target_intervals %}<br><span class="note">Target: {% for start, end in antigen.target_intervals %}[{{ start }}, {{ end }}){% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}<br><a class="note" href="#product-label-{{ group.modality }}-{{ product.name | e }}-1">Antigen 1 label</a></td>
+{% if include_manufacturability %}<td class="note">{% if product.manufacturability %}{% for label, value in product.manufacturability | compact_manufacturability %}<span class="mfg-item"><span class="mfg-key">{{ label }}:</span> <strong>{{ value }}</strong></span>{% if not loop.last %} &middot; {% endif %}{% endfor %}{% else %}—{% endif %}</td>{% endif %}
+</tr>
+{% endfor %}</tbody></table>
+{% else %}
 {% for product in group.products %}
 <article class="product">
 <h4 id="product-{{ product.name | e }}">{{ product.display_name | e }} &middot; {{ product.length }} {{ product.unit }}</h4>
@@ -58,10 +81,11 @@ Emitted antigen sequences by type: {% for kind, count in group.assembly_decision
 {% else %}<p>Historical product: antigen placement/source mappings were not recorded. Labels: {{ product.antigen_names | join(', ') }}.</p>{% endif %}
 {% if include_manufacturability and product.manufacturability %}
 <div class="manufacturability"><span class="note"><strong>Manufacturability:</strong></span>
-<div class="mfg-grid">{% for key, value in product.manufacturability.items() %}<span class="mfg-item"><span class="mfg-key">{{ key | replace('_', ' ') }}:</span> <strong>{{ value }}</strong></span>{% endfor %}</div></div>
+<div class="mfg-grid">{% for key, value in product.manufacturability.items() %}<span class="mfg-item"><span class="mfg-key">{{ key | replace('_', ' ') }}:</span> <strong>{{ value }}</strong></span>{% if not loop.last %} &middot; {% endif %}{% endfor %}</div></div>
 {% endif %}
 </article>
 {% else %}<p>No {{ group.modality }} products were emitted.</p>{% endfor %}
+{% endif %}
 {% if group.assembly_decisions is defined and group.assembly_decisions is not none and group.assembly_decisions.rows %}
 <details class="audit-details">
 <summary>Packing decisions ({{ group.assembly_decisions.rows | length }} candidate sequences)</summary>

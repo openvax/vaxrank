@@ -46,7 +46,29 @@ def test_total_missing_source_budget_is_checked_before_any_download(tmp_path, no
         build_cta_host_reference(species, cache_root=tmp_path, local_overrides={}, max_bytes=budget)
 
 
-def test_mouse_candidate_seed_is_rejected_as_incomplete_host_before_acquisition(tmp_path, no_acquisition):
+def test_mouse_candidate_seed_is_rejected_as_incomplete_host_before_acquisition(
+    tmp_path, no_acquisition, monkeypatch,
+):
+    import copy
+    from types import SimpleNamespace
+
+    live_dict = copy.deepcopy(oncoref.mouse.cta_snapshot().as_dict())
+    live_prov = set(live_dict['references'][0]['identity']['content_provenance'])
+    # If the installed OncoRef ships a complete mouse host inventory (>=1.49.0),
+    # verify the live mouse snapshot enforces the transfer budget before acquisition.
+    if {'protein', 'gtf', 'rna', 'ncrna'} <= live_prov or {'protein', 'feature_table'} <= live_prov:
+        with pytest.raises(ValueError, match='needs .* bytes; transfer budget'):
+            build_cta_host_reference('mouse', cache_root=tmp_path, local_overrides={}, max_bytes=1_000_000)
+
+    # Regardless of installed OncoRef data version, an incomplete candidate-subset
+    # snapshot must be rejected before any asset acquisition.
+    incomplete_dict = copy.deepcopy(live_dict)
+    incomplete_dict['references'][0]['identity']['content_provenance'] = {'protein': '0' * 64}
+    incomplete_snapshot = SimpleNamespace(as_dict=lambda: incomplete_dict)
+    monkeypatch.setattr(
+        'oncoref.species_antigens.cta_snapshot',
+        lambda *args, **kwargs: incomplete_snapshot,
+    )
     with pytest.raises(ValueError, match='candidate subsets are insufficient'):
         build_cta_host_reference('mouse', cache_root=tmp_path, local_overrides={}, max_bytes=1_000_000)
 
