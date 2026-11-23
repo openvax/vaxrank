@@ -152,7 +152,11 @@ def test_released_species_cta_snapshots_keep_evidence_and_offline_identity(tmp_p
         assert mouse.coverage['status'] == 'unavailable'
     else:
         assert mouse.coverage['status'] == 'partial'
-        assert mouse.gene_ids(reference='p1a-refseq-rs2024-02') == frozenset({'22037'})
+        mouse_ref_ids = {ref['id'] for ref in mouse.as_dict()['references']}
+        if 'ensembl115' in mouse_ref_ids:
+            assert mouse.gene_ids(reference='ensembl115') == frozenset({'ENSMUSG00000051257'})
+        else:
+            assert mouse.gene_ids(reference='p1a-refseq-rs2024-02') == frozenset({'22037'})
         assert {candidate['id'] for candidate in mouse.candidates()} == {'P1A'}
         assert any(row['tissue_role'] == 'somatic' for row in mouse.evidence())
         assert all(row['sample_count'] is None and row['donor_count'] is None

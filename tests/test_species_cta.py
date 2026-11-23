@@ -228,9 +228,15 @@ def test_species_cta_partial_mouse_reference_remains_unsupported(tmp_path):
     identity = snapshot.as_dict()['references'][0]['identity']
     context = ReferenceContext(10090, 'mouse', 'GRCm39', identity['annotation_source'],
         identity['annotation_release'], assembly_accession=identity['assembly_accession'])
-    # A native nomination and a single-gene reference subset cannot substitute
-    # for the supported expression-mapping and complete-host inventory contract.
-    with pytest.raises(ValueError, match='candidate subsets are insufficient'):
+    # When OncoRef ships a complete mouse reference (1.49+), an empty
+    # HostReference still fails provenance validation; older candidate-subset
+    # references fail earlier with 'candidate subsets are insufficient'.
+    expected_msg = (
+        'source SHA-256'
+        if {'protein', 'gtf', 'rna', 'ncrna'} <= set(identity.get('content_provenance', {}))
+        else 'candidate subsets are insufficient'
+    )
+    with pytest.raises(ValueError, match=expected_msg):
         admit(tmp_path, reference=HostReference(Proteome(context, [])))
 
 

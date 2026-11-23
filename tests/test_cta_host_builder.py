@@ -46,7 +46,25 @@ def test_total_missing_source_budget_is_checked_before_any_download(tmp_path, no
         build_cta_host_reference(species, cache_root=tmp_path, local_overrides={}, max_bytes=budget)
 
 
-def test_mouse_candidate_seed_is_rejected_as_incomplete_host_before_acquisition(tmp_path, no_acquisition):
+def test_mouse_candidate_seed_is_rejected_as_incomplete_host_before_acquisition(
+    tmp_path, monkeypatch, no_acquisition,
+):
+    # A snapshot whose reference lacks the complete annotated inventory roles
+    # must still be rejected before any asset download, even after OncoRef
+    # upgraded its default mouse snapshot to a full Ensembl 115 reference.
+    from types import SimpleNamespace
+
+    snapshot = oncoref.mouse.cta_snapshot().as_dict()
+    incomplete_ref = dict(snapshot['references'][0])
+    incomplete_identity = dict(incomplete_ref['identity'])
+    incomplete_identity['content_provenance'] = {'protein': '0' * 64}
+    incomplete_ref['identity'] = incomplete_identity
+    snapshot['references'] = [incomplete_ref]
+    fake_snapshot = SimpleNamespace(as_dict=lambda: snapshot)
+    monkeypatch.setattr(
+        'oncoref.species_antigens.cta_snapshot', lambda *args, **kwargs: fake_snapshot,
+    )
+
     with pytest.raises(ValueError, match='candidate subsets are insufficient'):
         build_cta_host_reference('mouse', cache_root=tmp_path, local_overrides={}, max_bytes=1_000_000)
 
