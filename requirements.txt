@@ -4,7 +4,7 @@ numpy>=2.0.0,<3.0.0
 # The 1.11.1 floor is what inspect_files/Cache.inspect need: download_test_data
 # reports a per-file status (available/missing/corrupt/inaccessible) instead of
 # only raising, and 1.11.1 is the release that shortens over-long cache names.
-datacache>=1.14.0,<2.0.0
+datacache>=1.34.0,<2.0.0
 # Public data acquisition and original-read extraction for the osteosarc corpus.
 # 0.15.6 coordinates runtime and distribution versions for evidence provenance.
 osteosarc>=0.15.6,<0.16

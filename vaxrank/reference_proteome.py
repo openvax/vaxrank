@@ -27,7 +27,6 @@ import threading
 from functools import lru_cache
 from typing import Iterable, Optional
 
-from platformdirs import user_cache_dir
 from pyensembl import Genome
 from .progress import progress
 
@@ -270,14 +269,33 @@ def _protein_source_snapshot(genome):
     return snapshot
 
 
-def get_cache_dir() -> str:
-    """Get the cache directory for reference peptide indices."""
-    env_dir = os.environ.get("VAXRANK_REF_PEPTIDES_DIR")
-    if env_dir:
-        cache_dir = env_dir
-    else:
-        cache_dir = user_cache_dir("vaxrank")
-    os.makedirs(cache_dir, exist_ok=True)
+def resolve_cache_location():
+    """Resolve Vaxrank's cache directory and why it was chosen, without creating it.
+
+    Precedence: ``VAXRANK_REF_PEPTIDES_DIR`` -> ``OPENVAX_DATA_CACHE/vaxrank``
+    -> populated shared platform cache -> populated legacy platform cache
+    (``~/Library/Caches/vaxrank`` / ``~/.cache/vaxrank``) -> default shared
+    platform cache.
+    """
+    import datacache
+    from datacache.common import _platform_cache_dir
+
+    return datacache.resolve_cache_dir(
+        "vaxrank",
+        "VAXRANK_REF_PEPTIDES_DIR",
+        legacy=(_platform_cache_dir("vaxrank"),),
+    )
+
+
+def get_cache_dir(*, create: bool = False) -> str:
+    """Get the cache directory for reference peptide indices.
+
+    By default nothing is created on disk; pass ``create=True`` when preparing
+    to write a new index file.
+    """
+    cache_dir = resolve_cache_location().path
+    if create:
+        os.makedirs(cache_dir, exist_ok=True)
     return cache_dir
 
 
@@ -438,6 +456,7 @@ def load_kmer_set_index(
             _kmer_set_cache[cache_key] = kmers
             # Save as compressed for next time
             logger.info("Converting to compressed format: %s", path)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
             with gzip.open(path, "wb", compresslevel=6) as f:
                 pickle.dump(kmers, f, protocol=pickle.HIGHEST_PROTOCOL)
             return kmers
@@ -445,6 +464,7 @@ def load_kmer_set_index(
         kmers = build_kmer_set_index(genome, min_len, max_len)
 
         logger.info("Saving kmer set index to %s", path)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         with gzip.open(path, "wb", compresslevel=6) as f:
             pickle.dump(kmers, f, protocol=pickle.HIGHEST_PROTOCOL)
 
