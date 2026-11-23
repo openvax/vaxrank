@@ -33,12 +33,17 @@ from .varcode_effects import (
 logger = logging.getLogger(__name__)
 
 
-def find_mutation_region(reference_protein, mutant_protein):
+def find_mutation_region(reference_protein, mutant_protein, *, align_right=True):
     """Return the differing region between reference and mutant proteins.
 
     The returned offsets use zero-based, half-open coordinates in the mutant
     protein. Insertions span their inserted residues; deletions have an empty
     span at the deletion point.
+
+    When ``align_right`` is False (for frameshifts, which never re-align to
+    the reference C-terminus), the entire tail from the first altered residue
+    through ``len(mutant_protein)`` is returned instead of trimming
+    coincidental C-terminal amino-acid matches.
     """
     min_len = min(len(reference_protein), len(mutant_protein))
 
@@ -48,6 +53,9 @@ def find_mutation_region(reference_protein, mutant_protein):
         if reference_protein[i] != mutant_protein[i]:
             start = i
             break
+
+    if not align_right:
+        return start, len(mutant_protein)
 
     # Find where sequences re-align from the right
     ref_i = len(reference_protein)
@@ -64,6 +72,47 @@ def find_mutation_region(reference_protein, mutant_protein):
         return min_len, len(mutant_protein)
 
     return start, mut_i
+
+
+def _trim_three_prime_partner_suffix(protein, start, end, effect, *, min_match=5):
+    """Trim wildtype 3' partner suffix from an in-frame fusion protein.
+
+    For an in-frame fusion ``A[:j] + B[k:]``, comparing against the 5'
+    reference ``A`` marks all of ``B[k:]`` as altered (or trims a single
+    coincidental C-terminal residue if ``A[-1] == B[-1]``). Compare the
+    C-terminus of ``protein`` against the 3' partner's reference protein:
+    when at least ``min_match`` C-terminal residues match, trim that wildtype
+    suffix so only the novel junction (plus any chimeric breakpoint residues)
+    stays inside ``[start, end)``. Conversely, for cross-transcript fusions
+    whose C-terminus does not match the 3' partner (out-of-frame fusions),
+    undo tiny (< ``min_match``) coincidental C-terminal matches against the 5'
+    reference so the final out-of-frame residue(s) are not lost.
+    """
+    if end <= start:
+        return end
+    three_prime = (
+        getattr(effect, "three_prime_transcript", None)
+        or getattr(effect, "partner_transcript", None)
+    )
+    if three_prime is None or three_prime is getattr(effect, "transcript", None):
+        return end
+    partner_protein = getattr(three_prime, "protein_sequence", None)
+    if partner_protein:
+        mut_i = len(protein)
+        partner_i = len(partner_protein)
+        matched = 0
+        while mut_i > start and partner_i > 0:
+            if protein[mut_i - 1] == partner_protein[partner_i - 1]:
+                mut_i -= 1
+                partner_i -= 1
+                matched += 1
+            else:
+                break
+        if matched >= min_match:
+            return min(end, mut_i)
+    if 0 < len(protein) - end < min_match:
+        return len(protein)
+    return end
 
 
 def _compact_candidate_provenance(candidate):
@@ -143,7 +192,12 @@ def _dna_protein_candidates(variant, effects=None):
                     protein = model.mutant_protein_sequence
             if not protein or protein == reference:
                 continue
-            start, end = find_mutation_region(reference, protein)
+            is_frameshift = "frameshift" in type(effect).__name__.lower()
+            start, end = find_mutation_region(
+                reference, protein, align_right=not is_frameshift
+            )
+            if structural:
+                end = _trim_three_prime_partner_suffix(protein, start, end, effect)
             # A terminal truncation supplies no altered residues or internal
             # junction in the remaining protein. Internal deletions stay usable.
             if start >= len(protein):
@@ -536,13 +590,27 @@ class MutantProteinFragment(DataclassSerializable):
         if partner is not None and partner.id != transcript.id:
             transcripts.append(partner)
         mut_start, mut_end = selection["mutation_start"], selection["mutation_end"]
+        mut_len = mut_end - mut_start
 
-        # Extract a window of protein_sequence_length centered on the mutation
-        mutation_midpoint = (mut_start + mut_end) // 2
-        half_window = protein_sequence_length // 2
-        window_start = max(0, mutation_midpoint - half_window)
-        window_end = min(len(mut_protein), window_start + protein_sequence_length)
-        window_start = max(0, window_end - protein_sequence_length)
+        if mut_len <= 1:
+            # Point mutation or zero-length deletion/junction: center a
+            # protein_sequence_length window on the locus.
+            mutation_midpoint = (mut_start + mut_end) // 2
+            half_window = protein_sequence_length // 2
+            window_start = max(0, mutation_midpoint - half_window)
+            window_end = min(len(mut_protein), window_start + protein_sequence_length)
+            window_start = max(0, window_end - protein_sequence_length)
+        else:
+            # Multi-residue alteration (MNV, insertion, frameshift, stop-loss,
+            # cryptic exon, out-of-frame fusion): preserve the entire mutant
+            # span plus flanking context on both sides so downstream window
+            # selection scores junction and distal epitopes alike.
+            flank = max(0, (protein_sequence_length - 1) // 2)
+            window_start = max(0, mut_start - flank)
+            window_end = min(len(mut_protein), mut_end + flank)
+            if window_end - window_start < protein_sequence_length:
+                window_end = min(len(mut_protein), window_start + protein_sequence_length)
+                window_start = max(0, window_end - protein_sequence_length)
 
         amino_acids = mut_protein[window_start:window_end]
         local_mut_start = max(0, mut_start - window_start)
