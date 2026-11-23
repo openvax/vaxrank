@@ -1,17 +1,17 @@
 /* this is to fix HTML->PDF rendering on Debian: wkhtmltopdf screws up the 
 line heights otherwise */
-html { font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #182431; }
+html { font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #182431; }
 body { margin: 0; }
-@page { size: A4; margin: 16mm; }
+@page { size: A4; margin: 13mm; }
 * { box-sizing: border-box; }
-.pure-table { border-collapse: collapse; width: 100%; margin: 0.8em 0; font-size: 12px; }
-.pure-table th, .pure-table td { padding: 0.5em; text-align: left; vertical-align: top;
+.pure-table { border-collapse: collapse; width: 100%; margin: 0.55em 0; font-size: 11px; }
+.pure-table th, .pure-table td { padding: 0.32em 0.44em; text-align: left; vertical-align: top;
     border: 1px solid #b7c4cf; overflow-wrap: anywhere; word-wrap: break-word; }
 .pure-table th, .pure-table thead { background: #e9f0f4; font-weight: bold; }
 thead { display: table-header-group; }
 tr { page-break-inside: avoid; }
-h2 { margin-top: 1.8em; border-bottom: 2px solid #326681; padding-bottom: 0.3em; }
-h3, h4, h5 { page-break-after: avoid; }
+h2 { margin-top: 1.25em; margin-bottom: 0.45em; border-bottom: 2px solid #326681; padding-bottom: 0.25em; page-break-after: avoid; break-after: avoid; }
+h3, h4, h5 { page-break-after: avoid; break-after: avoid; }
 p { line-height: 1.45; }
 .sequence { font: 12px/1.5 monospace; white-space: pre-wrap; word-wrap: break-word;
     padding: 0.8em; background: #f2f6f8; border-left: 3px solid #326681; }
@@ -33,16 +33,21 @@ p { line-height: 1.45; }
 .somatic-callout { margin: 0.8em 0 1.2em; padding: 0.6em 0.8em; background: #f8fbfd; border-left: 3px solid #245d7a; }
 .somatic-callout > h3 { margin-top: 0; }
 .somatic-row td:first-child { border-left: 3px solid #245d7a; }
-details.audit-details { margin: 0.9em 0; }
-details.audit-details > summary { cursor: pointer; font-weight: bold; color: #245d7a; padding: 0.35em 0.55em; background: #f2f6f8; border: 1px solid #cdd8e0; border-radius: 3px; }
+details.audit-details { margin: 0.65em 0; }
+details.audit-details > summary { cursor: pointer; font-weight: bold; color: #245d7a; padding: 0.32em 0.52em; background: #f2f6f8; border: 1px solid #cdd8e0; border-radius: 3px; overflow-wrap: anywhere; word-wrap: break-word; word-break: break-word; }
 details:not([open]) > :not(summary) { display: none; }
 .product-antigens { table-layout: fixed; }
 .product-antigens th:nth-child(1) { width: 30%; }
 .product-antigens th:nth-child(2) { width: 35%; }
 .product-antigens th:nth-child(3) { width: 15%; }
 .product-antigens th:nth-child(4) { width: 20%; }
-.note { font-size: 11px; color: #465765; }
-.product { margin: 1.5em 0; }
+.compact-peptides { table-layout: fixed; font-size: 10.5px; }
+.compact-peptides th:nth-child(1) { width: 23%; }
+.compact-peptides th:nth-child(2) { width: 33%; }
+.compact-peptides th:nth-child(3) { width: 19%; }
+.compact-peptides th:nth-child(4) { width: 25%; }
+.note { font-size: 10.5px; color: #465765; }
+.product { margin: 1.1em 0; }
 .manufacturability table { width: 70%; }
 /* Keep long source IDs and run arguments within the printable page. */
 .pure-table { table-layout: fixed; }
@@ -72,7 +77,7 @@ a { color: #245d7a; }
 .models th:first-child { width: 28%; }
 .model-version { font-size: 11px; }
 .model-summary { page-break-inside: avoid; }
-.appendix { page-break-before: always; }
+.appendix { margin-top: 1.4em; }
 .target-epitopes { font-size: 11px; line-height: 1.5; }
 .target-epitopes .paired-sequences { width: 27%; }
 .target-epitopes .prediction-model { width: 21%; }
@@ -90,9 +95,9 @@ a { color: #245d7a; }
 @page { @bottom-right { content: counter(page) " / " counter(pages); font-size: 9px; color: #465765; } }
 .variant, .peptide-data { font-size: 11px; }
 .variant td, .peptide-data td { padding: 0.3em 0.5em; }
-.manufacturability { page-break-inside: avoid; margin-top: 0.4em; font-size: 11px; }
-.mfg-grid { display: flex; flex-wrap: wrap; gap: 0.25em 1em; margin: 0.25em 0 0; padding: 0.35em 0.55em; background: #f6f8fa; border: 1px solid #d5dfe6; }
-.mfg-item { white-space: nowrap; }
+.manufacturability { page-break-inside: avoid; margin-top: 0.35em; font-size: 10.5px; }
+.mfg-grid { display: block; margin: 0.2em 0 0; padding: 0.32em 0.5em; background: #f6f8fa; border: 1px solid #d5dfe6; line-height: 1.5; }
+.mfg-item { display: inline-block; white-space: nowrap; margin-right: 0.65em; }
 .mfg-key { color: #465765; }
 .longitudinal-table { font-size: 9px; table-layout: auto; }
 .longitudinal-table th, .longitudinal-table td { padding: 0.25em 0.3em; }
@@ -103,16 +108,20 @@ a { color: #245d7a; }
 .score-calculations th:first-child { width: 18%; }
 .score-calculations th:nth-child(2) { width: 43%; }
 /* The default biological overview keeps source evidence beside its sequence. */
-.antigen-biology { margin: 1.2em 0 1.8em; border-top: 1px solid #ccd6dc; padding-top: .5em; }
-.protein-context { margin: 0.5em 0; padding: 0.45em 0.6em; background: #f8fafb; border: 1px solid #d5dfe6; page-break-inside: avoid; }
-.protein-sequence { font-family: monospace; font-size: 9.5pt; line-height: 1.75; overflow-wrap: anywhere; word-break: break-all; }
+.antigen-biology { margin: 0.55em 0 0.7em; border-top: 1px solid #ccd6dc; padding-top: .35em; break-inside: avoid; page-break-inside: avoid; }
+.antigen-biology h3 { margin: 0 0 0.2em; font-size: 12px; }
+.protein-context { margin: 0.45em 0; padding: 0.4em 0.55em; background: #f8fafb; border: 1px solid #d5dfe6; page-break-inside: avoid; }
+.protein-sequence { font-family: monospace; font-size: 9.5pt; line-height: 1.7; overflow-wrap: anywhere; word-break: break-all; }
 #antigen-biology > .note, .comparison-label { page-break-after: avoid; }
-.source-kind { font-size: .8em; font-weight: normal; color: #34596a; }
-.biology-facts { display: grid; grid-template-columns: 13em 1fr; gap: .25em 1em; font-size: .9em; }
-.biology-facts dt { font-weight: bold; }
-.biology-facts dd { margin: 0; }
-.biology-sequence, .biology-comparison { font-family: monospace; font-size: 10pt; overflow-wrap: anywhere; }
-.biology-comparison { line-height: 1.35; padding: .5em; background: #f4f6f7; break-inside: avoid; }
-.comparison-label, .junction-description { margin-bottom: .25em; font-size: .9em; }
+.source-kind { font-size: .85em; font-weight: normal; color: #34596a; }
+.biology-facts { margin: 0.15em 0 0.3em; font-size: 10.5px; line-height: 1.4; }
+.biology-facts dt, .biology-facts dd { display: inline; margin: 0; }
+.biology-facts dt { font-weight: bold; color: #34495e; }
+.biology-facts dt::after { content: ": "; }
+.biology-facts dd::after { content: " \00b7  "; color: #6b7b88; }
+.biology-facts dd:last-of-type::after { content: ""; }
+.biology-sequence, .biology-comparison { font-family: monospace; font-size: 9.5pt; overflow-wrap: anywhere; }
+.biology-comparison { margin: 0.2em 0 0; line-height: 1.25; padding: 0.35em 0.5em; background: #f4f6f7; break-inside: avoid; }
+.comparison-label, .junction-description { margin: 0.25em 0 0.15em; font-size: 10.5px; color: #465765; }
 
 .source-identifier { overflow-wrap: anywhere; word-wrap: break-word; word-break: break-all; }

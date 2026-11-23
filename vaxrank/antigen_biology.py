@@ -204,11 +204,16 @@ def antigen_biology(antigen, *, source_evidence=None, peptides=(), protein_conte
     result = evidence.get('isovar_result', {})
     origin = biology_origin(antigen, result=result, candidates=candidates, peptides=peptides)
     if origin is not None:
+        from .report_display import compact_allele
         for variant in origin.variants:
             facts.append(('Variant type', variant.variant_type + (':' + variant.sv_type if variant.sv_type else '')))
             if variant.contig and variant.start is not None:
                 facts.append(('Variant', '%s:%s %s → %s' % (
-                    variant.contig, variant.start, variant.ref or '∅', variant.alt or '∅')))
+                    variant.contig,
+                    variant.start,
+                    compact_allele(variant.ref) or '∅',
+                    compact_allele(variant.alt) or '∅',
+                )))
             if variant.end is not None and (variant.sv_type != 'BND' or variant.end != variant.start):
                 facts.append(('End coordinate', str(variant.end)))
             if variant.mate_contig:
@@ -274,14 +279,61 @@ def antigen_biology(antigen, *, source_evidence=None, peptides=(), protein_conte
                     **sequence_difference(original, reference, antigen.source_protein_offset,
                                           antigen.source_protein_offset + len(antigen.amino_acids))))
     if not comparisons:
+        # Merge overlapping equal-length recorded epitope comparators into one
+        # contiguous window comparison per label (zero annotation queries; uses
+        # only recorded comparators) instead of emitting a separate grey box
+        # for every overlapping 8-11-mer.
+        by_label = {}
         for peptide in peptides:
             for epitope in peptide.epitopes:
                 comparator = epitope.reference_comparator
                 if comparator is not None and comparator.sequence:
-                    comparison = dict(label='Patient background' if epitope.comparison_evidence else 'Reference peptide',
-                                      **sequence_difference(epitope.sequence, comparator.sequence))
-                    if comparison not in comparisons:
-                        comparisons.append(comparison)
+                    label = 'Patient background' if epitope.comparison_evidence else 'Reference peptide'
+                    by_label.setdefault(label, []).append((epitope, comparator.sequence))
+        for label, pairs in by_label.items():
+            ref_by_pos = {}
+            consistent = True
+            for epitope, comp_seq in pairs:
+                off = getattr(epitope, 'offset', None)
+                if (
+                    off is None
+                    or len(comp_seq) != len(epitope.sequence)
+                    or antigen.amino_acids[off:off + len(epitope.sequence)] != epitope.sequence
+                ):
+                    consistent = False
+                    break
+                for i, ch in enumerate(comp_seq):
+                    pos = off + i
+                    prev = ref_by_pos.get(pos)
+                    if prev is not None and prev != ch:
+                        consistent = False
+                        break
+                    ref_by_pos[pos] = ch
+                if not consistent:
+                    break
+            if consistent and ref_by_pos:
+                cov_start = min(ref_by_pos)
+                cov_end = max(ref_by_pos) + 1
+                if len(ref_by_pos) == cov_end - cov_start:
+                    ref_slice = ''.join(ref_by_pos[p] for p in range(cov_start, cov_end))
+                    tum_slice = antigen.amino_acids[cov_start:cov_end]
+                    diff = sequence_difference(tum_slice, ref_slice)
+                    diff['tumor_start'] = antigen.source_protein_offset + cov_start + 1
+                    diff['tumor_end'] = antigen.source_protein_offset + cov_end
+                    diff['reference_start'] = diff['tumor_start']
+                    diff['reference_end'] = diff['tumor_end']
+                    comparisons.append(dict(label=label, **diff))
+                    continue
+            # Fallback when comparators differ in length or are disjoint: keep
+            # the single highest-scoring representative epitope comparator.
+            best_ep, best_comp = max(
+                pairs,
+                key=lambda item: (getattr(item[0], 'score', 0.0) or 0.0),
+            )
+            comparisons.append(dict(
+                label=label,
+                **sequence_difference(best_ep.sequence, best_comp),
+            ))
     targeting = []
     from .cta_targeting import targeting_evidence, matching_gene_summary
     for peptide in peptides:

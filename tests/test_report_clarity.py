@@ -431,3 +431,99 @@ def test_direct_coverage_and_variant_counts_handle_none_coding_effect():
     assert obs['counts']['coding_with_rna_protein'] == 1
     assert obs['counts']['with_candidate_windows'] == 1
     assert obs['variant_outcomes'][1]['is_coding_nonsynonymous'] is None
+
+
+def test_compact_variant_labels_and_single_window_biology_alignment():
+    from vaxrank.antigen_biology import antigen_biology
+    from vaxrank.report_display import compact_allele, compact_variant_label
+
+    long_del = 'G' + 'A' * 736
+    assert compact_allele('A') == 'A'
+    assert compact_allele('TAGTGC') == 'TAGTGC'
+    assert compact_allele(long_del) == 'GAAAAA…(737bp)'
+    assert compact_variant_label('chr14 g.101980529G>A') == 'chr14 g.101980529G>A'
+    assert compact_variant_label('chr2 g.189010890_189011626del' + long_del) == (
+        'chr2 g.189010890_189011626del (737 bp)'
+    )
+
+    # Multiple overlapping epitopes on one SNV window must merge into ONE
+    # contiguous alignment without triggering annotation queries.
+    antigen, peptides = ranked_pair()[0]
+    antigen = replace(antigen, amino_acids='HGKRFHATISFAK')
+    ep1 = replace(peptides[0].epitopes[0], source_sequence=antigen.amino_acids, offset=2)
+    ep2 = replace(
+        ep1, sequence='RFHATISFA', offset=3,
+        per_allele_scores={'HLA-B*27:05': 0.5},
+        comparators={'wt': Peptide(sequence='RFHATVSFA', predictions=[prediction(value=120.0)])},
+    )
+    ep3 = replace(
+        ep1, sequence='FHATISFAK', offset=4,
+        per_allele_scores={'HLA-B*27:05': 0.3},
+        comparators={'wt': Peptide(sequence='FHATVSFAK', predictions=[prediction(value=150.0)])},
+    )
+    vp_multi = VaccinePeptide(antigen=antigen, epitopes=[ep1, ep2, ep3])
+    bio_merged = antigen_biology(antigen, peptides=[vp_multi])
+    assert len(bio_merged['comparisons']) == 1
+    assert bio_merged['comparisons'][0]['tumor'] == 'KRFHATISFAK'
+    assert bio_merged['comparisons'][0]['reference'] == 'KRFHATVSFAK'
+    assert bio_merged['comparisons'][0]['tumor_start'] == 3
+    assert bio_merged['comparisons'][0]['tumor_end'] == 13
+
+
+def test_compact_simple_peptide_table_and_collapsible_large_ledgers():
+    from vaxrank.peptide import PeptideConstructConfig, assemble_peptide_constructs
+    from vaxrank.report_display import compact_manufacturability
+
+    assert compact_manufacturability({
+        'cterm_7mer_gravy_score': '-0.55714',
+        'max_7mer_gravy_score': '0.9',
+        'cysteine_count': '0',
+        'n_terminal_methionine': '0',
+        'aspartate_proline_bond_count': '0',
+    }) == (('C-term GRAVY', '-0.56'), ('Max GRAVY', '0.9'), ('Flags', 'all 0'))
+    assert compact_manufacturability({
+        'cterm_7mer_gravy_score': 0.1,
+        'max_7mer_gravy_score': 1.5,
+        'cysteine_count': '2',
+        'n_terminal_methionine': '0',
+    }) == (('C-term GRAVY', '0.1'), ('Max GRAVY', '1.5'), ('Cys', '2'))
+
+    # Distinct sequences so each peptide has 1 unique source mapping.
+    seqs = ['SIINFEKLA', 'GILGFVFTL', 'NLVPMVATV']
+    ranked = [candidate(i, sequence=seqs[i], prefix='AA') for i in range(3)]
+    products = assemble_peptide_constructs(ranked, PeptideConstructConfig())
+    data = TemplateDataCreator(
+        ranked, PatientInfo('compact-test'), final_review='', reviewers='',
+        args_for_report={'manufacturability': True, 'wt_epitopes': True},
+        input_json_file=None, products={'peptide': products},
+    ).compute_template_data()
+    html = render(data, 'html')
+    assert 'class="pure-table pure-table-bordered compact-peptides"' in html
+    assert 'id="product-' in html
+    assert 'C-term GRAVY:' in html
+    # Manufacturability metrics have explicit separators so pdfkit never jams them together.
+    assert '</span> &middot; <span class="mfg-item">' in html
+
+    # Large direct variant_outcomes (>20) collapse into <details class="audit-details">.
+    data['input_coverage']['direct'] = [{
+        'input_id': 'vcf_bam:test',
+        'producer_version': '3.68.0',
+        'unit': 'parsed variant records',
+        'stage': 'original direct pipeline',
+        'counts': {'loaded': 25, 'annotatable': 25, 'coding_effect': 25,
+                   'coding_with_rna_protein': 0, 'with_candidate_windows': None},
+        'isovar_filter_thresholds': {},
+        'variant_outcomes': [
+            {
+                'gene_name': f'G{i}', 'contig': '1', 'start': 100 + i,
+                'ref': 'A' * 40 if i == 0 else 'A', 'alt': 'T',
+                'is_coding_nonsynonymous': True, 'rna_support': False,
+                'has_vaccine_peptide': None, 'isovar_filter_results': {'rna_support': False},
+            }
+            for i in range(25)
+        ],
+        'annotation_unavailable': [],
+    }]
+    html_big = render(data, 'html')
+    assert '<summary>Original variant outcomes: vcf_bam:test (25 variants)</summary>' in html_big
+    assert 'AAAAAA…(40bp)&gt;T' in html_big

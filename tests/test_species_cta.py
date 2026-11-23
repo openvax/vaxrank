@@ -222,10 +222,26 @@ def test_species_cta_unavailable_evidence_is_explicit(tmp_path, monkeypatch):
 
 @pytest.mark.skipif(Version(oncoref.__version__) < Version('1.22.1'),
                     reason='Native mouse P1A evidence was added in OncoRef 1.22.1')
-def test_species_cta_partial_mouse_reference_remains_unsupported(tmp_path):
+def test_species_cta_partial_mouse_reference_remains_unsupported(tmp_path, monkeypatch):
+    import copy
+
     snapshot = oncoref.mouse.cta_snapshot()
     assert snapshot.coverage['status'] == 'partial'
-    identity = snapshot.as_dict()['references'][0]['identity']
+    incomplete_dict = copy.deepcopy(snapshot.as_dict())
+    identity = incomplete_dict['references'][0]['identity']
+    # Exercise candidate-subset rejection independently of OncoRef upgrading
+    # mouse to a complete annotated host inventory (>=1.49.0).
+    identity['content_provenance'] = {'protein': '0' * 64}
+    incomplete_snapshot = SimpleNamespace(
+        taxon_id=10090,
+        coverage=snapshot.coverage,
+        as_dict=lambda: incomplete_dict,
+        candidates=snapshot.candidates,
+    )
+    monkeypatch.setattr(
+        'oncoref.species_antigens.cta_snapshot',
+        lambda *args, **kwargs: incomplete_snapshot,
+    )
     context = ReferenceContext(10090, 'mouse', 'GRCm39', identity['annotation_source'],
         identity['annotation_release'], assembly_accession=identity['assembly_accession'])
     # When OncoRef ships a complete mouse reference (1.49+), an empty

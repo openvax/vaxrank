@@ -27,11 +27,19 @@ they are not disjoint losses. “No ranked window” does not identify a biologi
 <h3>Unresolved reference models: {{ producer.family }} / {{ producer.sample or 'Unknown' }} ({{ producer.event_label | e }})</h3>
 <p>Producer evidence identity: {{ producer.identity | e }}</p><ul>{% for model in producer.unresolved %}
 <li>{{ model.identity | e }} {{ model.context | e }}: {{ model.reason | e }}{% if model.status %} ({{ model.status | e }}){% endif %}</li>{% endfor %}</ul>{% endif %}{% endfor %}
-{% for original in input_coverage.direct %}<p>Recorded Isovar thresholds: {{ original.isovar_filter_thresholds | tojson | e }}. Failed RNA filters alone do not establish final exclusion when DNA fallback is enabled.</p><h3>Original variant outcomes: {{ original.input_id | e }}</h3>
+{% for original in input_coverage.direct %}<p>Recorded Isovar thresholds: {{ original.isovar_filter_thresholds | tojson | e }}. Failed RNA filters alone do not establish final exclusion when DNA fallback is enabled.</p>
+{% set n_direct_rows = (original.variant_outcomes | length) + (original.annotation_unavailable | length) %}
+{% if n_direct_rows > 20 %}
+<details class="audit-details">
+<summary>Original variant outcomes: {{ original.input_id | e }} ({{ n_direct_rows }} variants)</summary>
+{% else %}
+<h3>Original variant outcomes: {{ original.input_id | e }}</h3>
+{% endif %}
 <table class="pure-table pure-table-bordered"><thead><tr><th>Variant</th><th>Coding effect</th><th>RNA protein</th><th>Candidate window</th><th>Isovar filter outcomes</th></tr></thead><tbody>
-{% for row in original.variant_outcomes %}<tr><td>{{ row.gene_name | e }} {{ row.contig }}:{{ row.start }} {{ row.ref }}&gt;{{ row.alt }}</td>
+{% for row in original.variant_outcomes %}<tr><td>{{ row.gene_name | e }} {{ row.contig }}:{{ row.start }} {{ row.ref | compact_allele | e }}&gt;{{ row.alt | compact_allele | e }}</td>
 {% for key in ('is_coding_nonsynonymous', 'rna_support', 'has_vaccine_peptide') %}<td>{{ ('Yes' if row[key] else 'No') if row[key] is not none else 'Not assessed at this stage' }}</td>{% endfor %}<td>{% if row.isovar_filter_results %}{% for name, passed in row.isovar_filter_results.items() %}{{ name | e }}: {{ 'Pass' if passed else 'Fail' }}<br>{% endfor %}{% else %}Not recorded{% endif %}</td></tr>{% endfor %}
-{% for row in original.annotation_unavailable %}<tr><td>{{ row.contig }}:{{ row.start }} {{ row.ref }}&gt;{{ row.alt }}</td><td colspan="4">Annotation result unavailable</td></tr>{% endfor %}</tbody></table>{% endfor %}
+{% for row in original.annotation_unavailable %}<tr><td>{{ row.contig }}:{{ row.start }} {{ row.ref | compact_allele | e }}&gt;{{ row.alt | compact_allele | e }}</td><td colspan="4">Annotation result unavailable</td></tr>{% endfor %}</tbody></table>
+{% if n_direct_rows > 20 %}</details>{% endif %}{% endfor %}
 {% for expression in input_coverage.expression %}
 {% if expression.decisions | length > 10 %}
 <details class="audit-details">
