@@ -63,6 +63,16 @@ def test_find_mutation_region_frameshift():
     assert end == 6  # everything from pos 3 onward differs
 
 
+def test_find_mutation_region_frameshift_no_right_align():
+    """Frameshifts must not lose terminal residues that coincidentally match WT."""
+    ref = "ABCDEFGH"
+    assert find_mutation_region(ref, "ABCXYH", align_right=False) == (3, 6)
+    # A 1-aa frameshift truncation matching the WT last residue must not collapse to a deletion.
+    assert find_mutation_region(ref, "ABCH", align_right=False) == (3, 4)
+    # Pure terminal truncation (no altered residues) still yields start == len(mut).
+    assert find_mutation_region(ref, "ABC", align_right=False) == (3, 3)
+
+
 def test_find_mutation_region_identical():
     ref = "ABCDEFGH"
     start, end = find_mutation_region(ref, ref)
@@ -99,11 +109,21 @@ def test_from_variant_dna_substitution(genome):
 
 
 def test_from_variant_dna_frameshift(genome):
-    """TP53 frameshift should produce a valid fragment with extended mutation region."""
+    """TP53 frameshift should preserve the full frameshift tail plus N-terminal flank."""
     v = varcode.Variant(contig='17', start=7577121, ref='G', alt='', genome=genome)
     frag = MutantProteinFragment.from_variant_dna(v, protein_sequence_length=35)
     assert frag is not None
-    assert len(frag.amino_acids) <= 35
+    effect = frag.predicted_effect()
+    mut_protein = effect.mutant_protein_sequence
+    mut_start = frag.dna_effect_selection["mutation_start"]
+    mut_end = frag.dna_effect_selection["mutation_end"]
+    assert mut_end == len(mut_protein)
+    # Full frameshift tail is retained (not truncated to 35 aa) with upstream flank.
+    assert frag.amino_acids[
+        frag.mutant_amino_acid_start_offset:frag.mutant_amino_acid_end_offset
+    ] == mut_protein[mut_start:mut_end]
+    assert frag.mutant_amino_acid_start_offset == min(mut_start, 17)
+    assert frag.mutant_amino_acid_end_offset == len(frag.amino_acids)
     assert frag.n_alt_reads == 0
     assert frag.gene_name == "TP53"
 
@@ -236,13 +256,13 @@ def test_dna_fusion_selects_usable_alternative(fusion_candidates, primary_kind):
     assert select_varcode_effect_outcome(primary) is primary
     fragment = MutantProteinFragment.from_variant_dna(variant, 35)
     assert fragment is not None
-    assert fragment.amino_acids == changed[28:63]
-    assert fragment.mutant_amino_acid_start_offset == 12
-    assert fragment.mutant_amino_acid_end_offset == 22
+    assert fragment.amino_acids == changed[23:67]
+    assert fragment.mutant_amino_acid_start_offset == 17
+    assert fragment.mutant_amino_acid_end_offset == 27
     assert fragment.predicted_effect() is alternative
     assert fragment.predicted_effect("multi_outcome") is primary
     assert fragment.predicted_effect("most_likely") is primary
-    assert fragment.global_start_pos() == 28
+    assert fragment.global_start_pos() == 23
     assert fragment.supporting_reference_transcripts == [transcript, partner]
     selection = fragment.dna_effect_selection
     assert selection["transcript_id"] == transcript.id
@@ -384,9 +404,93 @@ def test_dna_wide_change_preserves_actual_window_coordinates(fusion_candidates):
     variant, _, alternative = build(None, changed)
     fragment = MutantProteinFragment.from_variant_dna(variant, 35)
     start = fragment.global_start_pos()
-    assert start == 103
-    assert fragment.amino_acids == changed[start:start + 35]
+    assert start == 23
+    assert fragment.amino_acids == changed[23:217]
+    assert fragment.mutant_amino_acid_start_offset == 17
+    assert fragment.mutant_amino_acid_end_offset == 177
     for offset, part in fragment.generate_subsequences(25):
         assert part.global_start_pos() == start + offset
         assert part.amino_acids == changed[start + offset:start + offset + 25]
         assert part.predicted_effect() is alternative
+
+
+def test_dna_long_frameshift_preserves_full_tail_and_coincidental_c_terminus(genome):
+    """Long frameshifts keep the entire tail + upstream flank, even if the last AA matches WT."""
+    from varcode.effects import FrameShift
+
+    transcript = genome.transcript_by_id("ENST00000003084")  # CFTR
+    reference = transcript.protein_sequence
+    # 79 novel residues + 1 residue deliberately matching reference[-1]
+    tail = ("AHSGRDRPWSGKESTGAIPKEVPGPSWSLLDLKTGSCTSRWESAWSGLSPRTGRCGSEEASTLTIPAAPVGLRWLVRWQ"
+            + reference[-1])
+    assert len(tail) == 80
+    mut_protein = reference[:250] + tail
+    variant = varcode.Variant("7", 117171154, "T", "", genome)
+    effect = FrameShift(variant, transcript, 250, tail)
+    fragment = MutantProteinFragment.from_variant_dna(variant, 35, effects=[effect])
+    assert fragment is not None
+    # Full 80-aa tail (including coincidental reference[-1]) + 17-aa upstream WT flank = 97 aa
+    assert fragment.dna_effect_selection["mutation_start"] == 250
+    assert fragment.dna_effect_selection["mutation_end"] == 330
+    assert fragment.global_start_pos() == 233
+    assert fragment.amino_acids == mut_protein[233:330]
+    assert fragment.mutant_amino_acid_start_offset == 17
+    assert fragment.mutant_amino_acid_end_offset == 97
+
+
+def test_dna_in_frame_fusion_centers_on_junction(fusion_candidates):
+    """In-frame A::B fusions trim the wildtype 3' partner suffix and center on the junction."""
+    build, reference, _changed, _transcript, partner = fusion_candidates
+    partner_seq = partner.protein_sequence
+    fusion_protein = reference[:200] + partner_seq[100:]
+    variant, _, _ = build(None, fusion_protein)
+    fragment = MutantProteinFragment.from_variant_dna(variant, 35)
+    assert fragment is not None
+    assert fragment.dna_effect_selection["mutation_start"] == 200
+    assert fragment.dna_effect_selection["mutation_end"] == 200
+    assert len(fragment.amino_acids) == 35
+    assert fragment.global_start_pos() == 183
+    assert fragment.amino_acids == fusion_protein[183:218]
+    assert fragment.mutant_amino_acid_start_offset == 17
+    assert fragment.mutant_amino_acid_end_offset == 17
+    # Only peptides spanning the junction overlap the mutation.
+    assert fragment.interval_overlaps_mutation(12, 21)
+    assert not fragment.interval_overlaps_mutation(17, 26)
+    assert not fragment.interval_overlaps_mutation(8, 17)
+
+
+def test_dna_out_of_frame_fusion_preserves_full_novel_tail(fusion_candidates):
+    """Out-of-frame fusions keep the full novel C-terminal tail plus 5' flank."""
+    build, reference, _changed, _transcript, _partner = fusion_candidates
+    # Include a coincidental reference[-1] at the C-terminus to ensure it is not trimmed.
+    novel_tail = "WQ" * 29 + "W" + reference[-1]  # 60 novel residues
+    fusion_protein = reference[:200] + novel_tail
+    variant, _, _ = build(None, fusion_protein)
+    fragment = MutantProteinFragment.from_variant_dna(variant, 35)
+    assert fragment is not None
+    assert fragment.dna_effect_selection["mutation_start"] == 200
+    assert fragment.dna_effect_selection["mutation_end"] == 260
+    assert fragment.global_start_pos() == 183
+    assert fragment.amino_acids == fusion_protein[183:260]
+    assert fragment.mutant_amino_acid_start_offset == 17
+    assert fragment.mutant_amino_acid_end_offset == 77
+
+
+def test_dna_stop_loss_preserves_full_extension(genome):
+    """Stop-loss extensions preserve the entire C-terminal extension plus upstream flank."""
+    from varcode.effects import StopLoss
+
+    transcript = genome.transcript_by_id("ENST00000003084")
+    reference = transcript.protein_sequence
+    extension = "WQ" * 25  # 50-aa C-terminal extension
+    mut_protein = reference + extension
+    variant = varcode.Variant("7", 117171154, "T", "A", genome)
+    effect = StopLoss(variant, transcript, "", extension)
+    fragment = MutantProteinFragment.from_variant_dna(variant, 35, effects=[effect])
+    assert fragment is not None
+    assert fragment.dna_effect_selection["mutation_start"] == len(reference)
+    assert fragment.dna_effect_selection["mutation_end"] == len(mut_protein)
+    assert fragment.global_start_pos() == len(reference) - 17
+    assert fragment.amino_acids == mut_protein[len(reference) - 17:]
+    assert fragment.mutant_amino_acid_start_offset == 17
+    assert fragment.mutant_amino_acid_end_offset == 67
