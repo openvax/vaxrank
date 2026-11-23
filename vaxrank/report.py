@@ -37,6 +37,9 @@ from .report_grouping import (group_report_evidence, prediction_origins, predict
 from .prediction_input import finite_prediction_value
 from .processing import PEPSICKLE_PREDICTOR_NAME, resolve_peptide_offset
 from .report_display import (
+    compact_allele,
+    compact_manufacturability,
+    compact_variant_label,
     effective_target_intervals,
     epitope_display,
     marked_sequence,
@@ -73,6 +76,9 @@ def display_epitope_value(value):
 
 
 JINJA_ENVIRONMENT.filters["display_epitope_value"] = display_epitope_value
+JINJA_ENVIRONMENT.filters["compact_allele"] = compact_allele
+JINJA_ENVIRONMENT.filters["compact_manufacturability"] = compact_manufacturability
+JINJA_ENVIRONMENT.filters["compact_variant"] = compact_variant_label
 
 _ROMAN_NUMERALS = (
     (1000, "M"), (900, "CM"), (500, "D"), (400, "CD"),
@@ -997,7 +1003,7 @@ class TemplateDataCreator(object):
         if top.antigen.kind != 'CTA':
             frag = getattr(top, 'mutant_protein_fragment', None)
             if frag is not None and getattr(frag, 'variant', None) is not None:
-                variant_label = frag.variant.short_description
+                variant_label = compact_variant_label(frag.variant.short_description)
             else:
                 candidates = isovar_candidates(top.antigen)
                 identities = [value for key, value in top.antigen.source_metadata if key == 'isovar_evidence_id']
@@ -1007,7 +1013,12 @@ class TemplateDataCreator(object):
                 if origin is not None and origin.variants:
                     v = origin.variants[0]
                     if v.contig and v.start is not None:
-                        variant_label = '%s:%s %s→%s' % (v.contig, v.start, v.ref or '∅', v.alt or '∅')
+                        variant_label = '%s:%s %s→%s' % (
+                            v.contig,
+                            v.start,
+                            compact_allele(v.ref) or '∅',
+                            compact_allele(v.alt) or '∅',
+                        )
                     elif v.sv_type:
                         variant_label = '%s:%s' % (v.variant_type, v.sv_type)
 
@@ -1693,8 +1704,9 @@ def _pdf_via_pdfkit(html_path, pdf_report_path):
 
     options = {
         'page-size': 'A4',
-        'margin-top': '16mm', 'margin-bottom': '16mm',
-        'margin-left': '16mm', 'margin-right': '16mm'
+        'margin-top': '13mm', 'margin-bottom': '13mm',
+        'margin-left': '13mm', 'margin-right': '13mm',
+        'disable-smart-shrinking': '',
     }
 
     if sys.platform in ('linux', 'linux2'):

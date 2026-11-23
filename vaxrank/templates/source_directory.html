@@ -16,8 +16,20 @@
 {% if source.context %}<br>{{ source.context | e }}{% endif %}<br>{{ source.origin | e }}
 {% for label, value in source.rows %}<br>{{ label | e }}: {{ value | e }}{% endfor %}</td></tr>{% endfor %}</tbody></table>
 {% endif %}{% endif %}
-{% for group in product_groups %}{% if group.products %}<h3>Recorded {{ group.modality }} antigen labels</h3>
+{% for group in product_groups %}{% if group.products %}
+{% set label_count = namespace(total=0) %}{% for product in group.products %}{% set label_count.total = label_count.total + (product.antigens | length) %}{% endfor %}
+{% if label_count.total > 10 %}
+<details class="audit-details">
+<summary>Recorded {{ group.modality }} antigen labels ({{ label_count.total }} entries)</summary>
 <table class="pure-table"><thead><tr><th>Product / antigen</th><th>Full saved label</th></tr></thead><tbody>
 {% for product in group.products %}{% for antigen in product.antigens %}
 <tr id="product-label-{{ group.modality }}-{{ product.name | e }}-{{ loop.index }}"><th>{{ product.name }} / antigen {{ loop.index }}</th><td>{{ antigen.name | e }}</td></tr>
-{% endfor %}{% endfor %}</tbody></table>{% endif %}{% endfor %}
+{% endfor %}{% endfor %}</tbody></table>
+</details>
+{% else %}
+<h3>Recorded {{ group.modality }} antigen labels</h3>
+<table class="pure-table"><thead><tr><th>Product / antigen</th><th>Full saved label</th></tr></thead><tbody>
+{% for product in group.products %}{% for antigen in product.antigens %}
+<tr id="product-label-{{ group.modality }}-{{ product.name | e }}-{{ loop.index }}"><th>{{ product.name }} / antigen {{ loop.index }}</th><td>{{ antigen.name | e }}</td></tr>
+{% endfor %}{% endfor %}</tbody></table>
+{% endif %}{% endif %}{% endfor %}
