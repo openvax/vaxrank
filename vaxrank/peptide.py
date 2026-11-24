@@ -108,6 +108,7 @@ class PeptideConstructConfig:
     scale_mg: float = 5.0           # synthesis scale per peptide
     purity_percent: float = 95.0    # HPLC purity target
     counterion: str = "TFA"         # default salt form (TFA / acetate / HCl / free)
+    num_pools: int = 1              # formulation injection pools (>1 partitions by MHC/physicochemical balance)
     window_selection: dict | None = None
 
     def __post_init__(self):
@@ -146,6 +147,9 @@ class PeptideConstructConfig:
             raise ValueError(
                 "antigen_content must be 'mutation_spanning' or "
                 "'minimal_epitope'; got %r" % self.antigen_content)
+        if isinstance(self.num_pools, bool) or not isinstance(self.num_pools, int) or self.num_pools < 1:
+            raise ValueError(
+                "num_pools must be a positive integer; got %r" % (self.num_pools,))
         if self.window_selection is not None:
             from .window_selection import WindowSelection
             WindowSelection.resolve(self.window_selection)
@@ -168,6 +172,11 @@ class PeptideConstruct:
     def antigen_sources(self):
         """Separate source mappings for each emitted antigen segment."""
         return {a['name']: a['sources'] for a in self.antigens if a.get('sources')}
+
+    @property
+    def pool(self):
+        """1-based formulation pool number when multi-pool partitioning is active."""
+        return self.components.get('pool')
 
     def __post_init__(self):
         self.construct_placements = tuple(self.construct_placements)
@@ -295,6 +304,16 @@ def assemble_peptide_constructs(
             name=_peptide_construct_name(len(constructs) + 1, group),
             sequence=sequence, antigen_names=names, antigens=segments,
             components=components, manufacturability=_manufacturability_for(sequence)))
+    if options.num_pools > 1 and constructs:
+        from .peptide_pools import partition_peptide_constructs
+        pool_summary = partition_peptide_constructs(
+            constructs,
+            options.num_pools,
+            ranked_vaccine_peptides=ranked_vaccine_peptides,
+            target_alleles=target_alleles,
+        )
+        if pool_summary is not None:
+            selection_audit['pool_partition'] = pool_summary
     record_assembly_decisions(selection_audit, antigens, constructs, target_alleles, exclusions)
     return constructs
 
@@ -399,11 +418,14 @@ def write_peptide_outputs(constructs, fasta_path, manifest_path=None,
         placement.construct.chemical_modifications
         for c in constructs for placement in c.construct_placements)
 
+    has_pools = any(c.pool is not None for c in constructs)
+
     with open(fasta_path, 'w') as f:
         for c in constructs:
             genes = product_gene_names(c)
-            f.write(">%s antigens=%s length=%d genes=%s\n" % (
-                c.name, ','.join(c.antigen_names), len(c.sequence),
+            pool_tok = ("pool=%d " % c.pool) if c.pool is not None else ""
+            f.write(">%s %santigens=%s length=%d genes=%s\n" % (
+                c.name, pool_tok, ','.join(c.antigen_names), len(c.sequence),
                 ','.join(genes)))
             for i in range(0, len(c.sequence), 80):
                 f.write(c.sequence[i:i + 80] + "\n")
@@ -413,6 +435,7 @@ def write_peptide_outputs(constructs, fasta_path, manifest_path=None,
             {
                 'modality': 'peptide',
                 'name': c.name,
+                **({'pool': c.pool} if c.pool is not None else {}),
                 'sequence': c.sequence,
                 'length': len(c.sequence),
                 'length_unit': 'aa',
@@ -431,8 +454,11 @@ def write_peptide_outputs(constructs, fasta_path, manifest_path=None,
     if order_form_path:
         with open(order_form_path, 'w', newline='') as f:
             writer = csv.writer(f)
-            header = ['name', 'sequence', 'length',
-                      'n_terminal_modification', 'c_terminal_modification']
+            header = ['name']
+            if has_pools:
+                header.append('pool')
+            header += ['sequence', 'length',
+                       'n_terminal_modification', 'c_terminal_modification']
             if has_mods:
                 header.append('displayed_sequence')
             header += ['scale_mg', 'purity_percent', 'counterion',
@@ -467,7 +493,10 @@ def write_peptide_outputs(constructs, fasta_path, manifest_path=None,
                         displayed += "-[" + row_c_term + "]"
                     notes = (notes + " Explicit construct; see full modification/provenance record. "
                              "Sequence-only predictions do not assess chemical modifications.").strip()
-                row = [c.name, c.sequence, len(c.sequence), row_n_term, row_c_term]
+                row = [c.name]
+                if has_pools:
+                    row.append(c.pool if c.pool is not None else '')
+                row += [c.sequence, len(c.sequence), row_n_term, row_c_term]
                 if has_mods:
                     row.append(displayed)
                 row += [options.scale_mg, options.purity_percent,

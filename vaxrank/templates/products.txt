@@ -13,7 +13,9 @@ Recorded source events: {{ group.counts.source_events }}; candidate mappings wit
 Related alternative sequences do not establish independent target coverage.
 {% endif %}
 {% if group.files %}Product files (relative to the run output directory): {{ group.files | join(', ') }}.
-{% endif %}
+{% endif %}{% if group.pool_summary %}{% set ps = group.pool_summary %}Formulation pools: {{ ps.num_pools_assigned }} (same-allele binder pairs: {{ ps.single_pool_same_allele_pairs }} single-pool -> {{ ps.partitioned_same_allele_pairs }} partitioned).
+{% for prow in ps.pools %}  Pool {{ prow.pool }} ({{ prow.count }} peptides; same-allele pairs {{ prow.same_allele_pairs }}; Cys {{ prow.cys_peptides }}; mean max GRAVY {{ prow.mean_max_gravy if prow.mean_max_gravy is not none else 'n/a' }}; mean charge {{ '%+.2f' % prow.mean_net_charge if prow.mean_net_charge is not none else 'n/a' }}): {{ prow.construct_names | join(', ') }}
+{% endfor %}{% endif %}
 {% if group.assembly_decisions is defined %}{% if group.assembly_decisions is not none %}
 Assembly order: {{ group.assembly_decisions.order | replace('_', ' ') }}.
 {% if group.assembly_decisions.allocation %}{% if group.assembly_decisions.allocation.policy.mode == 'balanced' %}This saved design used the retired category-balancing policy.{% else %}Antigens follow the configured ranking, subject to explicit type goals and caps.{% endif %} One count per unique antigen sequence, attributed to its first ranked source type.
@@ -27,7 +29,7 @@ Identical final amino-acid sequences share one antigen slot, retaining all mappi
 {% endif %}{% endif %}
 {% for product in group.products %}
 
-{{ product.name }}: {{ product.length }} {{ product.unit }}
+{{ product.name }}: {{ product.length }} {{ product.unit }}{% if product.pool %} [Pool {{ product.pool }}]{% endif %}
 {% if product.window_decisions %}Recorded window rationale: {{ product.window_decisions | join(', ') }}.
 {% else %}A window-selection rationale was not recorded for this product.
 {% endif %}{% if product.junction %}Linker decisions: {{ product.junction.status }}.

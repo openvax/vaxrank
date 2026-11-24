@@ -23,6 +23,21 @@ Emitted antigen sequences by type: {% for kind, count in group.assembly_decision
 {% if group.assembly_decisions.allocation %}{% for goal in group.assembly_decisions.allocation.unmet_goals %}<p class="note">{{ goal.kind }} representation goal: requested {{ goal.requested }}, emitted {{ goal.emitted }}; {{ goal.reason | replace('_', ' ') }} ({{ goal.available }} eligible unique sequences).</p>{% endfor %}{% endif %}
 {% else %}<p class="note">Historical assembly ordering, deduplication and capacity decisions were not recorded. Product mappings below describe the saved result.</p>{% endif %}{% endif %}
 {% if group.files %}<p class="note">Product files: {% for file in group.files %}<code>{{ file }}</code>{% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
+{% if group.pool_summary %}{% set ps = group.pool_summary %}
+<h4>Formulation pools ({{ ps.num_pools_assigned }})</h4>
+<p class="note">Peptides partitioned across {{ ps.num_pools_assigned }} injection pool{{ '' if ps.num_pools_assigned == 1 else 's' }} to separate same-MHC allele competitors (same-allele binder pairs reduced from {{ ps.single_pool_same_allele_pairs }} in a single pool to {{ ps.partitioned_same_allele_pairs }}) and balance cysteine count, hydrophobicity, and net charge.</p>
+<table class="pure-table pure-table-bordered">
+<thead><tr><th>Pool</th><th>Peptides</th><th>MHC alleles (peptides)</th><th>Same-allele pairs</th><th>Cys peptides</th><th>Mean max GRAVY</th><th>Mean charge (pH 7)</th></tr></thead>
+<tbody>{% for prow in ps.pools %}<tr>
+<td><strong>Pool {{ prow.pool }}</strong></td>
+<td>{{ prow.count }}</td>
+<td class="note">{% if prow.allele_counts %}{% for allele, cnt in prow.allele_counts.items() %}{{ allele | e }} ({{ cnt }}){% if not loop.last %}, {% endif %}{% endfor %}{% else %}—{% endif %}</td>
+<td>{{ prow.same_allele_pairs }}</td>
+<td>{{ prow.cys_peptides }}</td>
+<td>{{ prow.mean_max_gravy if prow.mean_max_gravy is not none else '—' }}</td>
+<td>{{ '%+.2f' % prow.mean_net_charge if prow.mean_net_charge is not none else '—' }}</td>
+</tr>{% endfor %}</tbody></table>
+{% endif %}
 {% set ns = namespace(all_simple_peptides=(group.modality == 'peptide' and group.products | length > 0)) %}
 {% for product in group.products %}
 {% if product.unit != 'aa' or product.antigens | length != 1 or product.junction or product.protein %}
@@ -39,7 +54,7 @@ Emitted antigen sequences by type: {% for kind, count in group.assembly_decision
 <thead><tr><th>Product / target</th><th>Manufactured sequence</th><th>Sources &amp; regions</th>{% if include_manufacturability %}<th>Manufacturability</th>{% endif %}</tr></thead>
 <tbody>{% for product in group.products %}{% set antigen = product.antigens[0] %}
 <tr id="product-{{ product.name | e }}">
-<td><strong>{{ product.display_name | e }}</strong> &middot; {{ product.length }} {{ product.unit }}<br><span class="note"><code>{{ product.name | e }}</code></span>{% for label in antigen.context_labels %}<br><span class="note">{{ label | e }}</span>{% endfor %}<br><span class="note">{% if product.n_terminal_acetylation or product.c_terminal_amidation %}N-Ac: {{ 'yes' if product.n_terminal_acetylation else 'no' }}; C-NH2: {{ 'yes' if product.c_terminal_amidation else 'no' }}{% else %}Unmodified free termini{% endif %}{% if product.window_decisions %} &middot; {% for decision in product.window_decisions %}<a href="#window-{{ decision }}">{{ decision }}</a>{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}</span></td>
+<td><strong>{{ product.display_name | e }}</strong> &middot; {{ product.length }} {{ product.unit }}{% if product.pool %} <span class="badge badge-tp">Pool {{ product.pool }}</span>{% endif %}<br><span class="note"><code>{{ product.name | e }}</code></span>{% for label in antigen.context_labels %}<br><span class="note">{{ label | e }}</span>{% endfor %}<br><span class="note">{% if product.n_terminal_acetylation or product.c_terminal_amidation %}N-Ac: {{ 'yes' if product.n_terminal_acetylation else 'no' }}; C-NH2: {{ 'yes' if product.c_terminal_amidation else 'no' }}{% else %}Unmodified free termini{% endif %}{% if product.window_decisions %} &middot; {% for decision in product.window_decisions %}<a href="#window-{{ decision }}">{{ decision }}</a>{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}</span></td>
 <td class="sequence-cell">{{ product.sequence_html or antigen.sequence_html }}{% if not antigen.target_coordinates_known %}<br><span class="note">Target coordinates unavailable or differ across sources.</span>{% endif %}{% if antigen.excluded_intervals %}<br><span class="badge badge-unsafe">Unsafe/self overlap (excluded)</span> <span class="note">{% for start, end in antigen.excluded_intervals %}[{{ start }}, {{ end }}){% if not loop.last %}, {% endif %}{% endfor %}{% if antigen.excluded_genes %} ({{ antigen.excluded_genes | join(', ') | e }}){% endif %}</span>{% endif %}</td>
 <td>{% if antigen.source_ids %}Sources: {% for source in antigen.source_ids %}<a href="#source-{{ source }}">{{ source }}</a>{% if not loop.last %}, {% endif %}{% endfor %}<br>{% endif %}<span class="note">{{ antigen.sources if antigen.sources is not none else "unavailable" }} mapping{{ "" if antigen.sources == 1 else "s" }}; {{ antigen.transcripts if antigen.transcripts is not none else "unavailable" }} transcript{{ "" if antigen.transcripts == 1 else "s" }}</span>{% if antigen.target_intervals %}<br><span class="note">Target: {% for start, end in antigen.target_intervals %}[{{ start }}, {{ end }}){% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}<br><a class="note" href="#product-label-{{ group.modality }}-{{ product.name | e }}-1">Antigen 1 label</a></td>
 {% if include_manufacturability %}<td class="note">{% if product.manufacturability %}{% for label, value in product.manufacturability | compact_manufacturability %}<span class="mfg-item"><span class="mfg-key">{{ label }}:</span> <strong>{{ value }}</strong></span>{% if not loop.last %} &middot; {% endif %}{% endfor %}{% else %}—{% endif %}</td>{% endif %}
@@ -48,7 +63,7 @@ Emitted antigen sequences by type: {% for kind, count in group.assembly_decision
 {% else %}
 {% for product in group.products %}
 <article class="product">
-<h4 id="product-{{ product.name | e }}">{{ product.display_name | e }} &middot; {{ product.length }} {{ product.unit }}</h4>
+<h4 id="product-{{ product.name | e }}">{{ product.display_name | e }} &middot; {{ product.length }} {{ product.unit }}{% if product.pool %} <span class="badge badge-tp">Pool {{ product.pool }}</span>{% endif %}</h4>
 <p class="note">Product ID: <code>{{ product.name | e }}</code>{% if product.unit == 'aa' %} &middot; {% if product.n_terminal_acetylation or product.c_terminal_amidation %}N-term acetylation: {{ 'yes' if product.n_terminal_acetylation else 'no' }}; C-term amidation: {{ 'yes' if product.c_terminal_amidation else 'no' }}{% else %}Unmodified free termini{% endif %}{% endif %}{% if product.window_decisions %} &middot; Window rationale: {% for decision in product.window_decisions %}<a href="#window-{{ decision }}">{{ decision }}</a>{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}</p>
 {% if product.junction %}<h5>Linker decisions</h5><p>{{ product.junction.status | e }}.</p>
 {% if product.junction.rows %}<table class="pure-table"><tbody>{% for label, value in product.junction.rows %}<tr><th>{{ label | e }}</th><td>{{ value | e }}</td></tr>{% endfor %}</tbody></table>

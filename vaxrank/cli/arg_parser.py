@@ -893,6 +893,14 @@ def add_peptide_output_args(group):
         default="TFA",
         help="Salt form / counterion for the vendor order form "
              "(e.g. TFA, acetate, HCl, free). Default: TFA.")
+    group.add_argument(
+        "--peptide-num-pools",
+        default=1,
+        type=int,
+        help="Number of formulation injection pools to partition emitted "
+             "peptides across (e.g. 4 for clinical SLP multi-site pooling). "
+             "When >1, separates peptides competing for the same MHC allele "
+             "and balances cysteine count, GRAVY, and net charge. Default: 1.")
 
 
 def add_supplemental_report_args(arg_parser):

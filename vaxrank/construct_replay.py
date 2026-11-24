@@ -217,6 +217,8 @@ def _assembly_identity(args, ranked, options, context):
     # Adding that spelling must not force inference during native replay.
     if configuration.get('junction_rank_kind') == 'auto':
         configuration.pop('junction_rank_kind')
+    if configuration.get('num_pools', 1) == 1:
+        configuration.pop('num_pools', None)
     from .antigen_allocation import AntigenAllocation
     if AntigenAllocation.resolve(configuration.get('antigen_allocation')) == AntigenAllocation(mode='ranked'):
         configuration.pop('antigen_allocation', None)

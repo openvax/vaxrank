@@ -138,6 +138,7 @@ class PeptideConstructConfigSchema(
     scale_mg: Optional[float] = None
     purity_percent: Optional[float] = None
     counterion: Optional[str] = None
+    num_pools: Optional[int] = None
     manufacturability: Optional[ManufacturabilityConfigSchema] = None
     window_selection: Optional[dict] = None
 
