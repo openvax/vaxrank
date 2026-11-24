@@ -202,7 +202,8 @@ class TemplateDataCreator(object):
             candidate_details=False,
             source_evidence=None,
             selection=None,
-            host_reference=None):
+            host_reference=None,
+            mhc_allele_status=None):
         """
         Build a report from ranked candidates and actual assembly products.
 
@@ -240,6 +241,7 @@ class TemplateDataCreator(object):
         self.source_evidence = source_evidence or {}
         self.selection = selection or {}
         self.host_reference = host_reference
+        self.mhc_allele_status = mhc_allele_status or self.selection.get('mhc_allele_status')
         self.prediction_configuration = args_for_report.get('_effective_prediction_configuration', {})
         self.processing_enabled = args_for_report.get('processing_aware_annotation')
         self.proxy_expression_summary = args_for_report.get('_proxy_expression_summary')
@@ -1623,6 +1625,7 @@ class TemplateDataCreator(object):
             self.patient_info,
         )
         self.template_data['longitudinal_support'] = longitudinal
+        self.template_data['mhc_allele_status'] = self.mhc_allele_status
         ranked_rows = self.template_data['ranked_candidates']
         selected_keys = {r['source_key'] for r in ranked_rows if r.get('selected_products')}
         self.template_data['has_selected_candidates'] = bool(selected_keys)

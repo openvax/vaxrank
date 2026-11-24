@@ -1,0 +1,73 @@
+<section class="appendix" id="mhc-allele-status">
+<h2>MHC Allele Status &amp; Expression</h2>
+<p class="note">
+  Cross-species MHC allele competence and expression evidence (normalized via <code>mhcgnomes</code>).
+  Weight mode: <strong>{{ mhc_allele_status.policy.expression_weight_mode | e }}</strong> &middot;
+  Mask lost: <strong>{{ 'yes' if mhc_allele_status.policy.mask_lost_alleles else 'no' }}</strong> &middot;
+  Mask silenced: <strong>{{ 'yes' if mhc_allele_status.policy.mask_silenced_alleles else 'no' }}</strong> &middot;
+  Mask unresolvable: <strong>{{ 'yes' if mhc_allele_status.policy.mask_unresolvable_alleles else 'no' }}</strong>
+  {% if mhc_allele_status.affected_epitope_count %}
+  &middot; Epitopes adjusted: <strong>{{ mhc_allele_status.affected_epitope_count }}</strong> (total credit removed: <strong>{{ '%.3f' % mhc_allele_status.total_credit_removed }}</strong>)
+  {% endif %}
+</p>
+{% if mhc_allele_status.alleles %}
+<table class="pure-table pure-table-bordered">
+  <thead>
+    <tr>
+      <th>MHC Allele</th>
+      <th>Status</th>
+      <th>Weight</th>
+      <th>DNA LOH / CN</th>
+      <th>Bulk RNA ASE (Purity)</th>
+      <th>scRNA Tumor / Immune nTPM (UMIs)</th>
+      <th>Caveats &amp; Source</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for row in mhc_allele_status.alleles %}
+    <tr>
+      <td><code>{{ row.allele | e }}</code></td>
+      <td>
+        <span class="badge {% if row.effective_status in ('lost', 'silenced') %}badge-unsafe{% elif row.effective_status == 'unresolvable' %}badge-review{% else %}badge-clean{% endif %}">{{ row.badge | e }}</span>
+      </td>
+      <td>{{ '%.2f' % row.ranking_weight }}{% if row.masked %} <span class="note">(masked)</span>{% endif %}</td>
+      <td>
+        {% if row.dna_loh is not none %}{{ 'LOH' if row.dna_loh else 'No LOH' }}{% endif %}{% if row.dna_copy_number is not none %} (CN={{ '%.2f' % row.dna_copy_number }}){% endif %}{% if row.dna_loh is none and row.dna_copy_number is none %}—{% endif %}
+      </td>
+      <td>
+        {% if row.bulk_rna_allele_ratio is not none or row.bulk_rna_tpm is not none %}
+          {% if row.bulk_rna_allele_ratio is not none %}ratio={{ '%.2f' % row.bulk_rna_allele_ratio }}{% endif %}
+          {% if row.bulk_rna_tpm is not none %}{% if row.bulk_rna_allele_ratio is not none %}, {% endif %}TPM={{ '%.1f' % row.bulk_rna_tpm }}{% endif %}
+          {% if row.tumor_purity is not none %} (purity={{ '%.0f%%' % (row.tumor_purity * 100) }}){% endif %}
+        {% else %}—{% endif %}
+      </td>
+      <td>
+        {% if row.scrna_tumor_cluster_ntpm is not none or row.scrna_resolvable_umis is not none %}
+          {% if row.scrna_tumor_cluster_ntpm is not none %}{{ '%.1f' % row.scrna_tumor_cluster_ntpm }}{% else %}—{% endif %} /
+          {% if row.scrna_immune_control_ntpm is not none %}{{ '%.1f' % row.scrna_immune_control_ntpm }}{% else %}—{% endif %}
+          {% if row.scrna_resolvable_umis is not none %} ({{ row.scrna_resolvable_umis }} UMIs{% if row.scrna_chemistry %}, {{ row.scrna_chemistry | e }}{% endif %}){% endif %}
+        {% else %}—{% endif %}
+      </td>
+      <td class="note">
+        {% if row.caveats %}{{ row.caveats | join('; ') | e }}{% endif %}
+        {% if row.assay_source %}{% if row.caveats %}<br>{% endif %}{{ row.assay_source | e }}{% endif %}
+        {% if row.notes %}<br>{{ row.notes | e }}{% endif %}
+        {% if not row.caveats and not row.assay_source and not row.notes %}—{% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% if mhc_allele_status.apm %}
+{% set apm = mhc_allele_status.apm %}
+<p class="note">
+  <strong>Antigen presentation machinery (APM):</strong>
+  {% for label, val in [('B2M', apm.b2m_status), ('TAP1', apm.tap1_status), ('TAP2', apm.tap2_status), ('NLRC5', apm.nlrc5_status), ('JAK1', apm.jak1_status), ('JAK2', apm.jak2_status)] if val %}
+    {{ label }}: <strong>{{ val | e }}</strong>{% if not loop.last %}; {% endif %}
+  {% endfor %}
+  {% if apm.disrupted_genes %} &middot; <span class="badge badge-unsafe">APM disruption: {{ apm.disrupted_genes | join(', ') | e }}</span>{% endif %}
+  {% if apm.notes %} &middot; {{ apm.notes | e }}{% endif %}
+</p>
+{% endif %}
+</section>

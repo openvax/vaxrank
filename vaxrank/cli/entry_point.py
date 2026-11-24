@@ -1682,6 +1682,39 @@ def _run_parsed_cli(args, args_list):
             human_only=getattr(args, 'pepsickle_human_only', False),
             threshold=getattr(args, 'pepsickle_threshold', 0.5))
 
+    # Cross-species MHC allele status / expression masking (#921)
+    mhc_status_audit = None
+    mhc_status_path = getattr(args, 'mhc_allele_status', None)
+    mhc_loh_alleles = getattr(args, 'mhc_loh_alleles', None)
+    if mhc_status_path or mhc_loh_alleles:
+        from ..mhc_allele_status import (
+            apply_mhc_allele_status_to_ranked,
+            bundle_from_loh_alleles,
+            load_mhc_allele_status,
+            merge_mhc_allele_status_bundles,
+        )
+        file_bundle = load_mhc_allele_status(mhc_status_path) if mhc_status_path else None
+        cli_bundle = bundle_from_loh_alleles(mhc_loh_alleles) if mhc_loh_alleles else None
+        status_bundle = merge_mhc_allele_status_bundles(file_bundle, cli_bundle)
+        if status_bundle is not None and not status_bundle.is_empty():
+            merged_cfg = load_vaxrank_config(args)
+            ranked_variants_with_vaccine_peptides, mhc_status_audit = (
+                apply_mhc_allele_status_to_ranked(
+                    ranked_variants_with_vaccine_peptides,
+                    status_bundle,
+                    policy=merged_cfg.get('mhc_allele_status'),
+                )
+            )
+            data['variants'] = ranked_variants_with_vaccine_peptides
+            if dataset is not None:
+                dataset.selection['mhc_allele_status'] = mhc_status_audit
+            logger.info(
+                "Applied MHC allele status (%d allele(s), %d masked, %d epitope(s) adjusted).",
+                len(mhc_status_audit['alleles']),
+                len(mhc_status_audit['masked_alleles']),
+                mhc_status_audit['affected_epitope_count'],
+            )
+
     products = emit_outputs(args, ranked_variants_with_vaccine_peptides, source)
     prediction_configuration = effective_prediction_configuration(
         args, ranked_variants_with_vaccine_peptides, predictions, products,
@@ -1748,6 +1781,7 @@ def _run_parsed_cli(args, args_list):
         selection=(getattr(args, '_design_dataset').selection
                    if getattr(args, '_design_dataset', None) is not None else {}),
         host_reference=getattr(getattr(args, '_design_dataset', None), 'host_reference', None),
+        mhc_allele_status=mhc_status_audit,
     ).compute_template_data()
     if args.output_ascii_report:
         make_ascii_report(template_data=template_data, ascii_report_path=args.output_ascii_report)

@@ -293,6 +293,24 @@ class CompareConfigSchema(
     include_pdf: Optional[bool] = None
 
 
+class MHCAlleleStatusConfigSchema(
+    msgspec.Struct,
+    frozen=True,
+    kw_only=True,
+    forbid_unknown_fields=True,
+):
+    """Per-trial policy for cross-species MHC allele status / expression masking."""
+    mask_lost_alleles: Optional[bool] = None
+    mask_silenced_alleles: Optional[bool] = None
+    mask_unresolvable_alleles: Optional[bool] = None
+    expression_weight_mode: Optional[str] = None
+    dna_loh_max_copy_number: Optional[float] = None
+    min_scrna_resolvable_umis: Optional[int] = None
+    silenced_tumor_to_immune_ratio: Optional[float] = None
+    silenced_bulk_allele_ratio: Optional[float] = None
+    min_purity_for_bulk_ase_call: Optional[float] = None
+
+
 class VaxrankConfigSchema(
     msgspec.Struct,
     frozen=True,
@@ -308,3 +326,4 @@ class VaxrankConfigSchema(
     peptide: Optional[PeptideConstructConfigSchema] = None
     mrna: Optional[MrnaConstructConfigSchema] = None
     compare: Optional[CompareConfigSchema] = None
+    mhc_allele_status: Optional[MHCAlleleStatusConfigSchema] = None
