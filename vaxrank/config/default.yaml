@@ -362,6 +362,21 @@ mrna:
     compute_mfe: false                 # optional ViennaRNA whole-CDS + 5'-window MFE
     initiation_window_nt: 40
   optimize_linkers: null               # auto: reuse one VCF/BAM predictor; otherwise keep shared linker
+  # Per-trial policy for joint antigen ordering + linker + cleavage optimization.
+  junction_optimization:
+    optimize_order: false              # true enables Held-Karp DP (N<=12) / 2-opt (N>12) reordering
+    exact_dp_max_antigens: 12
+    include_signal_peptide_boundary: true
+    include_mitd_boundary: true
+    strong_burden_weight: 100.0        # weight per strong chimeric binder (<= junction_rank_strong)
+    mild_burden_weight: 10.0           # weight per mild chimeric binder (<= junction_rank_mild)
+    cleavage_penalty_weight: 5.0       # weight for boundary proteasomal cleavage penalty (1 - prob)
+    cleavage_scoring: none             # none | pepsickle
+    pepsickle_human_only: false
+    pepsickle_threshold: 0.5
+    linker_length_penalty: 0.01
+    worst_rank_tiebreak_weight: 0.001
+    max_2opt_passes: 50
   junction_predictor: null             # one mhctools model, for junction queries only
   junction_alleles: null               # declared genotype, or VCF/BAM --mhc-alleles; never inferred coverage
   junction_predictor_path: null

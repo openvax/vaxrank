@@ -207,8 +207,18 @@ def junction_view(product):
     enabled = record.get('enabled')
     status = ('Optimization evaluated' if enabled else 'Not assessed: ' + record.get('note', UNRECORDED))
     rows = _rows(record, [('note', 'Decision'), ('policy', 'Model selection policy'),
+        ('solver', 'Optimizer solver'),
+        ('reordered', 'Antigens reordered'),
+        ('original_antigen_order', 'Original antigen order'),
+        ('optimized_antigen_order', 'Optimized antigen order'),
         ('burden_strong', 'Chosen strong burden'), ('burden_mild', 'Chosen mild burden'),
-        ('default_burden_strong', 'Default strong burden'), ('default_burden_mild', 'Default mild burden')]) if enabled else []
+        ('fixed_order_burden_strong', 'Fixed-order optimal strong burden'),
+        ('fixed_order_burden_mild', 'Fixed-order optimal mild burden'),
+        ('default_burden_strong', 'Default strong burden'), ('default_burden_mild', 'Default mild burden'),
+        ('signal_peptide_burden_strong', 'Signal-peptide strong burden'),
+        ('signal_peptide_burden_mild', 'Signal-peptide mild burden'),
+        ('cleavage_status', 'Cleavage scoring'),
+        ('cleavage_penalty', 'Chosen cleavage penalty')]) if enabled else []
     prediction = record.get('prediction') or {}
     if enabled:
         rows += _rows(prediction, [('rank_kind', 'Prediction endpoint'), ('rank_metric', 'Rank metric'),

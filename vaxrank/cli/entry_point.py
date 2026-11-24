@@ -510,7 +510,8 @@ _ARG_GROUPS = (
         'mrna_candidates_per_slot', 'mrna_max_length_nt',
         'mrna_codon_species', 'mrna_codon_method',
         'mrna_cds_synthesis_safe', 'mrna_codon_optimizer',
-        'mrna_optimize_linkers', 'mrna_junction_candidates',
+        'mrna_optimize_linkers', 'mrna_optimize_antigen_order',
+        'mrna_junction_cleavage_scoring', 'mrna_junction_candidates',
         'mrna_junction_predictor', 'mrna_junction_alleles',
         'mrna_junction_predictor_path', 'mrna_junction_predictor_models_path',
         'mrna_junction_rank_strong', 'mrna_junction_rank_mild', 'mrna_junction_rank_kind',
@@ -804,6 +805,16 @@ def _emit_mrna_constructs(args, ranked, target_dir):
     if cli_optimizer is not None:
         cds_opt_dict['optimizer'] = cli_optimizer
     cds_optimization = cds_opt_dict or None
+    junction_opt_yaml = yaml_kwargs.get('junction_optimization')
+    junction_opt_dict = (
+        dict(junction_opt_yaml) if isinstance(junction_opt_yaml, dict) else {}
+    )
+    if getattr(args, 'mrna_optimize_antigen_order', False):
+        junction_opt_dict['optimize_order'] = True
+    cli_cleavage = getattr(args, 'mrna_junction_cleavage_scoring', None)
+    if cli_cleavage is not None:
+        junction_opt_dict['cleavage_scoring'] = cli_cleavage
+    junction_optimization = junction_opt_dict or None
     options = RNAConstructConfig(
         signal_peptide=(cfg('mrna_signal_peptide', 'signal_peptide') or None),
         linker=cfg('mrna_linker', 'linker'),
@@ -835,6 +846,7 @@ def _emit_mrna_constructs(args, ranked, target_dir):
         junction_rank_mild=cfg(
             'mrna_junction_rank_mild', 'junction_rank_mild'),
         junction_rank_kind=cfg('mrna_junction_rank_kind', 'junction_rank_kind'),
+        junction_optimization=junction_optimization,
         poly_a_length=cfg('mrna_poly_a_length', 'poly_a_length'),
         poly_a_segmented=cfg('mrna_poly_a_segmented', 'poly_a_segmented'),
         poly_a_first_segment=cfg(

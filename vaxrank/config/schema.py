@@ -193,6 +193,29 @@ class MrnaCDSOptimizationSchema(
     initiation_window_nt: Optional[int] = None
 
 
+class MrnaJunctionOptimizationSchema(
+    msgspec.Struct,
+    frozen=True,
+    kw_only=True,
+    forbid_unknown_fields=True,
+):
+    """Per-trial policy for joint mRNA antigen ordering, linker selection,
+    and optional proteasomal cleavage optimization."""
+    optimize_order: Optional[bool] = None
+    exact_dp_max_antigens: Optional[int] = None
+    include_signal_peptide_boundary: Optional[bool] = None
+    include_mitd_boundary: Optional[bool] = None
+    strong_burden_weight: Optional[float] = None
+    mild_burden_weight: Optional[float] = None
+    cleavage_penalty_weight: Optional[float] = None
+    cleavage_scoring: Optional[str] = None
+    pepsickle_human_only: Optional[bool] = None
+    pepsickle_threshold: Optional[float] = None
+    linker_length_penalty: Optional[float] = None
+    worst_rank_tiebreak_weight: Optional[float] = None
+    max_2opt_passes: Optional[int] = None
+
+
 class MrnaConstructConfigSchema(
     msgspec.Struct,
     frozen=True,
@@ -224,6 +247,7 @@ class MrnaConstructConfigSchema(
     codon_method: Optional[str] = None
     cds_optimization: Optional[MrnaCDSOptimizationSchema] = None
     optimize_linkers: Optional[bool] = None
+    junction_optimization: Optional[MrnaJunctionOptimizationSchema] = None
     junction_predictor: Optional[str] = None
     junction_alleles: Optional[str] = None
     junction_predictor_path: Optional[str] = None

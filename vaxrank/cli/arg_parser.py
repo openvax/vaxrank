@@ -701,6 +701,23 @@ def add_mrna_output_args(group):
         help="Disable per-junction linker optimization. The shared linker "
              "is used at every junction without optimization.")
     group.add_argument(
+        "--mrna-optimize-antigen-order",
+        action="store_true",
+        default=False,
+        help="Jointly optimize mRNA antigen ordering and per-junction linkers "
+             "(exact Held-Karp DP for <=12 antigens, 2-opt/Or-opt for larger "
+             "constructs) to minimize chimeric junctional MHC binding across "
+             "inter-antigen, signal-peptide, and MITD boundaries. Weights and "
+             "solver knobs can be saved under mrna.junction_optimization in a "
+             "per-trial YAML policy.")
+    group.add_argument(
+        "--mrna-junction-cleavage-scoring",
+        default=None,
+        choices=["none", "pepsickle"],
+        help="Optional proteasomal C-terminal cleavage penalty during joint "
+             "mRNA antigen ordering + linker optimization (none or pepsickle). "
+             "Default: none.")
+    group.add_argument(
         "--mrna-junction-predictor", default=None, metavar="NAME",
         help="One mhctools predictor for new junction queries only. Imported "
              "candidate predictions and scores are unchanged. No model is "
