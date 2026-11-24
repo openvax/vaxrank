@@ -88,6 +88,10 @@ def test_compare_policy_validation_and_yaml(tmp_path):
 
     with pytest.raises(ValueError, match="top_k_values"):
         ComparePolicy(top_k_values=())
+    with pytest.raises(ValueError, match="top_k_values"):
+        ComparePolicy(top_k_values=(True,))
+    with pytest.raises(ValueError, match="top_k_values"):
+        ComparePolicy(top_k_values="10")
     with pytest.raises(ValueError, match="expression_fold_change_threshold"):
         ComparePolicy(expression_fold_change_threshold=1.0)
     with pytest.raises(ValueError, match="Unknown compare policy"):
@@ -291,6 +295,9 @@ def test_compare_runs_attribution_and_construct_diffs(tmp_path):
     html_txt = render_comparison_html(comp)
     assert "<!DOCTYPE html>" in html_txt
     assert "peptide_window_shift" in html_txt
+    assert "PSWSLLDLKTGSCTSRWESAWSGLS" in html_txt
+    assert "GPHDLLWAHSGRDRPWSGKESTGAI" in html_txt
+    assert "MTEYKLVVVGADGVGKSALTIQLIQ" in html_txt
 
     out_dir = tmp_path / "diff_out"
     written = write_comparison_outputs(comp, out_dir)
@@ -347,3 +354,67 @@ def test_load_run_bundle_errors_cleanly(tmp_path):
     empty.mkdir()
     with pytest.raises(ValueError, match="No ranked candidates CSV"):
         load_run_bundle(empty)
+
+
+def test_compare_pdf_requires_output_dir(tmp_path, capsys):
+    csv_a = tmp_path / "a.csv"
+    csv_b = tmp_path / "b.csv"
+    _write_ranked_csv(csv_a, [
+        {"source_rank": 1, "window_rank": 1, "source_identifier": "G1",
+         "gene_name": "G1", "amino_acids": "AAAAAAAAAAAAAAAAAAAAAAAAA",
+         "combined_score": 5.0},
+    ])
+    _write_ranked_csv(csv_b, [
+        {"source_rank": 1, "window_rank": 1, "source_identifier": "G1",
+         "gene_name": "G1", "amino_acids": "AAAAAAAAAAAAAAAAAAAAAAAAA",
+         "combined_score": 5.0},
+    ])
+    with pytest.raises(SystemExit) as exc:
+        vaxrank_main(["compare", str(csv_a), str(csv_b), "--pdf"])
+    assert exc.value.code == 2
+    assert "--output-dir" in capsys.readouterr().err
+
+
+def test_compare_manifest_only_duplicate_slots_and_empty_jaccard(tmp_path):
+    man_a = tmp_path / "a_manifest.json"
+    man_b = tmp_path / "b_manifest.json"
+    man_a.write_text(json.dumps([
+        {"modality": "peptide", "name": "peptide_001", "sequence": "ACDEFGHIKLMNPQRSTVWYACDEF", "antigen_names": ["A1"]},
+        {"modality": "peptide", "name": "peptide_002", "sequence": "ACDEFGHIKLMNPQRSTVWYACDEF", "antigen_names": ["A2"]},
+    ]))
+    man_b.write_text(json.dumps([
+        {"modality": "peptide", "name": "peptide_001", "sequence": "ACDEFGHIKLMNPQRSTVWYACDEF", "antigen_names": ["A1"]},
+    ]))
+    comp = compare_runs(man_a, man_b)
+    assert comp["rank_preservation"]["top_k"]["10"]["jaccard"] is None
+    pep = comp["construct_diffs"]["peptide"]
+    assert pep["slot_count_a"] == 2
+    assert pep["slot_count_b"] == 1
+    assert pep["exact_match_count"] == 1
+    assert pep["dropped_count"] == 1
+    assert pep["exact_match_count"] + pep["shifted_window_count"] + pep["dropped_count"] == pep["slot_count_a"]
+    # Render cleanly when jaccard is None
+    assert "Jaccard n/a" in render_comparison_ascii(comp)
+    assert "<!DOCTYPE html>" in render_comparison_html(comp)
+
+
+def test_compare_candidate_predictions_tsv_inputs(tmp_path):
+    tsv_a = tmp_path / "a.tsv"
+    tsv_b = tmp_path / "b.tsv"
+    tsv_a.write_text(
+        "# comment metadata\n"
+        "source_identifier\tgene_name\tpeptide\tscore\n"
+        "TP53_p.R175H\tTP53\tHMTEVVRHC\t0.9\n"
+        "KRAS_p.G12D\tKRAS\tVVVGADGVG\t0.4\n"
+    )
+    tsv_b.write_text(
+        "# comment metadata\n"
+        "source_identifier\tgene_name\tpeptide\tscore\n"
+        "KRAS_p.G12D\tKRAS\tVVVGADGVG\t0.95\n"
+        "TP53_p.R175H\tTP53\tHMTEVVRHC\t0.5\n"
+    )
+    comp = compare_runs(tsv_a, tsv_b, policy=ComparePolicy(top_k_values=(1, 2), primary_top_k=1))
+    assert comp["rank_preservation"]["shared_target_count"] == 2
+    assert comp["rank_preservation"]["spearman_rho"] == pytest.approx(-1.0)
+    assert [r["gene_name"] for r in comp["gained_in_top_k"]] == ["KRAS"]
+

@@ -102,6 +102,8 @@ def run(argv: list[str] | None = None, prog: str = "vaxrank compare") -> int:
         policy_dict["include_pdf"] = True
 
     policy = ComparePolicy.resolve(policy_dict or None)
+    if policy.include_pdf and not args.output_dir:
+        parser.error("--pdf (or compare.include_pdf: true) requires --output-dir")
     comparison = compare_runs(
         args.run_a,
         args.run_b,

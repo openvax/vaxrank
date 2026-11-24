@@ -16,7 +16,6 @@
 from __future__ import annotations
 
 import csv
-import html
 import json
 import math
 from dataclasses import dataclass
@@ -39,10 +38,14 @@ class ComparePolicy:
     include_pdf: bool = False
 
     def __post_init__(self):
-        ks = tuple(int(k) for k in self.top_k_values)
-        if not ks or any(isinstance(k, bool) or k < 1 for k in ks):
+        if isinstance(self.top_k_values, (str, bytes)):
+            raise ValueError("compare.top_k_values must be a sequence of integers >= 1")
+        raw_ks = tuple(self.top_k_values)
+        if not raw_ks or any(
+            isinstance(k, bool) or not isinstance(k, int) or k < 1 for k in raw_ks
+        ):
             raise ValueError("compare.top_k_values must be a non-empty sequence of integers >= 1")
-        object.__setattr__(self, "top_k_values", tuple(sorted(set(ks))))
+        object.__setattr__(self, "top_k_values", tuple(sorted(set(raw_ks))))
         if (isinstance(self.primary_top_k, bool)
                 or not isinstance(self.primary_top_k, int)
                 or self.primary_top_k < 1):
@@ -128,8 +131,8 @@ def _parse_int(value: Any) -> int | None:
 def _target_key_from_row(row: dict[str, Any]) -> str:
     chrom = str(row.get("chr") or "").strip()
     pos = _parse_int(row.get("pos"))
-    ref = str(row.get("ref") or "").strip()
-    alt = str(row.get("alt") or "").strip()
+    ref = str(row.get("ref") or "").strip().upper()
+    alt = str(row.get("alt") or "").strip().upper()
     if chrom and pos is not None and (ref or alt):
         norm_chr = chrom[3:] if chrom.lower().startswith("chr") else chrom
         return f"{norm_chr}:{pos}:{ref}>{alt}"
@@ -139,6 +142,83 @@ def _target_key_from_row(row: dict[str, Any]) -> str:
     gene = str(row.get("gene_name") or "").strip()
     aa = str(row.get("amino_acids") or row.get("peptide") or "").strip()
     return f"{gene}:{aa}" if gene else aa
+
+
+def _load_predictions_tsv(tsv_path: Path) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    """Load target rankings and optional embedded policy metadata from a TSV
+    prediction table (``candidate_predictions.tsv`` / ``neoepitopes.tsv``)."""
+    policy_meta: dict[str, Any] | None = None
+    data_lines: list[str] = []
+    with open(tsv_path, encoding="utf-8") as handle:
+        for line in handle:
+            if line.startswith("#"):
+                # Inspect Topiary/vaxrank JSON comment headers for policy metadata
+                stripped = line.lstrip("#").strip()
+                if stripped.startswith("{") and ("selection_policy" in stripped or "run_configuration" in stripped):
+                    try:
+                        parsed = json.loads(stripped)
+                        if isinstance(parsed, dict):
+                            policy_meta = parsed.get("run_configuration") or parsed
+                    except json.JSONDecodeError:
+                        pass
+                continue
+            if line.strip():
+                data_lines.append(line)
+
+    if not data_lines:
+        return [], policy_meta
+
+    reader = csv.DictReader(data_lines, delimiter="\t")
+    by_key: dict[str, dict[str, Any]] = {}
+    for row in reader:
+        key = (
+            str(row.get("source_identifier") or row.get("variant") or row.get("source_sequence_name") or "").strip()
+            or _target_key_from_row(row)
+        )
+        if not key:
+            continue
+        score = _parse_float(
+            row.get("combined_score")
+            or row.get("score")
+            or row.get("target_epitope_score")
+            or row.get("value")
+        )
+        expr = _parse_float(
+            row.get("expression_score") or row.get("Variant allele RNA read count")
+        )
+        gene = str(row.get("gene_name") or row.get("gene") or "").strip()
+        aa = str(row.get("amino_acids") or row.get("peptide") or "").strip()
+        existing = by_key.get(key)
+        if existing is None or (
+            score is not None and (existing["combined_score"] is None or score > existing["combined_score"])
+        ):
+            by_key[key] = {
+                "target_key": key,
+                "source_rank": 0,
+                "source_identifier": key,
+                "gene_name": gene,
+                "source_kind": str(row.get("source_kind") or "prediction_tsv").strip(),
+                "variant_types": str(row.get("variant_types") or "").strip(),
+                "rna_product": str(row.get("rna_product") or "").strip(),
+                "amino_acids": aa,
+                "combined_score": score,
+                "expression_score": expr,
+                "target_epitope_score": _parse_float(row.get("target_epitope_score") or row.get("score")),
+                "biological_evidence": "",
+                "cta_targeting": "",
+            }
+
+    records = sorted(
+        by_key.values(),
+        key=lambda r: (
+            -(r["combined_score"] if r["combined_score"] is not None else float("-inf")),
+            r["target_key"],
+        ),
+    )
+    for rank_idx, rec in enumerate(records, start=1):
+        rec["source_rank"] = rank_idx
+        rec["rank"] = rank_idx
+    return records, policy_meta
 
 
 def _load_ranked_csv(csv_path: Path) -> list[dict[str, Any]]:
@@ -247,6 +327,9 @@ def load_run_bundle(path: str | Path, label: str | None = None) -> dict[str, Any
         if suffix == ".csv":
             ranked = _load_ranked_csv(p)
             files_loaded["ranked_csv"] = str(p)
+        elif suffix == ".tsv":
+            ranked, policy_meta = _load_predictions_tsv(p)
+            files_loaded["predictions_tsv"] = str(p)
         elif suffix == ".json":
             entries = _load_manifest(p)
             for item in entries:
@@ -259,13 +342,22 @@ def load_run_bundle(path: str | Path, label: str | None = None) -> dict[str, Any
         else:
             raise ValueError(
                 f"Unsupported single-file comparison input {p}; pass a vaxrank output "
-                f"directory, ranked_candidates.csv, or manifest.json."
+                f"directory, ranked_candidates.csv, candidate_predictions.tsv, or manifest.json."
             )
     else:
         csv_path = _find_ranked_csv(p)
         if csv_path is not None:
             ranked = _load_ranked_csv(csv_path)
             files_loaded["ranked_csv"] = str(csv_path)
+
+        tsv_path = p / "candidate_predictions.tsv"
+        if tsv_path.is_file():
+            tsv_ranked, tsv_policy = _load_predictions_tsv(tsv_path)
+            files_loaded["predictions_tsv"] = str(tsv_path)
+            if not ranked and tsv_ranked:
+                ranked = tsv_ranked
+            if policy_meta is None and tsv_policy is not None:
+                policy_meta = tsv_policy
 
         pep_path = p / "peptide" / "manifest.json"
         if pep_path.is_file():
@@ -287,8 +379,9 @@ def load_run_bundle(path: str | Path, label: str | None = None) -> dict[str, Any
                     peptide_manifest.append(item)
             files_loaded["manifest_json"] = str(top_manifest)
 
-        policy_meta = _find_selection_policy(p)
-        if policy_meta is not None:
+        found_policy = _find_selection_policy(p)
+        if found_policy is not None:
+            policy_meta = found_policy
             files_loaded["selection_policy"] = str(
                 (p / "selection_policy.json")
                 if (p / "selection_policy.json").is_file()
@@ -524,25 +617,35 @@ def _diff_modality_slots(
     if not slots_a and not slots_b:
         return {"available": False}
 
-    seqs_a = {s["sequence"]: s for s in slots_a if s["sequence"]}
-    seqs_b = {s["sequence"]: s for s in slots_b if s["sequence"]}
-    exact_seqs = sorted(set(seqs_a) & set(seqs_b))
-    exact_matches = [
-        {
-            "sequence": seq,
-            "antigen_a": seqs_a[seq]["antigen_label"],
-            "antigen_b": seqs_b[seq]["antigen_label"],
-            "construct_a": seqs_a[seq]["construct_name"],
-            "construct_b": seqs_b[seq]["construct_name"],
-            **({"pool_a": seqs_a[seq].get("pool"), "pool_b": seqs_b[seq].get("pool")}
-               if (seqs_a[seq].get("pool") is not None or seqs_b[seq].get("pool") is not None)
-               else {}),
-        }
-        for seq in exact_seqs
-    ]
+    # 1-to-1 exact sequence matching preserves exact slot accounting when
+    # duplicate sequences appear across constructs.
+    exact_matches = []
+    matched_a_exact: set[int] = set()
+    matched_b_exact: set[int] = set()
+    for idx_a, sa in enumerate(slots_a):
+        seq = sa["sequence"]
+        if not seq:
+            continue
+        for idx_b, sb in enumerate(slots_b):
+            if idx_b in matched_b_exact:
+                continue
+            if sb["sequence"] == seq:
+                matched_a_exact.add(idx_a)
+                matched_b_exact.add(idx_b)
+                exact_matches.append({
+                    "sequence": seq,
+                    "antigen_a": sa["antigen_label"],
+                    "antigen_b": sb["antigen_label"],
+                    "construct_a": sa["construct_name"],
+                    "construct_b": sb["construct_name"],
+                    **({"pool_a": sa.get("pool"), "pool_b": sb.get("pool")}
+                       if (sa.get("pool") is not None or sb.get("pool") is not None)
+                       else {}),
+                })
+                break
 
-    rem_a = [s for s in slots_a if not s["sequence"] or s["sequence"] not in seqs_b]
-    rem_b = [s for s in slots_b if not s["sequence"] or s["sequence"] not in seqs_a]
+    rem_a = [sa for idx_a, sa in enumerate(slots_a) if idx_a not in matched_a_exact]
+    rem_b = [sb for idx_b, sb in enumerate(slots_b) if idx_b not in matched_b_exact]
 
     shifted_windows = []
     matched_b_indices: set[int] = set()
@@ -670,7 +773,7 @@ def compare_runs(
             "count_a": len(tk_a),
             "count_b": len(tk_b),
             "overlap_count": len(overlap),
-            "jaccard": round(len(overlap) / len(union), 6) if union else 1.0,
+            "jaccard": round(len(overlap) / len(union), 6) if union else None,
             "gained_in_b_count": len(tk_b - tk_a),
             "lost_from_a_count": len(tk_a - tk_b),
             "exact_sequence_matches": exact_seq,
@@ -844,7 +947,7 @@ def render_comparison_ascii(comparison: dict[str, Any]) -> str:
     for k_str, stats in rp["top_k"].items():
         lines.append(
             f"  Top-{k_str}: overlap {stats['overlap_count']} "
-            f"(Jaccard {stats['jaccard']:.3f}; +{stats['gained_in_b_count']} gained, "
+            f"(Jaccard {_fmt_num(stats['jaccard'])}; +{stats['gained_in_b_count']} gained, "
             f"-{stats['lost_from_a_count']} lost; "
             f"exact seq {stats['exact_sequence_matches']}, "
             f"shifted window {stats['shifted_window_matches']})"
@@ -904,124 +1007,39 @@ def render_comparison_ascii(comparison: dict[str, Any]) -> str:
             f"Shifted windows: {diff['shifted_window_count']} | "
             f"Added: {diff['added_count']} | Dropped: {diff['dropped_count']}"
         )
+        for item in diff.get("shifted_windows", ()):
+            lines.append(
+                f"  [shifted] {item['antigen_a']}: {item['sequence_a']} -> {item['sequence_b']}"
+            )
+        for item in diff.get("added_in_b", ()):
+            lines.append(
+                f"  [added]   {item['antigen_label']} ({item['construct_name']}): {item['sequence']}"
+            )
+        for item in diff.get("dropped_from_a", ()):
+            lines.append(
+                f"  [dropped] {item['antigen_label']} ({item['construct_name']}): {item['sequence']}"
+            )
     return "\n".join(lines) + "\n"
 
 
 def render_comparison_html(comparison: dict[str, Any]) -> str:
-    """Render a self-contained HTML comparison report."""
-    esc = html.escape
-    ra = comparison["run_a"]
-    rb = comparison["run_b"]
-    rp = comparison["rank_preservation"]
-    pk = comparison["primary_top_k"]
+    """Render a self-contained HTML comparison report via Jinja2 template."""
+    from jinja2 import Environment, PackageLoader
 
-    topk_rows = []
-    for k_str, stats in rp["top_k"].items():
-        topk_rows.append(
-            f"<tr><td><strong>Top-{esc(k_str)}</strong></td>"
-            f"<td>{stats['overlap_count']}</td>"
-            f"<td>{stats['jaccard']:.3f}</td>"
-            f"<td>+{stats['gained_in_b_count']}</td>"
-            f"<td>-{stats['lost_from_a_count']}</td>"
-            f"<td>{stats['exact_sequence_matches']}</td>"
-            f"<td>{stats['shifted_window_matches']}</td></tr>"
-        )
-
-    def _target_table(rows: list[dict[str, Any]], empty_msg: str) -> str:
-        if not rows:
-            return f"<p class='note'>{esc(empty_msg)}</p>"
-        body = []
-        for r in rows:
-            badges = " ".join(
-                f"<span class='badge'>{esc(a)}</span>" for a in r["attribution"]
-            )
-            body.append(
-                f"<tr><td>{esc(r['gene_name'] or r['source_identifier'])}<br>"
-                f"<span class='note'><code>{esc(r['target_key'])}</code></span></td>"
-                f"<td>{r['rank_a'] if r['rank_a'] is not None else '—'} &rarr; "
-                f"{r['rank_b'] if r['rank_b'] is not None else '—'}</td>"
-                f"<td>{_fmt_num(r['score_a'])} &rarr; {_fmt_num(r['score_b'])}</td>"
-                f"<td>{_fmt_num(r['expression_a'])} &rarr; {_fmt_num(r['expression_b'])}</td>"
-                f"<td><code>{esc(r['sequence_match'])}</code></td>"
-                f"<td>{badges}</td></tr>"
-            )
-        return (
-            "<table><thead><tr><th>Target</th><th>Rank (A &rarr; B)</th>"
-            "<th>Combined score</th><th>Expression</th><th>Window</th>"
-            "<th>Attribution</th></tr></thead><tbody>"
-            + "".join(body)
-            + "</tbody></table>"
-        )
-
-    construct_sections = []
-    for mod in ("peptide", "mrna"):
-        diff = comparison["construct_diffs"][mod]
-        if not diff.get("available"):
-            continue
-        construct_sections.append(
-            f"<h3>Emitted {esc(mod.upper())} construct diff</h3>"
-            f"<p>Constructs: <strong>{diff['construct_count_a']} &rarr; "
-            f"{diff['construct_count_b']}</strong> &middot; Antigen slots: "
-            f"<strong>{diff['slot_count_a']} &rarr; {diff['slot_count_b']}</strong> &middot; "
-            f"Exact matches: <strong>{diff['exact_match_count']}</strong> &middot; "
-            f"Shifted windows: <strong>{diff['shifted_window_count']}</strong> &middot; "
-            f"Added: <strong>{diff['added_count']}</strong> &middot; "
-            f"Dropped: <strong>{diff['dropped_count']}</strong></p>"
-        )
-
-    return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>Vaxrank Compare: {esc(ra['label'])} vs {esc(rb['label'])}</title>
-<style>
-body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #1f2937; max-width: 1120px; margin: 24px auto; padding: 0 20px; line-height: 1.45; }}
-h1, h2, h3 {{ color: #111827; }}
-table {{ border-collapse: collapse; width: 100%; margin: 12px 0 20px; font-size: 0.92rem; }}
-th, td {{ border: 1px solid #d1d5db; padding: 6px 9px; text-align: left; vertical-align: top; }}
-th {{ background: #f3f4f6; }}
-.note {{ color: #4b5563; font-size: 0.85rem; }}
-.kpi-grid {{ display: flex; flex-wrap: wrap; gap: 12px; margin: 12px 0 18px; }}
-.kpi {{ border: 1px solid #d1d5db; border-radius: 6px; padding: 10px 14px; min-width: 150px; background: #f9fafb; }}
-.kpi .label {{ font-size: 0.78rem; color: #6b7280; text-transform: uppercase; }}
-.kpi .value {{ font-size: 1.25rem; font-weight: 600; color: #111827; }}
-.badge {{ display: inline-block; padding: 2px 7px; border-radius: 999px; background: #e0f2fe; color: #075985; font-size: 0.78rem; margin: 1px 2px; }}
-</style>
-</head>
-<body>
-<h1>Vaxrank Run Comparison</h1>
-<p><strong>Run A:</strong> {esc(ra['label'])} ({ra['ranked_count']} targets) &mdash; <code>{esc(ra['path'])}</code><br>
-<strong>Run B:</strong> {esc(rb['label'])} ({rb['ranked_count']} targets) &mdash; <code>{esc(rb['path'])}</code></p>
-
-<div class="kpi-grid">
-  <div class="kpi"><div class="label">Shared targets</div><div class="value">{rp['shared_target_count']} / {rp['total_unique_targets']}</div></div>
-  <div class="kpi"><div class="label">Only in A / B</div><div class="value">{rp['only_in_a_count']} / {rp['only_in_b_count']}</div></div>
-  <div class="kpi"><div class="label">Spearman &rho;</div><div class="value">{_fmt_num(rp['spearman_rho'])}</div></div>
-  <div class="kpi"><div class="label">Kendall &tau;-b</div><div class="value">{_fmt_num(rp['kendall_tau_b'])}</div></div>
-</div>
-
-<h2>Top-K Overlap</h2>
-<table>
-<thead><tr><th>Cutoff</th><th>Overlap</th><th>Jaccard</th><th>Gained in B</th><th>Lost from A</th><th>Exact seq</th><th>Shifted window</th></tr></thead>
-<tbody>{"".join(topk_rows)}</tbody>
-</table>
-
-<h2>Gained in Top-{pk} ({esc(rb['label'])})</h2>
-{_target_table(comparison["gained_in_top_k"], "No targets gained in primary Top-K.")}
-
-<h2>Lost from Top-{pk} ({esc(ra['label'])})</h2>
-{_target_table(comparison["lost_from_top_k"], "No targets lost from primary Top-K.")}
-
-<h2>Notable Rank Movers (|&Delta;rank| &ge; {comparison['policy']['rank_shift_highlight_threshold']})</h2>
-{_target_table(comparison["notable_rank_movers"], "No notable rank movers among retained shared targets.")}
-
-<h2>Shifted Peptide Windows ({len(comparison.get("shifted_window_targets", ()))})</h2>
-{_target_table(comparison.get("shifted_window_targets", []), "No shared targets changed peptide window sequence.")}
-
-{"".join(construct_sections)}
-</body>
-</html>
-"""
+    env = Environment(
+        loader=PackageLoader("vaxrank", "templates"),
+        autoescape=False,
+    )
+    template = env.get_template("compare_report.html")
+    return template.render(
+        comparison=comparison,
+        run_a=comparison["run_a"],
+        run_b=comparison["run_b"],
+        rp=comparison["rank_preservation"],
+        primary_top_k=comparison["primary_top_k"],
+        policies_differ=comparison.get("policies_differ", False),
+        fmt_num=_fmt_num,
+    )
 
 
 def write_comparison_outputs(
