@@ -222,6 +222,9 @@ def _assembly_identity(args, ranked, options, context):
     from .peptide_pools import PeptidePoolPolicy
     if PeptidePoolPolicy.resolve(configuration.get('pool_partition')) == PeptidePoolPolicy():
         configuration.pop('pool_partition', None)
+    from .mrna_cds import MRNACDSOptimizationPolicy
+    if MRNACDSOptimizationPolicy.resolve(configuration.get('cds_optimization')) == MRNACDSOptimizationPolicy():
+        configuration.pop('cds_optimization', None)
     from .antigen_allocation import AntigenAllocation
     if AntigenAllocation.resolve(configuration.get('antigen_allocation')) == AntigenAllocation(mode='ranked'):
         configuration.pop('antigen_allocation', None)

@@ -345,6 +345,22 @@ mrna:
   poly_a_segment_linker: GCATATGACT
   codon_species: null                  # derive from reference/host; explicit override supported
   codon_method: use_best_codon         # | match_codon_usage | harmonize_rca
+  # Per-trial synthesis-safe mRNA CDS optimization & sequence QC policy.
+  cds_optimization:
+    optimizer: dnachisel               # dnachisel | lineardesign
+    lineardesign_executable: lineardesign
+    lineardesign_lambda: 0.0
+    gc_min: null                       # e.g. 0.35 (synthesis-safe preset)
+    gc_max: null                       # e.g. 0.68 (synthesis-safe preset)
+    gc_window_nt: 50
+    max_homopolymer_length: null       # e.g. 5 (avoids runs >= 6 nt)
+    avoid_t7_terminator: false         # avoids ATCTGTT cryptic T7 class-II terminator
+    avoid_restriction_sites: []        # e.g. [BsaI, BbsI, SapI] or raw DNA motifs
+    uridine_depletion: false           # minimizes U content in CDS
+    uridine_depletion_weight: 1.0
+    avoid_uu_dinucleotides: false
+    compute_mfe: false                 # optional ViennaRNA whole-CDS + 5'-window MFE
+    initiation_window_nt: 40
   optimize_linkers: null               # auto: reuse one VCF/BAM predictor; otherwise keep shared linker
   junction_predictor: null             # one mhctools model, for junction queries only
   junction_alleles: null               # declared genotype, or VCF/BAM --mhc-alleles; never inferred coverage

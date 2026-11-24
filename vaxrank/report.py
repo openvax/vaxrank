@@ -1364,6 +1364,10 @@ class TemplateDataCreator(object):
                     display_name=' / '.join(dict.fromkeys(a['display_name'] for a in antigens)) or product.name,
                     unit='aa' if modality == 'peptide' else 'nt',
                     protein=product.cds_aa if modality == 'mrna' else None,
+                    sequence_qc=(
+                        (product.elements.get('sequence_qc') or product.components.get('sequence_qc'))
+                        if modality == 'mrna' else None
+                    ),
                     pool=product.components.get('pool') if modality == 'peptide' else None,
                     antigens=antigens, antigen_names=product.antigen_names,
                     n_terminal_acetylation=product.components.get('n_terminal_acetylation'),
