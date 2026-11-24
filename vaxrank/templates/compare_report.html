@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vaxrank Compare: {{ run_a.label | e }} vs {{ run_b.label | e }}</title>
+<style>
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #1f2937; max-width: 1120px; margin: 24px auto; padding: 0 20px; line-height: 1.45; }
+h1, h2, h3 { color: #111827; }
+table { border-collapse: collapse; width: 100%; margin: 12px 0 20px; font-size: 0.9rem; }
+th, td { border: 1px solid #d1d5db; padding: 6px 9px; text-align: left; vertical-align: top; }
+th { background: #f3f4f6; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.85em; }
+.note { color: #4b5563; font-size: 0.84rem; }
+.kpi-grid { display: flex; flex-wrap: wrap; gap: 12px; margin: 12px 0 18px; }
+.kpi { border: 1px solid #d1d5db; border-radius: 6px; padding: 10px 14px; min-width: 150px; background: #f9fafb; }
+.kpi .label { font-size: 0.78rem; color: #6b7280; text-transform: uppercase; }
+.kpi .value { font-size: 1.25rem; font-weight: 600; color: #111827; }
+.badge { display: inline-block; padding: 2px 7px; border-radius: 999px; background: #e0f2fe; color: #075985; font-size: 0.78rem; margin: 1px 2px; }
+.badge-added { background: #dcfce7; color: #166534; }
+.badge-dropped { background: #fee2e2; color: #991b1b; }
+.badge-shifted { background: #fef3c7; color: #92400e; }
+</style>
+</head>
+<body>
+<h1>Vaxrank Run Comparison</h1>
+<p>
+  <strong>Run A:</strong> {{ run_a.label | e }} ({{ run_a.ranked_count }} targets) &mdash; <code>{{ run_a.path | e }}</code><br>
+  <strong>Run B:</strong> {{ run_b.label | e }} ({{ run_b.ranked_count }} targets) &mdash; <code>{{ run_b.path | e }}</code>
+  {% if policies_differ %}<br><span class="badge badge-shifted">Selection policies differ between runs</span>{% endif %}
+</p>
+
+<div class="kpi-grid">
+  <div class="kpi"><div class="label">Shared targets</div><div class="value">{{ rp.shared_target_count }} / {{ rp.total_unique_targets }}</div></div>
+  <div class="kpi"><div class="label">Only in A / B</div><div class="value">{{ rp.only_in_a_count }} / {{ rp.only_in_b_count }}</div></div>
+  <div class="kpi"><div class="label">Spearman &rho;</div><div class="value">{{ fmt_num(rp.spearman_rho) }}</div></div>
+  <div class="kpi"><div class="label">Kendall &tau;-b</div><div class="value">{{ fmt_num(rp.kendall_tau_b) }}</div></div>
+</div>
+
+<h2>Top-K Overlap</h2>
+<table>
+<thead><tr><th>Cutoff</th><th>Overlap</th><th>Jaccard</th><th>Gained in B</th><th>Lost from A</th><th>Exact seq</th><th>Shifted window</th></tr></thead>
+<tbody>
+{% for k_str, stats in rp.top_k.items() %}
+<tr>
+  <td><strong>Top-{{ k_str | e }}</strong></td>
+  <td>{{ stats.overlap_count }}</td>
+  <td>{{ fmt_num(stats.jaccard) }}</td>
+  <td>+{{ stats.gained_in_b_count }}</td>
+  <td>-{{ stats.lost_from_a_count }}</td>
+  <td>{{ stats.exact_sequence_matches }}</td>
+  <td>{{ stats.shifted_window_matches }}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+
+{% macro target_table(rows, empty_msg, show_seqs=false) %}
+{% if not rows %}
+<p class="note">{{ empty_msg | e }}</p>
+{% else %}
+<table>
+<thead><tr>
+  <th>Target</th>
+  <th>Rank (A &rarr; B)</th>
+  <th>Combined score</th>
+  <th>Expression</th>
+  <th>{% if show_seqs %}Peptide sequence (A &rarr; B){% else %}Window{% endif %}</th>
+  <th>Attribution</th>
+</tr></thead>
+<tbody>
+{% for r in rows %}
+<tr>
+  <td>{{ (r.gene_name or r.source_identifier) | e }}<br><span class="note"><code>{{ r.target_key | e }}</code></span></td>
+  <td>{{ r.rank_a if r.rank_a is not none else '—' }} &rarr; {{ r.rank_b if r.rank_b is not none else '—' }}</td>
+  <td>{{ fmt_num(r.score_a) }} &rarr; {{ fmt_num(r.score_b) }}</td>
+  <td>{{ fmt_num(r.expression_a) }} &rarr; {{ fmt_num(r.expression_b) }}</td>
+  <td>{% if show_seqs %}<code>{{ r.amino_acids_a | e }}</code><br>&rarr; <code>{{ r.amino_acids_b | e }}</code>{% else %}<code>{{ r.sequence_match | e }}</code>{% endif %}</td>
+  <td>{% for a in r.attribution %}<span class="badge">{{ a | e }}</span> {% endfor %}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+{% endif %}
+{% endmacro %}
+
+<h2>Gained in Top-{{ primary_top_k }} ({{ run_b.label | e }})</h2>
+{{ target_table(comparison.gained_in_top_k, "No targets gained in primary Top-K.") }}
+
+<h2>Lost from Top-{{ primary_top_k }} ({{ run_a.label | e }})</h2>
+{{ target_table(comparison.lost_from_top_k, "No targets lost from primary Top-K.") }}
+
+<h2>Notable Rank Movers (|&Delta;rank| &ge; {{ comparison.policy.rank_shift_highlight_threshold }})</h2>
+{{ target_table(comparison.notable_rank_movers, "No notable rank movers among retained shared targets.") }}
+
+<h2>Shifted Peptide Windows ({{ comparison.shifted_window_targets | length }})</h2>
+{{ target_table(comparison.shifted_window_targets, "No shared targets changed peptide window sequence.", show_seqs=true) }}
+
+{% for mod in ('peptide', 'mrna') %}
+{% set diff = comparison.construct_diffs[mod] %}
+{% if diff.available %}
+<h2>Emitted {{ mod | upper }} Construct Diff</h2>
+<p>
+  Constructs: <strong>{{ diff.construct_count_a }} &rarr; {{ diff.construct_count_b }}</strong> &middot;
+  Antigen slots: <strong>{{ diff.slot_count_a }} &rarr; {{ diff.slot_count_b }}</strong> &middot;
+  Exact matches: <strong>{{ diff.exact_match_count }}</strong> &middot;
+  Shifted windows: <strong>{{ diff.shifted_window_count }}</strong> &middot;
+  Added: <strong>{{ diff.added_count }}</strong> &middot;
+  Dropped: <strong>{{ diff.dropped_count }}</strong>
+</p>
+{% if diff.shifted_windows or diff.added_in_b or diff.dropped_from_a %}
+<table>
+<thead><tr><th>Change</th><th>Antigen</th><th>Sequence</th><th>Construct / Pool</th></tr></thead>
+<tbody>
+{% for item in diff.shifted_windows %}
+<tr>
+  <td><span class="badge badge-shifted">shifted</span></td>
+  <td>{{ item.antigen_a | e }}{% if item.antigen_b != item.antigen_a %} &rarr; {{ item.antigen_b | e }}{% endif %}</td>
+  <td><code>{{ item.sequence_a | e }}</code><br>&rarr; <code>{{ item.sequence_b | e }}</code></td>
+  <td>{{ item.construct_a | e }} &rarr; {{ item.construct_b | e }}</td>
+</tr>
+{% endfor %}
+{% for item in diff.added_in_b %}
+<tr>
+  <td><span class="badge badge-added">added</span></td>
+  <td>{{ item.antigen_label | e }}</td>
+  <td><code>{{ item.sequence | e }}</code></td>
+  <td>{{ item.construct_name | e }}{% if item.pool is not none %} (Pool {{ item.pool }}){% endif %}</td>
+</tr>
+{% endfor %}
+{% for item in diff.dropped_from_a %}
+<tr>
+  <td><span class="badge badge-dropped">dropped</span></td>
+  <td>{{ item.antigen_label | e }}</td>
+  <td><code>{{ item.sequence | e }}</code></td>
+  <td>{{ item.construct_name | e }}{% if item.pool is not none %} (Pool {{ item.pool }}){% endif %}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+{% endif %}
+{% endif %}
+{% endfor %}
+</body>
+</html>

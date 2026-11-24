@@ -38,6 +38,7 @@ Examples:
 Running a design takes flags only; `vaxrank run FLAGS` means the same thing.
 Other activities start with a word:
     vaxrank data COMMAND           inspect or prune local caches (dirs, status, path, prune)
+    vaxrank compare RUN_A RUN_B    diff two runs (ranks, Top-K attribution, constructs)
     vaxrank policies [show NAME]   list the bundled selection policies, or show one
     vaxrank config                 print the default YAML configuration
     vaxrank replay FILE            re-emit a saved run (ranked .json or native evidence)
@@ -78,7 +79,7 @@ HELP_TOPICS = {
     "advanced": ("advanced options", ("Advanced options",)),
 }
 
-ACTIVITIES = ("run", "data", "policies", "config", "replay", "help")
+ACTIVITIES = ("run", "data", "compare", "policies", "config", "replay", "help")
 
 # Built once, after HELP_TOPICS: no literal "%" in the text can break import.
 EXAMPLES = _EXAMPLES_TEMPLATE.replace("@TOPICS@", ", ".join(HELP_TOPICS))
@@ -132,7 +133,7 @@ def print_bare_summary(stream=None):
 SHORT_USAGE = (
     "usage: vaxrank [run] FLAGS   run a design from variants and RNA, "
     "or an imported report\n"
-    "       vaxrank data COMMAND | policies [show NAME] | config | replay FILE | help [TOPIC]\n\n")
+    "       vaxrank data COMMAND | compare A B | policies [show NAME] | config | replay FILE | help [TOPIC]\n\n")
 
 
 def print_short_help(stream=None):
@@ -193,6 +194,10 @@ def resolve_command_line(args_list):
         if word == "data":
             from .data_cli import run as run_data_cli
             run_data_cli(rest)
+            return True, tokens
+        if word == "compare":
+            from .compare_cli import run as run_compare_cli
+            run_compare_cli(rest)
             return True, tokens
         if word != "help" and ("-h" in rest or "--help" in rest):
             print_short_help()
