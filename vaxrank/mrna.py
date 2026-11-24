@@ -201,6 +201,7 @@ class RNAConstructConfig:
     junction_rank_kind: str = 'auto'
     junction_rank_strong: float = 0.5
     junction_rank_mild: float = 2.0
+    junction_optimization: dict | None = None
     # Poly(A) length counts adenosines. Optional segmentation inserts the
     # configured linker between the first segment and the remaining adenosines.
     poly_a_length: int = 120
@@ -212,6 +213,9 @@ class RNAConstructConfig:
         if self.cds_optimization is not None:
             from .mrna_cds import MRNACDSOptimizationPolicy
             MRNACDSOptimizationPolicy.resolve(self.cds_optimization)
+        if self.junction_optimization is not None:
+            from .junction_swap import MRNAJunctionOptimizationPolicy
+            MRNAJunctionOptimizationPolicy.resolve(self.junction_optimization)
 
 
 @dataclass
@@ -523,7 +527,7 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
                              mhc_predictor=None, mhc_alleles=None,
                              reference_proteome=None, *,
                              target_alleles=None, source_evidence=None, selection_audit=None,
-                             host_taxon_id=None):
+                             host_taxon_id=None, cleavage_scorer=None):
     """Assemble mRNA constructs from ranked vaccine peptides.
 
     Parameters
@@ -626,6 +630,10 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
     options = replace(options, codon_species=resolve_codon_species(
         options.codon_species, host.host_taxon_id))
 
+    from .junction_swap import MRNAJunctionOptimizationPolicy
+    junction_opt_policy = MRNAJunctionOptimizationPolicy.resolve(
+        options.junction_optimization)
+
     constructs = []
     for i, antigen_group in enumerate(packed):
         names = [a.name for a in antigen_group]
@@ -639,7 +647,14 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
             'prediction': None,
         }
         n_junctions = max(0, len(antigen_aas) - 1)
-        if options.optimize_linkers and (n_junctions > 0 or mitd_aa):
+        has_any_boundary = (
+            n_junctions > 0
+            or bool(mitd_aa)
+            or (junction_opt_policy.optimize_order
+                and bool(signal_peptide_aa)
+                and junction_opt_policy.include_signal_peptide_boundary)
+        )
+        if options.optimize_linkers and has_any_boundary:
             if mhc_predictor is None or not mhc_alleles:
                 logger.warning(
                     "optimize_linkers=True but no mhc_predictor / "
@@ -656,72 +671,175 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
             else:
                 from .junction_swap import (
                     JUNCTION_SWAP_CANDIDATES,
+                    optimize_antigen_order_and_linkers,
                     optimize_linkers,
                 )
                 cand_names = (
                     tuple(options.junction_swap_candidates)
                     or JUNCTION_SWAP_CANDIDATES
                 )
-                swap = optimize_linkers(
-                    antigen_aas=antigen_aas,
-                    alleles=mhc_alleles,
-                    predictor=mhc_predictor,
-                    candidate_names=cand_names,
-                    k_lengths=tuple(options.junction_kmer_lengths),
-                    reference_proteome=reference_proteome,
-                    rank_strong=options.junction_rank_strong,
-                    rank_mild=options.junction_rank_mild,
-                    rank_kind=options.junction_rank_kind,
-                    mitd_aa=mitd_aa or None,
-                    default_linker_name=options.linker,
-                )
-                # `swap.default_*_burden` is always set when
-                # default_linker_name is supplied (which it always is on
-                # this code path); we asserted above that the optimizer
-                # ran with a default. Read directly.
-                default_strong = swap.default_strong_burden
-                default_mild = swap.default_burden
-                # Canonical name for the shared/default linker so the
-                # manifest's `chosen` field is uniform across branches.
-                default_name = linker.name
-                n_total_junctions = n_junctions + (1 if mitd_aa else 0)
-                if ((swap.strong_burden, swap.burden)
-                        < (default_strong, default_mild)):
-                    chosen_list = swap.chosen_linker_per_junction
-                    # Last entry corresponds to MITD junction when mitd_aa
-                    # was provided; split it off.
-                    if mitd_aa and len(chosen_list) == n_junctions + 1:
-                        per_junction_linkers = chosen_list[:n_junctions]
-                        pre_mitd_linker = chosen_list[-1]
+                if junction_opt_policy.optimize_order:
+                    original_names = list(names)
+                    swap = optimize_antigen_order_and_linkers(
+                        antigen_aas=antigen_aas,
+                        alleles=mhc_alleles,
+                        predictor=mhc_predictor,
+                        candidate_names=cand_names,
+                        k_lengths=tuple(options.junction_kmer_lengths),
+                        reference_proteome=reference_proteome,
+                        rank_strong=options.junction_rank_strong,
+                        rank_mild=options.junction_rank_mild,
+                        rank_kind=options.junction_rank_kind,
+                        signal_peptide_aa=signal_peptide_aa or None,
+                        mitd_aa=mitd_aa or None,
+                        default_linker_name=options.linker,
+                        policy=junction_opt_policy,
+                        cleavage_scorer=cleavage_scorer,
+                    )
+                    default_strong = swap.default_strong_burden
+                    default_mild = swap.default_burden
+                    default_name = linker.name
+                    use_mitd_boundary = bool(
+                        mitd_aa and junction_opt_policy.include_mitd_boundary)
+                    n_total_junctions = n_junctions + (1 if use_mitd_boundary else 0)
+                    improved = (
+                        (swap.strong_burden, swap.burden) < (default_strong, default_mild)
+                        or (
+                            (swap.strong_burden, swap.burden) == (default_strong, default_mild)
+                            and swap.default_total_cost is not None
+                            and swap.total_cost is not None
+                            and swap.total_cost < swap.default_total_cost - 1e-12
+                        )
+                    )
+                    if improved:
+                        names = [names[idx] for idx in swap.antigen_order]
+                        antigen_aas = [antigen_aas[idx] for idx in swap.antigen_order]
+                        chosen_list = swap.chosen_linker_per_junction
+                        if use_mitd_boundary and len(chosen_list) == n_junctions + 1:
+                            per_junction_linkers = chosen_list[:n_junctions]
+                            pre_mitd_linker = chosen_list[-1]
+                        else:
+                            per_junction_linkers = chosen_list
+                        junction_swap_meta = {
+                            'enabled': True,
+                            'solver': swap.solver,
+                            'reordered': swap.reordered,
+                            'original_antigen_order': original_names,
+                            'optimized_antigen_order': list(names),
+                            'chosen': swap.linker_names(),
+                            'burden_strong': swap.strong_burden,
+                            'burden_mild': swap.burden,
+                            'fixed_order_burden_strong': swap.fixed_order_strong_burden,
+                            'fixed_order_burden_mild': swap.fixed_order_burden,
+                            'default_burden_strong': default_strong,
+                            'default_burden_mild': default_mild,
+                            'signal_peptide_burden_strong': swap.signal_peptide_strong_burden,
+                            'signal_peptide_burden_mild': swap.signal_peptide_burden,
+                            'cleavage_status': swap.cleavage_status,
+                            'cleavage_penalty': swap.cleavage_penalty,
+                            'default_cleavage_penalty': swap.default_cleavage_penalty,
+                            'total_cost': swap.total_cost,
+                            'default_total_cost': swap.default_total_cost,
+                            'junction_optimization': junction_opt_policy.to_dict(),
+                        }
+                        logger.info(
+                            "Construct %d: joint order+linker optimizer (%s) "
+                            "reduced strong burden %d -> %d, mild burden %d -> %d "
+                            "(reordered=%s)",
+                            i + 1, swap.solver, default_strong, swap.strong_burden,
+                            default_mild, swap.burden, swap.reordered)
                     else:
-                        per_junction_linkers = chosen_list
-                    junction_swap_meta = {
-                        'enabled': True,
-                        'chosen': swap.linker_names(),
-                        'burden_strong': swap.strong_burden,
-                        'burden_mild': swap.burden,
-                        'default_burden_strong': default_strong,
-                        'default_burden_mild': default_mild,
-                    }
-                    logger.info(
-                        "Construct %d: per-junction linker optimizer "
-                        "reduced strong burden %d → %d, mild burden %d → %d",
-                        i + 1, default_strong, swap.strong_burden,
-                        default_mild, swap.burden)
+                        junction_swap_meta = {
+                            'enabled': True,
+                            'solver': swap.solver,
+                            'reordered': False,
+                            'original_antigen_order': original_names,
+                            'optimized_antigen_order': original_names,
+                            'chosen': [default_name] * n_total_junctions,
+                            'burden_strong': default_strong,
+                            'burden_mild': default_mild,
+                            'fixed_order_burden_strong': swap.fixed_order_strong_burden,
+                            'fixed_order_burden_mild': swap.fixed_order_burden,
+                            'default_burden_strong': default_strong,
+                            'default_burden_mild': default_mild,
+                            'signal_peptide_burden_strong': swap.signal_peptide_strong_burden,
+                            'signal_peptide_burden_mild': swap.signal_peptide_burden,
+                            'cleavage_status': swap.cleavage_status,
+                            'cleavage_penalty': swap.default_cleavage_penalty,
+                            'default_cleavage_penalty': swap.default_cleavage_penalty,
+                            'total_cost': swap.default_total_cost,
+                            'default_total_cost': swap.default_total_cost,
+                            'junction_optimization': junction_opt_policy.to_dict(),
+                            'note': "default linker and original order beat or tied all alternatives",
+                        }
+                    junction_swap_meta['prediction'] = swap.prediction_metadata
+                    for decision in swap.prediction_metadata.get('junction_decisions', ()):
+                        index = decision['junction_index']
+                        if index < len(junction_swap_meta['chosen']):
+                            decision['emitted_linker'] = junction_swap_meta['chosen'][index]
+                        if use_mitd_boundary and index == n_junctions:
+                            decision['junction_index'] = 'mitd'
                 else:
-                    junction_swap_meta = {
-                        'enabled': True,
-                        'chosen': [default_name] * n_total_junctions,
-                        'burden_strong': default_strong,
-                        'burden_mild': default_mild,
-                        'note': "default linker beat or tied all candidates",
-                    }
-                junction_swap_meta['prediction'] = swap.prediction_metadata
-                for decision in swap.prediction_metadata.get('junction_decisions', ()):
-                    index = decision['junction_index']
-                    decision['emitted_linker'] = junction_swap_meta['chosen'][index]
-                    if mitd_aa and index == n_junctions:
-                        decision['junction_index'] = 'mitd'
+                    swap = optimize_linkers(
+                        antigen_aas=antigen_aas,
+                        alleles=mhc_alleles,
+                        predictor=mhc_predictor,
+                        candidate_names=cand_names,
+                        k_lengths=tuple(options.junction_kmer_lengths),
+                        reference_proteome=reference_proteome,
+                        rank_strong=options.junction_rank_strong,
+                        rank_mild=options.junction_rank_mild,
+                        rank_kind=options.junction_rank_kind,
+                        mitd_aa=mitd_aa or None,
+                        default_linker_name=options.linker,
+                    )
+                    # `swap.default_*_burden` is always set when
+                    # default_linker_name is supplied (which it always is on
+                    # this code path); we asserted above that the optimizer
+                    # ran with a default. Read directly.
+                    default_strong = swap.default_strong_burden
+                    default_mild = swap.default_burden
+                    # Canonical name for the shared/default linker so the
+                    # manifest's `chosen` field is uniform across branches.
+                    default_name = linker.name
+                    n_total_junctions = n_junctions + (1 if mitd_aa else 0)
+                    if ((swap.strong_burden, swap.burden)
+                            < (default_strong, default_mild)):
+                        chosen_list = swap.chosen_linker_per_junction
+                        # Last entry corresponds to MITD junction when mitd_aa
+                        # was provided; split it off.
+                        if mitd_aa and len(chosen_list) == n_junctions + 1:
+                            per_junction_linkers = chosen_list[:n_junctions]
+                            pre_mitd_linker = chosen_list[-1]
+                        else:
+                            per_junction_linkers = chosen_list
+                        junction_swap_meta = {
+                            'enabled': True,
+                            'chosen': swap.linker_names(),
+                            'burden_strong': swap.strong_burden,
+                            'burden_mild': swap.burden,
+                            'default_burden_strong': default_strong,
+                            'default_burden_mild': default_mild,
+                        }
+                        logger.info(
+                            "Construct %d: per-junction linker optimizer "
+                            "reduced strong burden %d → %d, mild burden %d → %d",
+                            i + 1, default_strong, swap.strong_burden,
+                            default_mild, swap.burden)
+                    else:
+                        junction_swap_meta = {
+                            'enabled': True,
+                            'chosen': [default_name] * n_total_junctions,
+                            'burden_strong': default_strong,
+                            'burden_mild': default_mild,
+                            'note': "default linker beat or tied all candidates",
+                        }
+                    junction_swap_meta['prediction'] = swap.prediction_metadata
+                    for decision in swap.prediction_metadata.get('junction_decisions', ()):
+                        index = decision['junction_index']
+                        decision['emitted_linker'] = junction_swap_meta['chosen'][index]
+                        if mitd_aa and index == n_junctions:
+                            decision['junction_index'] = 'mitd'
 
         protein, frozen_segments, aa_segments = build_protein_with_segments(
             antigen_aas, names, signal_peptide_aa, options.signal_peptide,

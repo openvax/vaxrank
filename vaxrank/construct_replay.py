@@ -225,6 +225,9 @@ def _assembly_identity(args, ranked, options, context):
     from .mrna_cds import MRNACDSOptimizationPolicy
     if MRNACDSOptimizationPolicy.resolve(configuration.get('cds_optimization')) == MRNACDSOptimizationPolicy():
         configuration.pop('cds_optimization', None)
+    from .junction_swap import MRNAJunctionOptimizationPolicy
+    if MRNAJunctionOptimizationPolicy.resolve(configuration.get('junction_optimization')) == MRNAJunctionOptimizationPolicy():
+        configuration.pop('junction_optimization', None)
     from .antigen_allocation import AntigenAllocation
     if AntigenAllocation.resolve(configuration.get('antigen_allocation')) == AntigenAllocation(mode='ranked'):
         configuration.pop('antigen_allocation', None)

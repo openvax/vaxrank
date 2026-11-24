@@ -544,9 +544,14 @@ def test_cache_dir_created():
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("VAXRANK_REF_PEPTIDES_DIR", None)
             os.environ.pop("OPENVAX_DATA_CACHE", None)
+            cache_fn_attr = (
+                "platform_cache_dir"
+                if hasattr(datacache.common, "platform_cache_dir")
+                else "_platform_cache_dir"
+            )
             with patch.object(
                 datacache.common,
-                "_platform_cache_dir",
+                cache_fn_attr,
                 side_effect=lambda name: os.path.join(platform_root, name),
             ):
                 # Default is read-only and lands under shared openvax platform cache
