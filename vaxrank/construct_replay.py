@@ -219,6 +219,9 @@ def _assembly_identity(args, ranked, options, context):
         configuration.pop('junction_rank_kind')
     if configuration.get('num_pools', 1) == 1:
         configuration.pop('num_pools', None)
+    from .peptide_pools import PeptidePoolPolicy
+    if PeptidePoolPolicy.resolve(configuration.get('pool_partition')) == PeptidePoolPolicy():
+        configuration.pop('pool_partition', None)
     from .antigen_allocation import AntigenAllocation
     if AntigenAllocation.resolve(configuration.get('antigen_allocation')) == AntigenAllocation(mode='ranked'):
         configuration.pop('antigen_allocation', None)

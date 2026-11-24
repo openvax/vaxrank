@@ -17,6 +17,8 @@ from vaxrank.peptide import (
     write_peptide_outputs,
 )
 from vaxrank.peptide_pools import (
+    PeptidePoolPolicy,
+    net_charge_at_ph,
     net_charge_ph7,
     partition_peptide_constructs,
     summarize_peptide_pools,
@@ -282,7 +284,8 @@ def test_outputs_reports_and_cli_yaml_integration(tmp_path):
     assert "Formulation pools (2)" in html
     assert "Pool 1</span>" in html and "Pool 2</span>" in html
     assert "from 2 in a single pool to 0" in html
-    assert "Formulation pools: 2 (same-allele binder pairs: 2 single-pool -> 0 partitioned)." in ascii_txt
+    assert "Formulation pools: 2 (same-allele binder pairs: 2 single-pool -> 0 partitioned; pH 7.0)." in ascii_txt
+    assert "Pool policy: strong <= 0.5%" in ascii_txt
     assert "[Pool 1]" in ascii_txt and "[Pool 2]" in ascii_txt
 
     # CLI & YAML config round-trip
@@ -368,4 +371,77 @@ def test_cli_end_to_end_and_offline_replay_preserves_pools(tmp_path):
     with open(out3 / "order_form.csv") as f:
         header3 = next(csv.reader(f))
     assert "pool" not in header3
+
+
+def test_per_trial_yaml_pool_policy_governs_tiers_charge_and_weights(tmp_path):
+    # Histidine-rich peptide shifts dramatically between pH 5.5 and pH 7.4
+    his_seq = "HHHHHAAAAAAAAAAA"
+    q_acidic = net_charge_at_ph(his_seq, ph=5.5)
+    q_neutral = net_charge_at_ph(his_seq, ph=7.0)
+    q_basic = net_charge_at_ph(his_seq, ph=8.5)
+    assert q_acidic > 3.0
+    assert q_acidic > q_neutral > q_basic
+
+    # Custom trial policy tightens strong_rank_threshold to 0.25 and sets
+    # cysteine_pair_weight >> allele_competition_weight so cysteine separation wins
+    # over a 0.4% (now medium) MHC overlap.
+    trial_yaml = tmp_path / "trial_canine_os.yaml"
+    trial_yaml.write_text(
+        "peptide:\n"
+        "  num_pools: 2\n"
+        "  pool_partition:\n"
+        "    strong_rank_threshold: 0.25\n"
+        "    medium_rank_threshold: 1.5\n"
+        "    strong_allele_weight: 5.0\n"
+        "    medium_allele_weight: 0.5\n"
+        "    allele_competition_weight: 1.0\n"
+        "    cysteine_pair_weight: 500.0\n"
+        "    gravy_balance_weight: 1.0\n"
+        "    charge_balance_weight: 1.0\n"
+        "    charge_ph: 5.5\n"
+    )
+    merged = load_vaxrank_config(
+        config_path=["builtin:openvax-v1", str(trial_yaml)],
+        set_overrides=["peptide.pool_partition.charge_ph=6.2"],
+    )
+    assert merged["peptide"]["num_pools"] == 2
+    assert merged["peptide"]["pool_partition"]["strong_rank_threshold"] == 0.25
+    assert merged["peptide"]["pool_partition"]["cysteine_pair_weight"] == 500.0
+    assert merged["peptide"]["pool_partition"]["charge_ph"] == 6.2
+
+    # Two Cys peptides share DLA-88*001:01 at 0.4% rank; two non-Cys peptides
+    # do not bind. With strong_rank_threshold=0.25 (so 0.4% is medium) and
+    # cysteine_pair_weight=500, the two Cys peptides must be separated across pools.
+    ranked = [
+        _make_candidate(0, "CAAAAAAAAAAAAAAA", {"DLA-88*001:01": 0.4}),
+        _make_candidate(1, "CGGGGGGGGGGGGGGG", {"DLA-88*001:01": 0.4}),
+        _make_candidate(2, "SSSSSSSSSSSSSSSS", {"DLA-88*001:01": 5.0}),
+        _make_candidate(3, "TTTTTTTTTTTTTTTT", {"DLA-88*001:01": 5.0}),
+    ]
+    opts = PeptideConstructConfig(
+        num_pools=2,
+        pool_partition=merged["peptide"]["pool_partition"],
+    )
+    audit = {}
+    constructs = assemble_peptide_constructs(
+        ranked, opts, target_alleles=["DLA-88*001:01"], selection_audit=audit
+    )
+    # 0.4% > strong_rank_threshold (0.25), <= medium_rank_threshold (1.5)
+    assert constructs[0].components["pool_profile"]["strong_alleles"] == []
+    assert constructs[0].components["pool_profile"]["medium_alleles"] == ["DLA-88*001:01"]
+    assert constructs[0].components["pool_profile"]["charge_ph"] == 6.2
+    assert constructs[0].pool != constructs[1].pool
+    assert audit["pool_partition"]["policy"]["strong_rank_threshold"] == 0.25
+    assert audit["pool_partition"]["policy"]["charge_ph"] == 6.2
+
+    # Validation rejects unknown keys and invalid bounds
+    with pytest.raises(ValueError, match="Unknown peptide.pool_partition keys"):
+        PeptidePoolPolicy.resolve({"bogus_knob": 1.0})
+    with pytest.raises(ValueError, match="medium_rank_threshold"):
+        PeptidePoolPolicy(strong_rank_threshold=2.0, medium_rank_threshold=1.0)
+    with pytest.raises(ValueError, match="charge_ph"):
+        PeptidePoolPolicy(charge_ph=15.0)
+    with pytest.raises(ValueError, match="allele_competition_weight"):
+        PeptidePoolPolicy(allele_competition_weight=-1.0)
+
 
