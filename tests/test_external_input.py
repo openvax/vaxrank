@@ -167,7 +167,6 @@ def test_installed_ensembl_releases_walks_pyensembl_cache(
     (``<cache>/pyensembl/<build>/ensembl<N>``). Important so the
     pre-flight ``--ensembl-release`` hint suggests releases the user
     actually has installed, not arbitrary numbers."""
-    import platformdirs
     from vaxrank.external_input import installed_ensembl_releases_for_build
 
     fake_cache = tmp_path / 'pyensembl'
@@ -176,9 +175,7 @@ def test_installed_ensembl_releases_walks_pyensembl_cache(
     (fake_cache / 'GRCh37' / 'ensembl75').mkdir(parents=True)
     (fake_cache / 'GRCh38' / 'not_an_ensembl_dir').mkdir(parents=True)
 
-    monkeypatch.setattr(
-        platformdirs, 'user_cache_dir',
-        lambda app: str(fake_cache) if app == 'pyensembl' else '')
+    monkeypatch.setenv('PYENSEMBL_CACHE_DIR', str(tmp_path))
 
     assert installed_ensembl_releases_for_build('GRCh38') == [100, 112]
     assert installed_ensembl_releases_for_build('GRCh37') == [75]

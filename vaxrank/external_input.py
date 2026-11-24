@@ -492,9 +492,9 @@ def installed_ensembl_releases_for_build(build):
     import glob
     import re
 
-    import platformdirs
+    from pyensembl.cache_location import cache_root as pyensembl_cache_root
 
-    cache_root = platformdirs.user_cache_dir('pyensembl')
+    cache_root = pyensembl_cache_root()
     pattern = os.path.join(cache_root, build, 'ensembl*')
     releases = []
     for path in glob.glob(pattern):

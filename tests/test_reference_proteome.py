@@ -534,19 +534,42 @@ def test_partial_overlap_both_captured():
 # =============================================================================
 
 def test_cache_dir_created():
-    """Test that cache directory is created if it doesn't exist"""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        new_cache_dir = os.path.join(tmpdir, "new_cache")
-        ok_(not os.path.exists(new_cache_dir))
+    """Cache resolution is read-only by default, honors OPENVAX_DATA_CACHE, and creates only on create=True."""
+    import datacache
 
-        # Ensure VAXRANK_REF_PEPTIDES_DIR is unset so the platformdirs
-        # fallback path is exercised (CI sets this env var for caching).
+    with tempfile.TemporaryDirectory() as tmpdir:
+        platform_root = os.path.join(tmpdir, "platform")
+        shared_root = os.path.join(tmpdir, "shared")
+
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("VAXRANK_REF_PEPTIDES_DIR", None)
-            with patch('vaxrank.reference_proteome.user_cache_dir', return_value=new_cache_dir):
+            os.environ.pop("OPENVAX_DATA_CACHE", None)
+            with patch.object(
+                datacache.common,
+                "_platform_cache_dir",
+                side_effect=lambda name: os.path.join(platform_root, name),
+            ):
+                # Default is read-only and lands under shared openvax platform cache
                 result = get_cache_dir()
-                eq_(result, new_cache_dir)
-                ok_(os.path.exists(new_cache_dir))
+                eq_(result, os.path.join(platform_root, "openvax", "vaxrank"))
+                ok_(not os.path.exists(result))
+
+                # Legacy platform dir stays put when populated
+                legacy = os.path.join(platform_root, "vaxrank")
+                os.makedirs(legacy, exist_ok=True)
+                with open(os.path.join(legacy, "index.pkl.gz"), "wb") as handle:
+                    handle.write(b"old")
+                eq_(get_cache_dir(), legacy)
+
+                # OPENVAX_DATA_CACHE takes precedence over platform/legacy
+                os.environ["OPENVAX_DATA_CACHE"] = shared_root
+                shared_target = os.path.join(shared_root, "vaxrank")
+                eq_(get_cache_dir(), shared_target)
+                ok_(not os.path.exists(shared_target))
+
+                # create=True explicitly creates the directory
+                eq_(get_cache_dir(create=True), shared_target)
+                ok_(os.path.exists(shared_target))
 
 
 # =============================================================================
