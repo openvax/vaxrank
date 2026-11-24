@@ -278,12 +278,22 @@ def resolve_cache_location():
     platform cache.
     """
     import datacache
-    from datacache.common import _platform_cache_dir
+    import datacache.common as datacache_common
+
+    platform_cache_dir = getattr(
+        datacache_common,
+        "platform_cache_dir",
+        getattr(datacache_common, "_platform_cache_dir", None),
+    )
+    if platform_cache_dir is None:
+        raise ImportError(
+            "datacache.common exposes neither platform_cache_dir nor _platform_cache_dir"
+        )
 
     return datacache.resolve_cache_dir(
         "vaxrank",
         "VAXRANK_REF_PEPTIDES_DIR",
-        legacy=(_platform_cache_dir("vaxrank"),),
+        legacy=(platform_cache_dir("vaxrank"),),
     )
 
 
