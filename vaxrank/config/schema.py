@@ -278,6 +278,21 @@ class EvidenceConfigSchema(msgspec.Struct, frozen=True, kw_only=True, forbid_unk
     ms: Optional[dict] = None
 
 
+class CompareConfigSchema(
+    msgspec.Struct,
+    frozen=True,
+    kw_only=True,
+    forbid_unknown_fields=True,
+):
+    """Per-trial thresholds for ``vaxrank compare`` run-to-run diff reports."""
+    top_k_values: Optional[list[int]] = None
+    primary_top_k: Optional[int] = None
+    score_relative_change_threshold: Optional[float] = None
+    expression_fold_change_threshold: Optional[float] = None
+    rank_shift_highlight_threshold: Optional[int] = None
+    include_pdf: Optional[bool] = None
+
+
 class VaxrankConfigSchema(
     msgspec.Struct,
     frozen=True,
@@ -292,3 +307,4 @@ class VaxrankConfigSchema(
     vaccine_peptides: Optional[VaccinePeptidesConfigSchema] = None
     peptide: Optional[PeptideConstructConfigSchema] = None
     mrna: Optional[MrnaConstructConfigSchema] = None
+    compare: Optional[CompareConfigSchema] = None

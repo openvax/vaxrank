@@ -384,3 +384,13 @@ mrna:
   junction_candidates: ""              # comma-separated; "" = library default
   junction_rank_strong: 0.5            # %rank below = strong-binder hit
   junction_rank_mild: 2.0
+
+
+# Per-trial thresholds for ``vaxrank compare`` run-to-run diff reports.
+compare:
+  top_k_values: [5, 10, 20]
+  primary_top_k: 10
+  score_relative_change_threshold: 0.25
+  expression_fold_change_threshold: 1.5
+  rank_shift_highlight_threshold: 3
+  include_pdf: false
