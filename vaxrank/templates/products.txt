@@ -48,6 +48,7 @@ Identical final amino-acid sequences share one antigen slot, retaining all mappi
 {{ product.sequence | wordwrap(70, break_long_words=True) }}
 {% if product.protein %}Encoded protein:
 {{ product.protein | wordwrap(70, break_long_words=True) }}
+{% endif %}{% if product.sequence_qc %}{% set qc = product.sequence_qc %}CDS sequence QC: GC {{ '%.1f%%' % (qc.gc_fraction * 100) if qc.gc_fraction is not none else 'n/a' }} (window {{ '%.0f' % (qc.min_window_gc * 100) }}-{{ '%.0f%%' % (qc.max_window_gc * 100) }} / {{ qc.gc_window_nt }} nt); U {{ '%.1f%%' % (qc.uridine_fraction * 100) if qc.uridine_fraction is not none else 'n/a' }} (UU={{ qc.uu_dinucleotide_count }}); max homopolymer {{ qc.max_homopolymer_length }} nt; T7 terminators {{ qc.t7_terminator_count }}{% if qc.cai is not none %}; CAI {{ '%.3f' % qc.cai }}{% endif %}{% if qc.cds_mfe_kcal_mol is not none %}; MFE {{ qc.cds_mfe_kcal_mol }} kcal/mol{% endif %}; flags: {{ qc.synthesis_flags | join(', ') if qc.synthesis_flags else 'none' }}.
 {% endif %}
 {% for antigen in product.antigens %}
   Antigen {{ loop.index }} / {{ antigen.display_name }}: [{{ antigen.start }}, {{ antigen.end }}), {{ antigen.length }} aa

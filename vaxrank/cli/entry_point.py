@@ -509,6 +509,7 @@ _ARG_GROUPS = (
         'mrna_antigens_per_construct', 'mrna_max_constructs',
         'mrna_candidates_per_slot', 'mrna_max_length_nt',
         'mrna_codon_species', 'mrna_codon_method',
+        'mrna_cds_synthesis_safe', 'mrna_codon_optimizer',
         'mrna_optimize_linkers', 'mrna_junction_candidates',
         'mrna_junction_predictor', 'mrna_junction_alleles',
         'mrna_junction_predictor_path', 'mrna_junction_predictor_models_path',
@@ -790,6 +791,19 @@ def _emit_mrna_constructs(args, ranked, target_dir):
         args, 'mrna_epitopes_per_antigen', 'epitopes_per_antigen', None)
     if epitopes_per_antigen is None:
         epitopes_per_antigen = yaml_kwargs.get('epitopes_per_antigen', 1)
+    from ..mrna_cds import MRNACDSOptimizationPolicy
+    cds_opt_yaml = yaml_kwargs.get('cds_optimization')
+    cds_opt_dict = dict(cds_opt_yaml) if isinstance(cds_opt_yaml, dict) else {}
+    if getattr(args, 'mrna_cds_synthesis_safe', False):
+        preset = MRNACDSOptimizationPolicy.synthesis_safe().to_dict()
+        # Apply synthesis-safe defaults without clobbering explicit YAML overrides.
+        for k, v in preset.items():
+            if k not in cds_opt_dict or cds_opt_dict[k] is None:
+                cds_opt_dict[k] = v
+    cli_optimizer = getattr(args, 'mrna_codon_optimizer', None)
+    if cli_optimizer is not None:
+        cds_opt_dict['optimizer'] = cli_optimizer
+    cds_optimization = cds_opt_dict or None
     options = RNAConstructConfig(
         signal_peptide=(cfg('mrna_signal_peptide', 'signal_peptide') or None),
         linker=cfg('mrna_linker', 'linker'),
@@ -800,6 +814,7 @@ def _emit_mrna_constructs(args, ranked, target_dir):
         codon_species=(resolve_codon_species(cfg('mrna_codon_species', 'codon_species'), host.host_taxon_id)
                        if ranked else cfg('mrna_codon_species', 'codon_species')),
         codon_method=cfg('mrna_codon_method', 'codon_method'),
+        cds_optimization=cds_optimization,
         antigen_content=antigen_content,
         epitopes_per_antigen=epitopes_per_antigen,
         min_antigen_length_aa=cfg(

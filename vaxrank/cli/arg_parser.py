@@ -668,6 +668,20 @@ def add_mrna_output_args(group):
         choices=["use_best_codon", "match_codon_usage", "harmonize_rca"],
         help="DnaChisel codon-optimization method. Default: use_best_codon.")
     group.add_argument(
+        "--mrna-cds-synthesis-safe",
+        action="store_true",
+        default=False,
+        help="Enable synthesis-safe mRNA CDS constraints (35–68%% GC over 50-nt "
+             "windows, homopolymers <=5 nt, cryptic T7 terminator avoidance, "
+             "and uridine depletion). Fine-grained knobs can be saved under "
+             "mrna.cds_optimization in a per-trial YAML policy.")
+    group.add_argument(
+        "--mrna-codon-optimizer",
+        default=None,
+        choices=["dnachisel", "lineardesign"],
+        help="CDS optimization backend (dnachisel or optional external "
+             "LinearDesign CLI). Default: dnachisel.")
+    group.add_argument(
         "--mrna-optimize-linkers",
         dest="mrna_optimize_linkers",
         action="store_true",

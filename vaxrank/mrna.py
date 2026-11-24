@@ -37,14 +37,6 @@ import os
 from dataclasses import dataclass, field, replace
 from typing import Optional
 
-from dnachisel import (
-    AvoidChanges,
-    AvoidPattern,
-    CodonOptimize,
-    DnaOptimizationProblem,
-    EnforceTranslation,
-    Location,
-)
 from dnachisel.biotools import reverse_translate
 
 from .assembly_antigens import antigens_for_assembly, pack_antigens, product_gene_names, record_assembly_decisions
@@ -177,6 +169,7 @@ class RNAConstructConfig:
     utr_3p: str = "HBB_FI"  # tandem 2× HBB
     codon_species: Optional[str] = None
     codon_method: str = "use_best_codon"
+    cds_optimization: dict | None = None
     # Antigen-design axes — shared semantics with PeptideConstructConfig.
     # ``antigen_content`` ∈ {'mutation_spanning', 'minimal_epitope'};
     # the latter packs top MHC ligands as antigens instead of
@@ -214,6 +207,11 @@ class RNAConstructConfig:
     poly_a_segmented: bool = False
     poly_a_first_segment: int = 30
     poly_a_segment_linker: str = "GCATATGACT"
+
+    def __post_init__(self):
+        if self.cds_optimization is not None:
+            from .mrna_cds import MRNACDSOptimizationPolicy
+            MRNACDSOptimizationPolicy.resolve(self.cds_optimization)
 
 
 @dataclass
@@ -268,7 +266,8 @@ def resolve_named_mrna_element(table, name, kind):
 
 
 def codon_optimize(amino_acids, species=None, method="use_best_codon",
-                   avoid_patterns=(), frozen_segments=()):
+                   avoid_patterns=(), frozen_segments=(),
+                   cds_optimization=None):
     """Back-translate and codon-optimize an amino-acid sequence to DNA.
 
     Parameters
@@ -287,6 +286,10 @@ def codon_optimize(amino_acids, species=None, method="use_best_codon",
         ``blessed_dna`` exactly and not be touched by codon optimization.
         Used to preserve published codon usage for 2A self-cleaving
         peptides (see vaccine_library.LINKER_P2A et al.).
+    cds_optimization : dict or MRNACDSOptimizationPolicy or None
+        Optional synthesis-safe CDS policy (GC window, homopolymer cap,
+        T7 terminator / restriction-site avoidance, uridine depletion, or
+        LinearDesign backend).
 
     Returns
     -------
@@ -296,49 +299,16 @@ def codon_optimize(amino_acids, species=None, method="use_best_codon",
     if not amino_acids:
         return ""
     species = resolve_codon_species(species)
-    frozen_segments = sorted(frozen_segments)
-    # Build the initial DNA by substituting blessed nt segments where
-    # provided, otherwise back-translating freely. Track nt ranges to
-    # later pin via AvoidChanges.
-    initial_parts = []
-    frozen_nt_ranges = []
-    cursor = 0
-    nt_offset = 0
-    for start_aa, end_aa, blessed_dna in frozen_segments:
-        if start_aa < cursor:
-            raise ValueError("frozen_segments must not overlap")
-        if (end_aa - start_aa) * 3 != len(blessed_dna):
-            raise ValueError(
-                "blessed DNA length %d does not match AA window %d:%d"
-                % (len(blessed_dna), start_aa, end_aa))
-        prefix_aa = amino_acids[cursor:start_aa]
-        if prefix_aa:
-            prefix_dna = reverse_translate(prefix_aa)
-            initial_parts.append(prefix_dna)
-            nt_offset += len(prefix_dna)
-        initial_parts.append(blessed_dna)
-        frozen_nt_ranges.append((nt_offset, nt_offset + len(blessed_dna)))
-        nt_offset += len(blessed_dna)
-        cursor = end_aa
-    suffix_aa = amino_acids[cursor:]
-    if suffix_aa:
-        initial_parts.append(reverse_translate(suffix_aa))
-    initial = "".join(initial_parts)
-
-    constraints = [EnforceTranslation()]
-    for pattern in avoid_patterns:
-        constraints.append(AvoidPattern(pattern))
-    for start_nt, end_nt in frozen_nt_ranges:
-        constraints.append(AvoidChanges(location=Location(start_nt, end_nt)))
-    problem = DnaOptimizationProblem(
-        sequence=initial,
-        constraints=constraints,
-        objectives=[CodonOptimize(species=species, method=method)],
-        logger=None,
+    from .mrna_cds import optimize_cds_dna
+    return optimize_cds_dna(
+        amino_acids,
+        species=species,
+        method=method,
+        avoid_patterns=tuple(avoid_patterns),
+        frozen_segments=tuple(frozen_segments),
+        policy=cds_optimization,
+        reverse_translate_fn=reverse_translate,
     )
-    problem.resolve_constraints()
-    problem.optimize()
-    return problem.sequence
 
 
 def summarize_mrna_ranking_decisions(
@@ -765,12 +735,20 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
             method=options.codon_method,
             avoid_patterns=options.avoid_patterns,
             frozen_segments=frozen_segments,
+            cds_optimization=options.cds_optimization,
         )
+        from .mrna_cds import MRNACDSOptimizationPolicy, compute_mrna_sequence_qc
+        cds_policy = MRNACDSOptimizationPolicy.resolve(options.cds_optimization)
         # Three sequence views: cds_nt = back-translated protein + STOP;
         # no_polya_nt = 5' UTR + cds_nt + 3' UTR; full_nt = no_polya_nt
         # + polyA tail. ``sequence`` keeps full_nt for back-compat with
         # callers that read it as the canonical "the construct" string.
         cds_nt = coding_dna + STOP_CODON
+        sequence_qc = compute_mrna_sequence_qc(
+            cds_nt,
+            species=options.codon_species,
+            policy=cds_policy,
+        )
         no_polya_nt = utr_5p_dna + cds_nt + utr_3p_dna
         poly_a_nt = build_poly_a(options)
         full_nt = no_polya_nt + poly_a_nt
@@ -847,6 +825,9 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
         }
         elements['codon_species'] = options.codon_species
         elements['codon_method'] = options.codon_method
+        elements['sequence_qc'] = sequence_qc
+        if cds_policy.has_active_constraints() or cds_policy.compute_mfe:
+            elements['cds_optimization'] = cds_policy.to_dict()
         elements['junction_swap'] = junction_swap_meta
 
         # Back-compat ``components`` dict: same fields the 2.12.x
@@ -861,7 +842,10 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
             'codon_species': options.codon_species,
             'codon_method': options.codon_method,
             'protein': protein,
+            'sequence_qc': sequence_qc,
         }
+        if cds_policy.has_active_constraints() or cds_policy.compute_mfe:
+            components['cds_optimization'] = cds_policy.to_dict()
         components['junction_swap'] = junction_swap_meta
 
         constructs.append(RNAConstruct(

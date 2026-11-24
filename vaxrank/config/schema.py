@@ -170,6 +170,29 @@ class PeptideConstructConfigSchema(
     window_selection: Optional[dict] = None
 
 
+class MrnaCDSOptimizationSchema(
+    msgspec.Struct,
+    frozen=True,
+    kw_only=True,
+    forbid_unknown_fields=True,
+):
+    """Per-trial policy for synthesis-safe mRNA CDS optimization and QC."""
+    optimizer: Optional[str] = None
+    lineardesign_executable: Optional[str] = None
+    lineardesign_lambda: Optional[float] = None
+    gc_min: Optional[float] = None
+    gc_max: Optional[float] = None
+    gc_window_nt: Optional[int] = None
+    max_homopolymer_length: Optional[int] = None
+    avoid_t7_terminator: Optional[bool] = None
+    avoid_restriction_sites: Optional[list[str]] = None
+    uridine_depletion: Optional[bool] = None
+    uridine_depletion_weight: Optional[float] = None
+    avoid_uu_dinucleotides: Optional[bool] = None
+    compute_mfe: Optional[bool] = None
+    initiation_window_nt: Optional[int] = None
+
+
 class MrnaConstructConfigSchema(
     msgspec.Struct,
     frozen=True,
@@ -199,6 +222,7 @@ class MrnaConstructConfigSchema(
     poly_a_segment_linker: Optional[str] = None
     codon_species: Optional[str] = None
     codon_method: Optional[str] = None
+    cds_optimization: Optional[MrnaCDSOptimizationSchema] = None
     optimize_linkers: Optional[bool] = None
     junction_predictor: Optional[str] = None
     junction_alleles: Optional[str] = None
