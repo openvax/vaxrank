@@ -394,3 +394,16 @@ compare:
   expression_fold_change_threshold: 1.5
   rank_shift_highlight_threshold: 3
   include_pdf: false
+
+
+# Per-trial policy for cross-species MHC allele LOH / silencing / expression status.
+mhc_allele_status:
+  mask_lost_alleles: true              # zero ranking credit on confirmed DNA LOH alleles
+  mask_silenced_alleles: true          # zero ranking credit on confirmed transcriptionally silenced alleles
+  mask_unresolvable_alleles: false     # keep unresolvable (e.g. 10x 3' low UMI) alleles credited with caveat
+  expression_weight_mode: binary       # binary | continuous_ratio
+  dna_loh_max_copy_number: 0.5
+  min_scrna_resolvable_umis: 20
+  silenced_tumor_to_immune_ratio: 0.1
+  silenced_bulk_allele_ratio: 0.1
+  min_purity_for_bulk_ase_call: 0.5

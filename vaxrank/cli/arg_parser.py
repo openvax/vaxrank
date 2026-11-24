@@ -567,6 +567,22 @@ def add_output_args(arg_parser):
              "appear in any product or report, so this changes the "
              "design, not only its length. --max-mutations-in-report is "
              "the older spelling of the same option.")
+    design_group.add_argument(
+        "--mhc-allele-status",
+        default=None,
+        metavar="PATH",
+        help="Path to a JSON or TSV MHC allele status/expression file "
+             "(DNA LOH, bulk RNA ASE, scRNA tumor-cluster nTPM, and optional "
+             "APM status). Alleles are matched cross-species via mhcgnomes; "
+             "masking/weighting thresholds are configurable under "
+             "mhc_allele_status: in a per-trial YAML policy.")
+    design_group.add_argument(
+        "--mhc-loh-alleles",
+        default=None,
+        metavar="ALLELES",
+        help="Comma-separated list of MHC alleles with confirmed somatic LOH "
+             "(e.g. 'HLA-A*02:01' or 'DLA-88*034:01'). Shorthand for marking "
+             "those alleles status=lost under the mhc_allele_status policy.")
 
 
 

@@ -30,6 +30,7 @@
 
             <nav class="contents" aria-label="Report contents">
                 <a href="#input-coverage">Input survey</a> &middot;
+                {% if mhc_allele_status %}<a href="#mhc-allele-status">MHC allele status</a> &middot; {% endif %}
                 {% if host_coverage is defined and host_coverage.identity %}<a href="#host-catalogue-coverage">Host ORF coverage</a> &middot; {% endif %}
                 <a href="#ranking">Candidate ranking</a> &middot;
                 <a href="#products">Emitted products</a> &middot;
@@ -44,6 +45,7 @@
             </nav>
 
             {% if input_coverage %}{% include "templates/input_coverage.html" %}{% endif %}
+            {% if mhc_allele_status %}{% include "templates/mhc_allele_status.html" %}{% endif %}
             {% if host_coverage is defined and host_coverage.identity %}{% include "templates/host_coverage.html" %}{% endif %}
             {% if ranked_candidates is defined %}<section class="appendix">{% include "templates/ranking.html" %}</section>{% endif %}
             <section class="appendix">{% include "templates/products.html" %}</section>
