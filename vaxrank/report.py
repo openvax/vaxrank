@@ -1364,13 +1364,19 @@ class TemplateDataCreator(object):
                     display_name=' / '.join(dict.fromkeys(a['display_name'] for a in antigens)) or product.name,
                     unit='aa' if modality == 'peptide' else 'nt',
                     protein=product.cds_aa if modality == 'mrna' else None,
+                    pool=product.components.get('pool') if modality == 'peptide' else None,
                     antigens=antigens, antigen_names=product.antigen_names,
                     n_terminal_acetylation=product.components.get('n_terminal_acetylation'),
                     c_terminal_amidation=product.components.get('c_terminal_amidation'),
                     manufacturability={k: _sanitize(v) for k, v in product.manufacturability.items()}
                         if modality == 'peptide' else {}))
+            pool_summary = None
+            if modality == 'peptide':
+                from .peptide_pools import summarize_peptide_pools
+                pool_summary = summarize_peptide_pools(products)
             groups.append(dict(modality=modality, products=rows, counts=summarize_products(products),
-                               files=self.product_files.get(modality, ())))
+                               files=self.product_files.get(modality, ()),
+                               **({'pool_summary': pool_summary} if pool_summary else {})))
         return groups
 
     def compute_template_data(self):

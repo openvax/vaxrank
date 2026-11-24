@@ -281,6 +281,7 @@ peptide:
   scale_mg: 5.0
   purity_percent: 95.0
   counterion: TFA
+  num_pools: 1                         # >1 partitions emitted SLPs into K balanced injection pools
 
   # Peptide-only synthesis-difficulty rules + thresholds. Used as a
   # tie-break when ``vaccine_peptides.ranking_rules`` references the

@@ -383,6 +383,9 @@ def _peptide_construct_options(args):
         args, 'peptide_epitopes_per_antigen', 'epitopes_per_antigen', None)
     if epitopes_per_antigen is None:
         epitopes_per_antigen = yaml_kwargs.get('epitopes_per_antigen', 1)
+    num_pools = cfg('peptide_num_pools', 'num_pools')
+    if num_pools is None:
+        num_pools = 1
     config_kwargs = dict(
         mode=cfg('peptide_mode', 'mode'),
         linker=cfg('peptide_linker', 'linker'),
@@ -402,6 +405,7 @@ def _peptide_construct_options(args):
         scale_mg=cfg('peptide_scale_mg', 'scale_mg'),
         purity_percent=cfg('peptide_purity_percent', 'purity_percent'),
         counterion=cfg('peptide_counterion', 'counterion'),
+        num_pools=num_pools,
         epitopes_per_antigen=epitopes_per_antigen,
         window_selection=yaml_kwargs.get('window_selection'),
         antigen_allocation=yaml_kwargs.get('antigen_allocation'),
@@ -494,6 +498,7 @@ _ARG_GROUPS = (
         'peptide_candidates_per_slot', 'peptide_n_terminal_acetyl',
         'peptide_c_terminal_amide', 'peptide_scale_mg',
         'peptide_purity_percent', 'peptide_counterion',
+        'peptide_num_pools',
         'peptide_antigen_content', 'peptide_epitopes_per_antigen',
     )),
     ("mRNA", (
