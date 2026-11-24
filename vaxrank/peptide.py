@@ -109,6 +109,7 @@ class PeptideConstructConfig:
     purity_percent: float = 95.0    # HPLC purity target
     counterion: str = "TFA"         # default salt form (TFA / acetate / HCl / free)
     num_pools: int = 1              # formulation injection pools (>1 partitions by MHC/physicochemical balance)
+    pool_partition: dict | None = None  # per-trial PeptidePoolPolicy parameters
     window_selection: dict | None = None
 
     def __post_init__(self):
@@ -150,6 +151,9 @@ class PeptideConstructConfig:
         if isinstance(self.num_pools, bool) or not isinstance(self.num_pools, int) or self.num_pools < 1:
             raise ValueError(
                 "num_pools must be a positive integer; got %r" % (self.num_pools,))
+        if self.pool_partition is not None:
+            from .peptide_pools import PeptidePoolPolicy
+            PeptidePoolPolicy.resolve(self.pool_partition)
         if self.window_selection is not None:
             from .window_selection import WindowSelection
             WindowSelection.resolve(self.window_selection)
@@ -311,6 +315,7 @@ def assemble_peptide_constructs(
             options.num_pools,
             ranked_vaccine_peptides=ranked_vaccine_peptides,
             target_alleles=target_alleles,
+            policy=options.pool_partition,
         )
         if pool_summary is not None:
             selection_audit['pool_partition'] = pool_summary

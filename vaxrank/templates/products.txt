@@ -13,8 +13,9 @@ Recorded source events: {{ group.counts.source_events }}; candidate mappings wit
 Related alternative sequences do not establish independent target coverage.
 {% endif %}
 {% if group.files %}Product files (relative to the run output directory): {{ group.files | join(', ') }}.
-{% endif %}{% if group.pool_summary %}{% set ps = group.pool_summary %}Formulation pools: {{ ps.num_pools_assigned }} (same-allele binder pairs: {{ ps.single_pool_same_allele_pairs }} single-pool -> {{ ps.partitioned_same_allele_pairs }} partitioned).
-{% for prow in ps.pools %}  Pool {{ prow.pool }} ({{ prow.count }} peptides; same-allele pairs {{ prow.same_allele_pairs }}; Cys {{ prow.cys_peptides }}; mean max GRAVY {{ prow.mean_max_gravy if prow.mean_max_gravy is not none else 'n/a' }}; mean charge {{ '%+.2f' % prow.mean_net_charge if prow.mean_net_charge is not none else 'n/a' }}): {{ prow.construct_names | join(', ') }}
+{% endif %}{% if group.pool_summary %}{% set ps = group.pool_summary %}Formulation pools: {{ ps.num_pools_assigned }} (same-allele binder pairs: {{ ps.single_pool_same_allele_pairs }} single-pool -> {{ ps.partitioned_same_allele_pairs }} partitioned; pH {{ ps.charge_ph }}).
+{% if ps.policy %}  Pool policy: strong <= {{ ps.policy.strong_rank_threshold }}% (w={{ ps.policy.strong_allele_weight }}), medium <= {{ ps.policy.medium_rank_threshold }}% (w={{ ps.policy.medium_allele_weight }}); weights MHC={{ ps.policy.allele_competition_weight }}, Cys={{ ps.policy.cysteine_pair_weight }}, GRAVY={{ ps.policy.gravy_balance_weight }}, charge={{ ps.policy.charge_balance_weight }}.
+{% endif %}{% for prow in ps.pools %}  Pool {{ prow.pool }} ({{ prow.count }} peptides; same-allele pairs {{ prow.same_allele_pairs }}; Cys {{ prow.cys_peptides }}; mean max GRAVY {{ prow.mean_max_gravy if prow.mean_max_gravy is not none else 'n/a' }}; mean charge {{ '%+.2f' % prow.mean_net_charge if prow.mean_net_charge is not none else 'n/a' }}): {{ prow.construct_names | join(', ') }}
 {% endfor %}{% endif %}
 {% if group.assembly_decisions is defined %}{% if group.assembly_decisions is not none %}
 Assembly order: {{ group.assembly_decisions.order | replace('_', ' ') }}.

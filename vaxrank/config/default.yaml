@@ -282,6 +282,20 @@ peptide:
   purity_percent: 95.0
   counterion: TFA
   num_pools: 1                         # >1 partitions emitted SLPs into K balanced injection pools
+  # Per-trial formulation policy for multi-pool SLP partitioning (used when num_pools > 1).
+  pool_partition:
+    strong_rank_threshold: 0.5         # <= % rank counted as strong MHC binder
+    medium_rank_threshold: 2.0         # <= % rank counted as medium MHC binder
+    strong_score_threshold: 0.5        # score fallback when % rank is absent
+    medium_score_threshold: 0.1
+    strong_allele_weight: 3.0          # competition weight for strong MHC binders
+    medium_allele_weight: 1.0          # competition weight for medium MHC binders
+    allele_competition_weight: 100.0   # primary objective: separate same-MHC competitors
+    cysteine_pair_weight: 10.0         # secondary objective: separate Cys-containing peptides
+    gravy_balance_weight: 2.0          # tertiary objective: balance max 7-mer GRAVY
+    charge_balance_weight: 1.0         # tertiary objective: balance net charge at charge_ph
+    charge_ph: 7.0                     # formulation buffer pH for Henderson-Hasselbalch charge
+    max_swap_passes: 50                # steepest-descent 2-swap local search cap
 
   # Peptide-only synthesis-difficulty rules + thresholds. Used as a
   # tie-break when ``vaccine_peptides.ranking_rules`` references the

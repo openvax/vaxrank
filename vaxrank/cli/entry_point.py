@@ -406,6 +406,7 @@ def _peptide_construct_options(args):
         purity_percent=cfg('peptide_purity_percent', 'purity_percent'),
         counterion=cfg('peptide_counterion', 'counterion'),
         num_pools=num_pools,
+        pool_partition=yaml_kwargs.get('pool_partition'),
         epitopes_per_antigen=epitopes_per_antigen,
         window_selection=yaml_kwargs.get('window_selection'),
         antigen_allocation=yaml_kwargs.get('antigen_allocation'),

@@ -21,37 +21,146 @@ separate anatomical sites so:
    the same draining lymph node.
 2. **Cysteine-containing peptides** are spread across pools to reduce
    inter-peptide disulfide cross-linking risk during formulation.
-3. **Hydrophobicity (max 7-mer GRAVY)** and **net charge at pH 7.0** are
-   balanced across pools to reduce co-precipitation and solubility failures.
+3. **Hydrophobicity (max 7-mer GRAVY)** and **net charge at formulation pH**
+   are balanced across pools to reduce co-precipitation and solubility
+   failures.
 
-The optimizer is deterministic, species-agnostic (uses ``mhcgnomes``-backed
-canonical allele names), enforces balanced pool cardinalities
-(``floor(N/K)..ceil(N/K)``), and leaves single-pool (``num_pools == 1``)
-designs untouched.
+Every tier cutoff and objective weight lives on :class:`PeptidePoolPolicy`
+so clinical trials and non-human protocols can persist and version their
+formulation policy in YAML (``peptide.pool_partition:``). The optimizer is
+deterministic, species-agnostic (``mhcgnomes``-backed canonical MHC alleles),
+enforces balanced pool cardinalities (``floor(N/K)..ceil(N/K)``), and leaves
+single-pool (``num_pools == 1``) designs untouched.
 """
 
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, fields
 import math
 from typing import Iterable, Optional
 
-from .coverage import compute_coverage
 from .identifiers import normalize_mhc_allele
 
 
-# Tier weights for same-allele competition within a pool.
-_STRONG_WEIGHT = 3.0
-_MEDIUM_WEIGHT = 1.0
+# Lehninger Principles of Biochemistry standard pKa values for
+# Henderson-Hasselbalch peptide net-charge calculation.
+_PKA_N_TERM = 9.69
+_PKA_C_TERM = 2.34
+_PKA_POSITIVE = {'K': 10.53, 'R': 12.48, 'H': 6.00}
+_PKA_NEGATIVE = {'D': 3.86, 'E': 4.25, 'C': 8.33, 'Y': 10.07}
 
-# Relative weights between the primary (MHC competition), secondary (cysteine
-# cross-linking), and tertiary (scale-normalized GRAVY & net-charge balance)
-# objectives.
-_W_ALLELE = 100.0
-_W_CYSTEINE = 10.0
-_W_GRAVY = 2.0
-_W_CHARGE = 1.0
+
+def _check_finite_nonnegative(name: str, value: float) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+        raise ValueError(f"PeptidePoolPolicy.{name} must be finite and >= 0; got {value!r}")
+    return float(value)
+
+
+@dataclass(frozen=True)
+class PeptidePoolPolicy:
+    """Explicit, serializable per-trial policy for multi-pool SLP partitioning.
+
+    All cutoffs and objective weights can be saved in a trial YAML config
+    under ``peptide.pool_partition:`` and are recorded in ``selection_policy.json``,
+    ``manifest.json``, and reports.
+    """
+
+    strong_rank_threshold: float = 0.5
+    medium_rank_threshold: float = 2.0
+    strong_score_threshold: float = 0.5
+    medium_score_threshold: float = 0.1
+    strong_allele_weight: float = 3.0
+    medium_allele_weight: float = 1.0
+    allele_competition_weight: float = 100.0
+    cysteine_pair_weight: float = 10.0
+    gravy_balance_weight: float = 2.0
+    charge_balance_weight: float = 1.0
+    charge_ph: float = 7.0
+    max_swap_passes: int = 50
+
+    def __post_init__(self):
+        sr = _check_finite_nonnegative("strong_rank_threshold", self.strong_rank_threshold)
+        mr = _check_finite_nonnegative("medium_rank_threshold", self.medium_rank_threshold)
+        if sr <= 0:
+            raise ValueError(f"PeptidePoolPolicy.strong_rank_threshold must be > 0; got {sr!r}")
+        if mr < sr:
+            raise ValueError(
+                f"PeptidePoolPolicy.medium_rank_threshold ({mr}) must be >= strong_rank_threshold ({sr})"
+            )
+        ss = _check_finite_nonnegative("strong_score_threshold", self.strong_score_threshold)
+        ms = _check_finite_nonnegative("medium_score_threshold", self.medium_score_threshold)
+        if ss < ms:
+            raise ValueError(
+                f"PeptidePoolPolicy.strong_score_threshold ({ss}) must be >= medium_score_threshold ({ms})"
+            )
+        for name in (
+            "strong_allele_weight",
+            "medium_allele_weight",
+            "allele_competition_weight",
+            "cysteine_pair_weight",
+            "gravy_balance_weight",
+            "charge_balance_weight",
+        ):
+            _check_finite_nonnegative(name, getattr(self, name))
+        ph = _check_finite_nonnegative("charge_ph", self.charge_ph)
+        if ph > 14.0:
+            raise ValueError(f"PeptidePoolPolicy.charge_ph must be in [0, 14]; got {ph!r}")
+        if isinstance(self.max_swap_passes, bool) or not isinstance(self.max_swap_passes, int) or self.max_swap_passes < 0:
+            raise ValueError(
+                f"PeptidePoolPolicy.max_swap_passes must be a nonnegative integer; got {self.max_swap_passes!r}"
+            )
+
+    @classmethod
+    def resolve(cls, value=None) -> "PeptidePoolPolicy":
+        """Resolve ``None``, a ``PeptidePoolPolicy``, or a dict to a validated policy."""
+        if value is None:
+            return cls()
+        if isinstance(value, cls):
+            return value
+        if not isinstance(value, dict):
+            raise TypeError(
+                f"peptide.pool_partition must be a mapping or PeptidePoolPolicy; got {type(value).__name__}"
+            )
+        valid = {f.name for f in fields(cls)}
+        unknown = sorted(set(value) - valid)
+        if unknown:
+            raise ValueError(
+                f"Unknown peptide.pool_partition keys: {', '.join(unknown)}"
+            )
+        cleaned = {k: v for k, v in value.items() if v is not None}
+        return cls(**cleaned)
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+def net_charge_at_ph(
+    sequence: str,
+    *,
+    ph: float = 7.0,
+    n_terminal_acetylation: bool = False,
+    c_terminal_amidation: bool = False,
+) -> float:
+    """Estimate peptide net charge at ``ph`` via Henderson-Hasselbalch pKa."""
+    if not sequence:
+        return 0.0
+    seq = sequence.upper()
+    charge = 0.0
+    for aa in seq:
+        pka_pos = _PKA_POSITIVE.get(aa)
+        if pka_pos is not None:
+            charge += 1.0 / (1.0 + 10.0 ** (ph - pka_pos))
+        else:
+            pka_neg = _PKA_NEGATIVE.get(aa)
+            if pka_neg is not None:
+                charge -= 1.0 / (1.0 + 10.0 ** (pka_neg - ph))
+    if not n_terminal_acetylation:
+        charge += 1.0 / (1.0 + 10.0 ** (ph - _PKA_N_TERM))
+    if not c_terminal_amidation:
+        charge -= 1.0 / (1.0 + 10.0 ** (_PKA_C_TERM - ph))
+    rounded = round(charge, 2)
+    return 0.0 if rounded == 0.0 else rounded
 
 
 def net_charge_ph7(
@@ -60,28 +169,13 @@ def net_charge_ph7(
     n_terminal_acetylation: bool = False,
     c_terminal_amidation: bool = False,
 ) -> float:
-    """Estimate peptide net charge at physiological pH (7.0).
-
-    Uses standard side-chain contributions (K/R +1.0, H +0.1, D/E -1.0) plus
-    free-terminus contributions (+1.0 for unacetylated N-terminus, -1.0 for
-    unamidated C-terminus).
-    """
-    if not sequence:
-        return 0.0
-    seq = sequence.upper()
-    charge = 0.0
-    for aa in seq:
-        if aa in ('K', 'R'):
-            charge += 1.0
-        elif aa == 'H':
-            charge += 0.1
-        elif aa in ('D', 'E'):
-            charge -= 1.0
-    if not n_terminal_acetylation:
-        charge += 1.0
-    if not c_terminal_amidation:
-        charge -= 1.0
-    return round(charge, 2)
+    """Estimate peptide net charge at physiological pH (7.0)."""
+    return net_charge_at_ph(
+        sequence,
+        ph=7.0,
+        n_terminal_acetylation=n_terminal_acetylation,
+        c_terminal_amidation=c_terminal_amidation,
+    )
 
 
 @dataclass(frozen=True)
@@ -141,66 +235,78 @@ def _extract_construct_epitopes(construct, vp_by_sequence: dict[str, list]):
 def _allele_weights_for_epitopes(
     epitopes,
     target_alleles: Optional[Iterable[str]] = None,
+    *,
+    policy: Optional[PeptidePoolPolicy] = None,
 ) -> tuple[dict[str, float], tuple[str, ...], tuple[str, ...]]:
-    """Map each bound allele to a competition weight (strong=3.0, medium=1.0).
+    """Map each bound MHC allele to a competition weight under ``policy``.
 
-    Prefers percentile-rank tiers via :func:`vaxrank.coverage.compute_coverage`
-    (presentation or affinity <=0.5% strong, <=2.0% medium/low). Falls back
-    to ``per_allele_scores`` (>=0.5 strong, >=0.1 medium) when percentile ranks
-    are absent (e.g. IC50-only or synthetic runs).
+    Evaluates best percentile rank (across ``pMHC_presentation`` and
+    ``pMHC_affinity`` predictions) against ``policy.strong_rank_threshold`` and
+    ``policy.medium_rank_threshold``. Falls back to ``per_allele_scores``
+    against ``policy.strong_score_threshold`` / ``policy.medium_score_threshold``
+    when percentile ranks are absent.
     """
-    alleles = []
-    seen = set()
-    for a in target_alleles or ():
-        canon = _canonical_allele(a)
-        if canon and canon not in seen:
-            seen.add(canon)
-            alleles.append(canon)
-    for ep in epitopes:
-        for a in getattr(ep, 'per_allele_scores', {}) or {}:
-            canon = _canonical_allele(a)
-            if canon and canon not in seen:
-                seen.add(canon)
-                alleles.append(canon)
-        for pred in ep.predictions_flat() if hasattr(ep, 'predictions_flat') else ():
-            if pred.allele:
-                canon = _canonical_allele(pred.allele)
-                if canon and canon not in seen:
-                    seen.add(canon)
-                    alleles.append(canon)
+    policy = PeptidePoolPolicy.resolve(policy)
+    allowed = None
+    if target_alleles:
+        allowed = {_canonical_allele(a) for a in target_alleles if a}
+        allowed.discard('')
 
-    if not alleles or not epitopes:
+    if not epitopes:
         return {}, (), ()
 
-    coverage = compute_coverage(epitopes, alleles)
+    best_pct: dict[str, float] = {}
+    for ep in epitopes:
+        preds = ep.predictions_flat() if hasattr(ep, 'predictions_flat') else ()
+        for pred in preds:
+            if pred.kind not in ('pMHC_affinity', 'pMHC_presentation'):
+                continue
+            pct = getattr(pred, 'percentile_rank', None)
+            if pct is None or not pred.allele:
+                continue
+            try:
+                pct_f = float(pct)
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(pct_f):
+                continue
+            canon = _canonical_allele(pred.allele)
+            if not canon or (allowed is not None and canon not in allowed):
+                continue
+            prev = best_pct.get(canon)
+            if prev is None or pct_f < prev:
+                best_pct[canon] = pct_f
+
     strong = set()
     medium = set()
-    any_pct_tier = any(cov.tier is not None for cov in coverage.values())
-    if any_pct_tier:
-        for allele, cov in coverage.items():
-            if cov.tier == 'strong':
+    if best_pct:
+        for allele, pct in best_pct.items():
+            if pct <= policy.strong_rank_threshold:
                 strong.add(allele)
-            elif cov.tier in ('medium', 'low'):
+            elif pct <= policy.medium_rank_threshold:
                 medium.add(allele)
     else:
-        best_score = {}
+        best_score: dict[str, float] = {}
         for ep in epitopes:
             for allele, score in (getattr(ep, 'per_allele_scores', {}) or {}).items():
                 if score is None:
                     continue
                 canon = _canonical_allele(allele)
+                if not canon or (allowed is not None and canon not in allowed):
+                    continue
+                score_f = float(score)
                 prev = best_score.get(canon, 0.0)
-                if score > prev:
-                    best_score[canon] = float(score)
+                if score_f > prev:
+                    best_score[canon] = score_f
         for allele, score in best_score.items():
-            if score >= 0.5:
+            if score >= policy.strong_score_threshold:
                 strong.add(allele)
-            elif score >= 0.1:
+            elif score >= policy.medium_score_threshold:
                 medium.add(allele)
 
     medium -= strong
-    weights = {a: _STRONG_WEIGHT for a in strong}
-    weights.update({a: _MEDIUM_WEIGHT for a in medium})
+    weights = {a: policy.strong_allele_weight for a in strong}
+    weights.update({a: policy.medium_allele_weight for a in medium})
     return weights, tuple(sorted(strong)), tuple(sorted(medium))
 
 
@@ -208,7 +314,10 @@ def _build_profiles(
     constructs,
     ranked_vaccine_peptides=(),
     target_alleles=None,
+    *,
+    policy: Optional[PeptidePoolPolicy] = None,
 ) -> list[PeptidePoolProfile]:
+    policy = PeptidePoolPolicy.resolve(policy)
     vp_by_sequence: dict[str, list] = {}
     for _, vps in ranked_vaccine_peptides or ():
         for vp in vps:
@@ -217,13 +326,16 @@ def _build_profiles(
     profiles = []
     for idx, construct in enumerate(constructs):
         epitopes = _extract_construct_epitopes(construct, vp_by_sequence)
-        weights, strong, medium = _allele_weights_for_epitopes(epitopes, target_alleles)
+        weights, strong, medium = _allele_weights_for_epitopes(
+            epitopes, target_alleles, policy=policy
+        )
         mfg = construct.manufacturability or {}
         max_gravy = float(mfg.get('max_7mer_gravy_score', 0.0) or 0.0)
         cterm_gravy = float(mfg.get('cterm_7mer_gravy_score', 0.0) or 0.0)
         cys_count = int(mfg.get('cysteine_count', 0) or 0)
-        charge = net_charge_ph7(
+        charge = net_charge_at_ph(
             construct.sequence,
+            ph=policy.charge_ph,
             n_terminal_acetylation=bool(construct.components.get('n_terminal_acetylation', False)),
             c_terminal_amidation=bool(construct.components.get('c_terminal_amidation', False)),
         )
@@ -247,10 +359,13 @@ def _pool_cost(
     mean_charge: float,
     gravy_scale: float = 1.0,
     charge_scale: float = 1.0,
+    *,
+    policy: Optional[PeptidePoolPolicy] = None,
 ) -> float:
-    """Compute objective penalty for one pool."""
+    """Compute objective penalty for one pool under ``policy``."""
     if not pool_profiles:
         return 0.0
+    policy = policy or PeptidePoolPolicy()
 
     # Pairwise same-allele weighted competition: sum_{i<j} w_{i,a} * w_{j,a}
     # = 0.5 * ((sum w)^2 - sum(w^2)) per allele.
@@ -277,32 +392,11 @@ def _pool_cost(
     gravy_dev = ((g_sum / n - mean_gravy) / gravy_scale) ** 2
     charge_dev = ((q_sum / n - mean_charge) / charge_scale) ** 2
     return (
-        _W_ALLELE * allele_pen
-        + _W_CYSTEINE * cys_pen
-        + _W_GRAVY * gravy_dev
-        + _W_CHARGE * charge_dev
+        policy.allele_competition_weight * allele_pen
+        + policy.cysteine_pair_weight * cys_pen
+        + policy.gravy_balance_weight * gravy_dev
+        + policy.charge_balance_weight * charge_dev
     )
-
-
-def _total_cost(
-    pools: list[list[PeptidePoolProfile]],
-    mean_gravy: float,
-    mean_charge: float,
-    gravy_scale: float = 1.0,
-    charge_scale: float = 1.0,
-) -> float:
-    return sum(
-        _pool_cost(p, mean_gravy, mean_charge, gravy_scale, charge_scale)
-        for p in pools
-    )
-
-
-def _same_allele_pairs(pool_profiles: list[PeptidePoolProfile]) -> int:
-    counts = Counter()
-    for prof in pool_profiles:
-        for allele in prof.all_alleles:
-            counts[allele] += 1
-    return sum(c * (c - 1) // 2 for c in counts.values())
 
 
 def partition_peptide_constructs(
@@ -311,16 +405,19 @@ def partition_peptide_constructs(
     *,
     ranked_vaccine_peptides=(),
     target_alleles=None,
+    policy=None,
 ) -> Optional[dict]:
     """Assign emitted peptide constructs across ``1..num_pools`` formulation pools.
 
     Mutates each construct's ``components`` dict in place to add ``'pool'``
-    (1-based integer) and ``'pool_profile'`` (bound alleles + net charge) when
-    ``num_pools > 1``. Returns a JSON-serializable pool summary dict, or
-    ``None`` when ``num_pools <= 1`` or ``constructs`` is empty.
+    (1-based integer) and ``'pool_profile'`` (bound MHC alleles, net charge,
+    formulation pH, and policy) when ``num_pools > 1``. Returns a
+    JSON-serializable pool summary dict, or ``None`` when ``num_pools <= 1``
+    or ``constructs`` is empty.
     """
     if isinstance(num_pools, bool) or not isinstance(num_pools, int) or num_pools < 1:
         raise ValueError("num_pools must be a positive integer; got %r" % (num_pools,))
+    resolved_policy = PeptidePoolPolicy.resolve(policy)
     if num_pools == 1 or not constructs:
         return None
 
@@ -329,6 +426,7 @@ def partition_peptide_constructs(
         constructs,
         ranked_vaccine_peptides=ranked_vaccine_peptides,
         target_alleles=target_alleles,
+        policy=resolved_policy,
     )
     n = len(profiles)
     mean_gravy = sum(p.max_gravy for p in profiles) / n
@@ -367,8 +465,14 @@ def partition_peptide_constructs(
         for pi in range(k):
             if len(pools[pi]) >= caps[pi]:
                 continue
-            before = _pool_cost(pools[pi], mean_gravy, mean_charge, gravy_scale, charge_scale)
-            after = _pool_cost(pools[pi] + [prof], mean_gravy, mean_charge, gravy_scale, charge_scale)
+            before = _pool_cost(
+                pools[pi], mean_gravy, mean_charge, gravy_scale, charge_scale,
+                policy=resolved_policy,
+            )
+            after = _pool_cost(
+                pools[pi] + [prof], mean_gravy, mean_charge, gravy_scale, charge_scale,
+                policy=resolved_policy,
+            )
             delta = after - before
             if (
                 delta < best_delta - 1e-12
@@ -381,24 +485,35 @@ def partition_peptide_constructs(
 
     # Deterministic steepest-descent 2-swap local search preserving exact
     # balanced pool sizes.
-    max_passes = 50
-    for _ in range(max_passes):
+    for _ in range(resolved_policy.max_swap_passes):
         improved = False
         best_swap = None
         best_gain = 1e-12
         for p1 in range(k):
             for p2 in range(p1 + 1, k):
                 c12_before = (
-                    _pool_cost(pools[p1], mean_gravy, mean_charge, gravy_scale, charge_scale)
-                    + _pool_cost(pools[p2], mean_gravy, mean_charge, gravy_scale, charge_scale)
+                    _pool_cost(
+                        pools[p1], mean_gravy, mean_charge, gravy_scale, charge_scale,
+                        policy=resolved_policy,
+                    )
+                    + _pool_cost(
+                        pools[p2], mean_gravy, mean_charge, gravy_scale, charge_scale,
+                        policy=resolved_policy,
+                    )
                 )
                 for i1, item1 in enumerate(pools[p1]):
                     for i2, item2 in enumerate(pools[p2]):
                         cand1 = pools[p1][:i1] + [item2] + pools[p1][i1 + 1:]
                         cand2 = pools[p2][:i2] + [item1] + pools[p2][i2 + 1:]
                         c12_after = (
-                            _pool_cost(cand1, mean_gravy, mean_charge, gravy_scale, charge_scale)
-                            + _pool_cost(cand2, mean_gravy, mean_charge, gravy_scale, charge_scale)
+                            _pool_cost(
+                                cand1, mean_gravy, mean_charge, gravy_scale, charge_scale,
+                                policy=resolved_policy,
+                            )
+                            + _pool_cost(
+                                cand2, mean_gravy, mean_charge, gravy_scale, charge_scale,
+                                policy=resolved_policy,
+                            )
                         )
                         gain = c12_before - c12_after
                         if gain > best_gain:
@@ -417,6 +532,7 @@ def partition_peptide_constructs(
         pool.sort(key=lambda p: p.index)
     pools.sort(key=lambda pool: pool[0].index)
 
+    policy_dict = resolved_policy.to_dict()
     for pool_num, pool in enumerate(pools, start=1):
         for prof in pool:
             construct = constructs[prof.index]
@@ -424,12 +540,20 @@ def partition_peptide_constructs(
             construct.components['pool_profile'] = {
                 'strong_alleles': list(prof.strong_alleles),
                 'medium_alleles': list(prof.medium_alleles),
-                'net_charge_ph7': prof.net_charge,
+                'net_charge': prof.net_charge,
+                'net_charge_ph7': prof.net_charge if resolved_policy.charge_ph == 7.0 else net_charge_ph7(
+                    construct.sequence,
+                    n_terminal_acetylation=bool(construct.components.get('n_terminal_acetylation', False)),
+                    c_terminal_amidation=bool(construct.components.get('c_terminal_amidation', False)),
+                ),
+                'charge_ph': resolved_policy.charge_ph,
             }
+            construct.components['pool_policy'] = policy_dict
 
     return summarize_peptide_pools(
         constructs,
         num_pools_requested=num_pools,
+        policy=resolved_policy,
     )
 
 
@@ -437,11 +561,24 @@ def summarize_peptide_pools(
     constructs,
     *,
     num_pools_requested: Optional[int] = None,
+    policy=None,
 ) -> Optional[dict]:
-    """Summarize pool assignments, MHC competition reduction, and balance."""
+    """Summarize pool assignments, MHC competition reduction, balance, and policy."""
     pooled = [c for c in constructs if c.components.get('pool') is not None]
     if not pooled:
         return None
+
+    recorded_policy = None
+    if policy is not None:
+        recorded_policy = PeptidePoolPolicy.resolve(policy).to_dict()
+    else:
+        for c in pooled:
+            if c.components.get('pool_policy'):
+                recorded_policy = PeptidePoolPolicy.resolve(c.components['pool_policy']).to_dict()
+                break
+    if recorded_policy is None:
+        recorded_policy = PeptidePoolPolicy().to_dict()
+    charge_ph = float(recorded_policy.get('charge_ph', 7.0))
 
     by_pool: dict[int, list] = {}
     all_allele_counts = Counter()
@@ -476,11 +613,14 @@ def summarize_peptide_pools(
                 cys_peptides += 1
             if 'max_7mer_gravy_score' in mfg and mfg['max_7mer_gravy_score'] is not None:
                 gravys.append(float(mfg['max_7mer_gravy_score']))
-            if 'net_charge_ph7' in profile:
+            if 'net_charge' in profile:
+                charges.append(float(profile['net_charge']))
+            elif 'net_charge_ph7' in profile and charge_ph == 7.0:
                 charges.append(float(profile['net_charge_ph7']))
             else:
-                charges.append(net_charge_ph7(
+                charges.append(net_charge_at_ph(
                     c.sequence,
+                    ph=charge_ph,
                     n_terminal_acetylation=bool(c.components.get('n_terminal_acetylation', False)),
                     c_terminal_amidation=bool(c.components.get('c_terminal_amidation', False)),
                 ))
@@ -503,5 +643,7 @@ def summarize_peptide_pools(
         'num_pools_assigned': len(pool_rows),
         'single_pool_same_allele_pairs': single_pool_collisions,
         'partitioned_same_allele_pairs': partitioned_collisions,
+        'charge_ph': charge_ph,
+        'policy': recorded_policy,
         'pools': pool_rows,
     }

@@ -115,6 +115,32 @@ class VaccinePeptidesConfigSchema(
     max_antigen_length_aa: Optional[int] = None
 
 
+class PeptidePoolConfigSchema(
+    msgspec.Struct,
+    frozen=True,
+    kw_only=True,
+    forbid_unknown_fields=True,
+):
+    """Per-trial formulation policy for multi-pool peptide partitioning.
+
+    Lives under ``peptide.pool_partition:`` in YAML configs. Every tier
+    cutoff, allele competition weight, physicochemical balance weight, and
+    formulation pH can be tuned and saved as a versioned trial policy.
+    """
+    strong_rank_threshold: Optional[float] = None
+    medium_rank_threshold: Optional[float] = None
+    strong_score_threshold: Optional[float] = None
+    medium_score_threshold: Optional[float] = None
+    strong_allele_weight: Optional[float] = None
+    medium_allele_weight: Optional[float] = None
+    allele_competition_weight: Optional[float] = None
+    cysteine_pair_weight: Optional[float] = None
+    gravy_balance_weight: Optional[float] = None
+    charge_balance_weight: Optional[float] = None
+    charge_ph: Optional[float] = None
+    max_swap_passes: Optional[int] = None
+
+
 class PeptideConstructConfigSchema(
     msgspec.Struct,
     frozen=True,
@@ -139,6 +165,7 @@ class PeptideConstructConfigSchema(
     purity_percent: Optional[float] = None
     counterion: Optional[str] = None
     num_pools: Optional[int] = None
+    pool_partition: Optional[PeptidePoolConfigSchema] = None
     manufacturability: Optional[ManufacturabilityConfigSchema] = None
     window_selection: Optional[dict] = None
 

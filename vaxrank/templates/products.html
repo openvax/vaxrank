@@ -25,9 +25,9 @@ Emitted antigen sequences by type: {% for kind, count in group.assembly_decision
 {% if group.files %}<p class="note">Product files: {% for file in group.files %}<code>{{ file }}</code>{% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
 {% if group.pool_summary %}{% set ps = group.pool_summary %}
 <h4>Formulation pools ({{ ps.num_pools_assigned }})</h4>
-<p class="note">Peptides partitioned across {{ ps.num_pools_assigned }} injection pool{{ '' if ps.num_pools_assigned == 1 else 's' }} to separate same-MHC allele competitors (same-allele binder pairs reduced from {{ ps.single_pool_same_allele_pairs }} in a single pool to {{ ps.partitioned_same_allele_pairs }}) and balance cysteine count, hydrophobicity, and net charge.</p>
+<p class="note">Peptides partitioned across {{ ps.num_pools_assigned }} injection pool{{ '' if ps.num_pools_assigned == 1 else 's' }} to separate same-MHC allele competitors (same-allele binder pairs reduced from {{ ps.single_pool_same_allele_pairs }} in a single pool to {{ ps.partitioned_same_allele_pairs }}) and balance cysteine count, hydrophobicity, and net charge at pH {{ ps.charge_ph }}.{% if ps.policy %} Policy weights: MHC {{ ps.policy.allele_competition_weight }} (strong &le;{{ ps.policy.strong_rank_threshold }}% &times;{{ ps.policy.strong_allele_weight }}, med &le;{{ ps.policy.medium_rank_threshold }}% &times;{{ ps.policy.medium_allele_weight }}), Cys {{ ps.policy.cysteine_pair_weight }}, GRAVY {{ ps.policy.gravy_balance_weight }}, charge {{ ps.policy.charge_balance_weight }}.{% endif %}</p>
 <table class="pure-table pure-table-bordered">
-<thead><tr><th>Pool</th><th>Peptides</th><th>MHC alleles (peptides)</th><th>Same-allele pairs</th><th>Cys peptides</th><th>Mean max GRAVY</th><th>Mean charge (pH 7)</th></tr></thead>
+<thead><tr><th>Pool</th><th>Peptides</th><th>MHC alleles (peptides)</th><th>Same-allele pairs</th><th>Cys peptides</th><th>Mean max GRAVY</th><th>Mean charge (pH {{ ps.charge_ph }})</th></tr></thead>
 <tbody>{% for prow in ps.pools %}<tr>
 <td><strong>Pool {{ prow.pool }}</strong></td>
 <td>{{ prow.count }}</td>
