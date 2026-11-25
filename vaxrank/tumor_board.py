@@ -321,13 +321,19 @@ def build_tumor_board_dossier(
             vaf_info = dna_vaf_by_variant.get(base_id) or {}
         if not isinstance(vaf_info, dict):
             vaf_info = {"tumor_vaf": _finite_or_none(vaf_info)}
-        normal_alt_vaf = _finite_or_none(vaf_info.get("normal_alt_vaf") or vaf_info.get("normal_vaf"))
+        raw_normal_vaf = vaf_info.get("normal_alt_vaf")
+        if raw_normal_vaf is None:
+            raw_normal_vaf = vaf_info.get("normal_vaf")
+        normal_alt_vaf = _finite_or_none(raw_normal_vaf)
+        raw_tumor_vaf = vaf_info.get("tumor_vaf")
+        if raw_tumor_vaf is None:
+            raw_tumor_vaf = vaf_info.get("vaf")
         genomic_telemetry = {
             "chr": getattr(source, "contig", None),
             "pos": getattr(source, "original_start", None),
             "ref": getattr(source, "original_ref", None),
             "alt": getattr(source, "original_alt", None),
-            "tumor_vaf": _finite_or_none(vaf_info.get("tumor_vaf") or vaf_info.get("vaf")),
+            "tumor_vaf": _finite_or_none(raw_tumor_vaf),
             "tumor_depth": vaf_info.get("tumor_depth"),
             "normal_alt_vaf": normal_alt_vaf,
             "normal_depth": vaf_info.get("normal_depth"),
@@ -371,14 +377,22 @@ def build_tumor_board_dossier(
                 if pred.allele:
                     norm_a = normalize_mhc_allele_name(pred.allele)
                     binding_alleles_set.add(norm_a)
-                    if (pred.percentile_rank is not None and pred.percentile_rank <= 2.0) or (
-                        pred.score is not None and pred.score > 0
+                    if (
+                        (pred.percentile_rank is not None and pred.percentile_rank <= 2.0)
+                        or (
+                            pred.percentile_rank is None
+                            and pred.score is not None
+                            and pred.score > 0.1
+                        )
                     ):
                         raw_positive_alleles.add(norm_a)
 
         allele_statuses_here = {
             a: {
                 "effective_status": status_by_allele[a]["effective_status"],
+                "dna_status": status_by_allele[a].get("dna_status", "unknown"),
+                "rna_status": status_by_allele[a].get("rna_status", "unknown"),
+                "loss_mechanism": status_by_allele[a].get("loss_mechanism", "unknown"),
                 "badge": status_by_allele[a]["badge"],
                 "masked": status_by_allele[a]["masked"],
                 "caveats": status_by_allele[a]["caveats"],
@@ -402,32 +416,54 @@ def build_tumor_board_dossier(
             "apm_disrupted_genes": apm_disrupted,
         }
 
-        # Layer 4: Immunogenicity & epitope geometry
+        # Layer 4: Immunogenicity & epitope geometry (scan all target epitopes;
+        # prefer unmasked/retained alleles for best_rank/best_allele)
         top_epitopes = []
-        best_rank = None
-        best_allele = None
+        best_rank_retained = None
+        best_allele_retained = None
+        best_rank_any = None
+        best_allele_any = None
         ms_supported = False
-        for ep in vp.target_epitopes[:5]:
+        for idx_ep, ep in enumerate(vp.target_epitopes):
             if getattr(ep, "ms_increment", 0.0) or getattr(ep, "ms_scoring", None):
                 ms_supported = True
-            ep_best_rank = None
-            ep_best_allele = None
+            ep_best_rank_retained = None
+            ep_best_allele_retained = None
+            ep_best_rank_any = None
+            ep_best_allele_any = None
             for pred in ep.predictions_flat():
                 pr = _finite_or_none(pred.percentile_rank)
-                if pr is not None and (ep_best_rank is None or pr < ep_best_rank):
-                    ep_best_rank = pr
-                    ep_best_allele = pred.allele
-            if ep_best_rank is not None and (best_rank is None or ep_best_rank < best_rank):
-                best_rank = ep_best_rank
-                best_allele = ep_best_allele
-            top_epitopes.append({
-                "sequence": ep.sequence,
-                "offset": ep.offset,
-                "overlaps_mutation": bool(ep.overlaps_mutation),
-                "best_percentile_rank": ep_best_rank,
-                "best_allele": ep_best_allele,
-                "score": _finite_or_none(sum((ep.per_allele_scores or {}).values())),
-            })
+                if pr is None:
+                    continue
+                if ep_best_rank_any is None or pr < ep_best_rank_any:
+                    ep_best_rank_any = pr
+                    ep_best_allele_any = pred.allele
+                norm_pred_a = normalize_mhc_allele_name(pred.allele) if pred.allele else ""
+                is_masked = status_by_allele.get(norm_pred_a, {}).get("masked", False)
+                if not is_masked and (ep_best_rank_retained is None or pr < ep_best_rank_retained):
+                    ep_best_rank_retained = pr
+                    ep_best_allele_retained = pred.allele
+            if ep_best_rank_any is not None and (best_rank_any is None or ep_best_rank_any < best_rank_any):
+                best_rank_any = ep_best_rank_any
+                best_allele_any = ep_best_allele_any
+            if ep_best_rank_retained is not None and (
+                best_rank_retained is None or ep_best_rank_retained < best_rank_retained
+            ):
+                best_rank_retained = ep_best_rank_retained
+                best_allele_retained = ep_best_allele_retained
+            if idx_ep < 5:
+                ep_best_rank = ep_best_rank_retained if ep_best_rank_retained is not None else ep_best_rank_any
+                ep_best_allele = ep_best_allele_retained if ep_best_rank_retained is not None else ep_best_allele_any
+                top_epitopes.append({
+                    "sequence": ep.sequence,
+                    "offset": ep.offset,
+                    "overlaps_mutation": bool(ep.overlaps_mutation),
+                    "best_percentile_rank": ep_best_rank,
+                    "best_allele": ep_best_allele,
+                    "score": _finite_or_none(sum((ep.per_allele_scores or {}).values())),
+                })
+        best_rank = best_rank_retained if best_rank_retained is not None else best_rank_any
+        best_allele = best_allele_retained if best_rank_retained is not None else best_allele_any
         immunogenicity_and_geometry = {
             "target_epitope_count": len(vp.target_epitopes),
             "best_percentile_rank": best_rank,
@@ -498,12 +534,12 @@ def build_tumor_board_dossier(
                 "detail": "All binding MHC alleles for this candidate are confirmed lost or silenced.",
                 "evidence_key": "tumor_evolution_and_mhc.all_restricting_mhc_lost_or_silenced",
             })
-        if (pol.min_retained_mhc_score > 0.0
-                and (vp.target_epitope_score or 0.0) < pol.min_retained_mhc_score):
+        retained_score = vp.target_epitope_score if vp.target_epitope_score is not None else 0.0
+        if pol.min_retained_mhc_score > 0.0 and retained_score < pol.min_retained_mhc_score:
             hard_gates.append({
                 "gate": "below_min_retained_mhc_score",
                 "detail": (
-                    f"Retained MHC epitope score {vp.target_epitope_score:.3f} < "
+                    f"Retained MHC epitope score {retained_score:.3f} < "
                     f"policy minimum {pol.min_retained_mhc_score:.3f}."
                 ),
                 "evidence_key": "immunogenicity_and_geometry.target_epitope_count",
@@ -579,6 +615,18 @@ def build_tumor_board_dossier(
             **layers,
         })
 
+    # Compute dossier_sha256 over the candidate evidence preimage excluding
+    # post-assembly product/pool annotations so pre-assembly validation and
+    # post-assembly interactive HTML export always produce the same hash.
+    hash_candidates = []
+    for cand in candidates:
+        mfg_copy = {
+            k: v
+            for k, v in cand["construct_and_manufacturability"].items()
+            if k not in ("emitted_products", "peptide_pool")
+        }
+        hash_candidates.append({**cand, "construct_and_manufacturability": mfg_copy})
+
     body = {
         "schema": DOSSIER_SCHEMA,
         "vaxrank_version": __version__,
@@ -591,7 +639,8 @@ def build_tumor_board_dossier(
         "review_flagged_count": review_flagged_count,
         "candidates": candidates,
     }
-    dossier_sha256 = _canonical_sha256(body)
+    hash_body = {**body, "candidates": hash_candidates}
+    dossier_sha256 = _canonical_sha256(hash_body)
     return {"dossier_sha256": dossier_sha256, **body}
 
 
@@ -603,18 +652,17 @@ def write_tumor_board_dossier(dossier: dict[str, Any], path: str | Path) -> str:
     return str(p)
 
 
-def load_tumor_board_overrides(path: str | Path) -> TumorBoardOverrides:
-    """Load and parse a ``tumor_board_overrides.json`` bundle (human or AI)."""
-    p = Path(path).expanduser().resolve()
-    if not p.is_file():
-        raise FileNotFoundError(f"Selection overrides file not found: {p}")
-    with open(p, encoding="utf-8") as handle:
-        data = json.load(handle)
+def overrides_from_dict(
+    data: dict[str, Any],
+    *,
+    source_label: str = "overrides",
+) -> TumorBoardOverrides:
+    """Reconstruct a ``TumorBoardOverrides`` bundle from a parsed JSON dict."""
     if not isinstance(data, dict):
-        raise TumorBoardValidationError(f"Expected JSON object in {p}")
+        raise TumorBoardValidationError(f"Expected JSON object in {source_label}")
     raw_decisions = data.get("decisions")
     if not isinstance(raw_decisions, list):
-        raise TumorBoardValidationError(f"'decisions' must be a list in {p}")
+        raise TumorBoardValidationError(f"'decisions' must be a list in {source_label}")
     decisions = tuple(
         TumorBoardDecision(
             candidate_id=item.get("candidate_id", ""),
@@ -634,6 +682,16 @@ def load_tumor_board_overrides(path: str | Path) -> TumorBoardOverrides:
         notes=data.get("notes", ""),
         decisions=decisions,
     )
+
+
+def load_tumor_board_overrides(path: str | Path) -> TumorBoardOverrides:
+    """Load and parse a ``tumor_board_overrides.json`` bundle (human or AI)."""
+    p = Path(path).expanduser().resolve()
+    if not p.is_file():
+        raise FileNotFoundError(f"Selection overrides file not found: {p}")
+    with open(p, encoding="utf-8") as handle:
+        data = json.load(handle)
+    return overrides_from_dict(data, source_label=str(p))
 
 
 def validate_and_apply_overrides(
@@ -674,13 +732,13 @@ def validate_and_apply_overrides(
                 f"must match a candidate in the dossier."
             )
 
-        # Hard safety gates cannot be bypassed by Accept
+        # Hard safety gates cannot be bypassed by Accept OR Review
         hard_gates = cand.get("hard_gate_failures") or []
-        if hard_gates and dec.decision == "Accept":
+        if hard_gates and dec.decision != "Reject":
             gate_names = ", ".join(g["gate"] for g in hard_gates)
             raise TumorBoardValidationError(
-                f"Cannot override candidate {dec.candidate_id!r} to 'Accept': "
-                f"failed deterministic hard gate(s): {gate_names}."
+                f"Cannot override candidate {dec.candidate_id!r} to {dec.decision!r}: "
+                f"failed deterministic hard gate(s): {gate_names}. Only 'Reject' is permitted."
             )
 
         # Validate cited evidence keys
@@ -708,6 +766,7 @@ def validate_and_apply_overrides(
     seen_ids: dict[str, int] = {}
     filtered_ranked = []
     rejected_ids: list[str] = []
+    auto_rejected_hard_gate_ids: list[str] = []
     accepted_ids: list[str] = []
     review_ids: list[str] = []
 
@@ -721,8 +780,15 @@ def validate_and_apply_overrides(
         seen_ids[base_id] = seen_ids.get(base_id, 0) + 1
         cid = base_id if seen_ids[base_id] == 1 else f"{base_id}#{seen_ids[base_id]}"
         dec = decisions_by_id.get(cid)
+        cand_entry = by_id.get(cid)
+        cand_hard_gates = (cand_entry.get("hard_gate_failures") or []) if cand_entry else []
         if dec is not None and dec.decision == "Reject":
             rejected_ids.append(cid)
+            continue
+        if cand_hard_gates:
+            # Deterministic hard gates cannot be bypassed by omitting the candidate
+            rejected_ids.append(cid)
+            auto_rejected_hard_gate_ids.append(cid)
             continue
         if dec is not None and dec.decision == "Accept":
             accepted_ids.append(cid)
@@ -741,6 +807,7 @@ def validate_and_apply_overrides(
         "accepted_ids": accepted_ids,
         "review_ids": review_ids,
         "rejected_ids": rejected_ids,
+        "auto_rejected_hard_gate_ids": auto_rejected_hard_gate_ids,
         "decisions": [d.to_dict() for d in overrides.decisions],
     }
     return filtered_ranked, audit

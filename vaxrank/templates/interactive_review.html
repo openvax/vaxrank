@@ -64,7 +64,7 @@
       <td>
         <select class="tb-decision" data-candidate-id="{{ c.candidate_id | e }}" style="padding:4px 6px;">
           <option value="Accept" {% if c.default_recommendation == 'Accept' %}selected{% endif %} {% if c.hard_gate_failures %}disabled title="Blocked by deterministic hard gate"{% endif %}>Accept{% if c.hard_gate_failures %} (blocked){% endif %}</option>
-          <option value="Review" {% if c.default_recommendation == 'Review' %}selected{% endif %}>Review</option>
+          <option value="Review" {% if c.default_recommendation == 'Review' %}selected{% endif %} {% if c.hard_gate_failures %}disabled title="Blocked by deterministic hard gate"{% endif %}>Review{% if c.hard_gate_failures %} (blocked){% endif %}</option>
           <option value="Reject" {% if c.default_recommendation == 'Reject' %}selected{% endif %}>Reject</option>
         </select>
       </td>

@@ -15,9 +15,11 @@
   <thead>
     <tr>
       <th>MHC Allele</th>
-      <th>Status</th>
+      <th>Effective Status</th>
+      <th>DNA Status</th>
+      <th>RNA Status</th>
       <th>Weight</th>
-      <th>DNA LOH / CN</th>
+      <th>DNA LOH / CN / Variants</th>
       <th>Bulk RNA ASE (Purity)</th>
       <th>scRNA Tumor / Immune nTPM (UMIs)</th>
       <th>Caveats &amp; Source</th>
@@ -29,10 +31,13 @@
       <td><code>{{ row.allele | e }}</code></td>
       <td>
         <span class="badge {% if row.effective_status in ('lost', 'silenced') %}badge-unsafe{% elif row.effective_status == 'unresolvable' %}badge-review{% else %}badge-clean{% endif %}">{{ row.badge | e }}</span>
+        {% if row.loss_mechanism and row.loss_mechanism not in ('none', 'unknown') %}<br><span class="note">{{ row.loss_mechanism | e }}</span>{% endif %}
       </td>
+      <td>{{ (row.dna_status or 'unknown') | e }}</td>
+      <td>{{ (row.rna_status or 'unknown') | e }}</td>
       <td>{{ '%.2f' % row.ranking_weight }}{% if row.masked %} <span class="note">(masked)</span>{% endif %}</td>
       <td>
-        {% if row.dna_loh is not none %}{{ 'LOH' if row.dna_loh else 'No LOH' }}{% endif %}{% if row.dna_copy_number is not none %} (CN={{ '%.2f' % row.dna_copy_number }}){% endif %}{% if row.dna_loh is none and row.dna_copy_number is none %}—{% endif %}
+        {% if row.dna_loh is not none %}{{ 'LOH' if row.dna_loh else 'No LOH' }}{% endif %}{% if row.dna_copy_number is not none %} (CN={{ '%.2f' % row.dna_copy_number }}){% endif %}{% if row.dna_somatic_variants %} [{{ row.dna_somatic_variants | length }} somatic var]{% endif %}{% if row.dna_loh is none and row.dna_copy_number is none and not row.dna_somatic_variants %}—{% endif %}
       </td>
       <td>
         {% if row.bulk_rna_allele_ratio is not none or row.bulk_rna_tpm is not none %}
@@ -66,7 +71,12 @@
   {% for label, val in [('B2M', apm.b2m_status), ('TAP1', apm.tap1_status), ('TAP2', apm.tap2_status), ('NLRC5', apm.nlrc5_status), ('JAK1', apm.jak1_status), ('JAK2', apm.jak2_status)] if val %}
     {{ label }}: <strong>{{ val | e }}</strong>{% if not loop.last %}; {% endif %}
   {% endfor %}
-  {% if apm.disrupted_genes %} &middot; <span class="badge badge-unsafe">APM disruption: {{ apm.disrupted_genes | join(', ') | e }}</span>{% endif %}
+  {% if apm.genes %}
+    {% for g in apm.genes %}
+      {% if not loop.first %}; {% endif %}{{ g.gene | e }} (DNA: <strong>{{ g.dna_status | e }}</strong>, RNA: <strong>{{ g.rna_status | e }}</strong>{% if g.rna_ntpm is not none %}, nTPM={{ '%.1f' % g.rna_ntpm }}{% endif %})
+    {% endfor %}
+  {% endif %}
+  {% if apm.disrupted_genes %} &middot; <span class="badge badge-unsafe">Loss of APM: {{ apm.disrupted_genes | join(', ') | e }}</span>{% endif %}
   {% if apm.notes %} &middot; {{ apm.notes | e }}{% endif %}
 </p>
 {% endif %}

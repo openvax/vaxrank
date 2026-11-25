@@ -477,11 +477,11 @@ _ARG_GROUPS = (
         'vcf', 'bam', 'input_lens', 'input_pvacseq', 'external_input', 'input_manifest',
         'external_predictions', 'external_prediction_prefix', 'external_peptide_only',
         'ensembl_release', 'genome', 'tumor_sample_name',
-        'input_json_file',
+        'input_json_file', 'selection_overrides',
     )),
     ("MHC", (
         'mhc_predictor', 'mhc_alleles', 'mhc_alleles_file',
-        'mhc_epitope_lengths',
+        'mhc_epitope_lengths', 'mhc_allele_status', 'mhc_loh_alleles',
     )),
     ("Reference comparisons", (
         'comparison_reference', 'patient_background_baseline', 'patient_background_pairs',
@@ -528,6 +528,7 @@ _ARG_GROUPS = (
         'output_dir', 'output_policy_dir', 'output_csv', 'output_xlsx_report',
         'output_ascii_report', 'output_html_report',
         'output_pdf_report', 'output_neoepitope_report',
+        'output_tumor_board_dossier', 'interactive_review_html',
         'output_json_file', 'output_passing_variants_csv',
         'output_isovar_csv', 'output_epitopes',
         'output_patient_id', 'output_reviewed_by',
@@ -627,8 +628,8 @@ def log_args_summary(args):
 
 
 def resolve_target_alleles(args):
-    """Return the list of patient MHC alleles for coverage-aware
-    antigen selection (and for report-time coverage display).
+    """Return the list of active (non-masked) patient MHC alleles for
+    coverage-aware antigen selection, SLP pool partitioning, and report display.
 
     Resolution mirrors :func:`resolve_mhc_for_linker_optimizer`:
 
@@ -636,15 +637,31 @@ def resolve_target_alleles(args):
     * External path (LENS / pVACseq): the loader stashes inferred
       alleles on ``args._inferred_mhc_alleles_from_lens``.
 
+    Alleles masked by ``--mhc-allele-status`` / ``--mhc-loh-alleles`` (stashed on
+    ``args._masked_mhc_alleles``) are excluded after ``mhcgnomes`` normalization
+    so lost or silenced alleles cannot be promoted by coverage selection or
+    distort multi-pool competition.
+
     Returns an empty list when neither source has data — callers
     treat that as "coverage selection / display disabled, fall back
-    to pure-score order." Animal-agnostic: HLA, mouse H-2, swine
+    to pure-score order." Animal-agnostic: HLA, canine DLA, mouse H-2, swine
     SLA all flow through here.
     """
+    def _filter_masked(raw_alleles):
+        masked = getattr(args, '_masked_mhc_alleles', None)
+        if not masked:
+            return list(raw_alleles or [])
+        from ..mhc_allele_status import normalize_mhc_allele_name
+        masked_norm = {normalize_mhc_allele_name(a) for a in masked}
+        return [
+            a for a in (raw_alleles or [])
+            if normalize_mhc_allele_name(a) not in masked_norm
+        ]
+
     if getattr(args, 'vcf', None) and getattr(args, '_declared_mhc_alleles', None):
         # Direct prediction can target a subset; pooled vaccine coverage uses
         # the complete declared genotype, including table-only alleles.
-        return list(args._declared_mhc_alleles)
+        return _filter_masked(args._declared_mhc_alleles)
     _ARG_LOAD_ERRORS = (AttributeError, ValueError, KeyError)
     alleles = None
     try:
@@ -654,7 +671,7 @@ def resolve_target_alleles(args):
     if not alleles:
         alleles = (
             getattr(args, '_inferred_mhc_alleles_from_lens', None) or [])
-    return list(alleles or [])
+    return _filter_masked(alleles)
 
 
 def _linker_prediction_configuration(args, config_kwargs=None):
@@ -1014,9 +1031,10 @@ _AUTO_OUTPUT_FILENAMES = {
 # Output flags whose value is a file; their parent directory must be writable.
 _OUTPUT_FILE_FLAGS = (
     'output_csv', 'output_xlsx_report', 'output_ascii_report', 'output_html_report',
-    'output_pdf_report', 'output_neoepitope_report', 'output_json_file',
-    'output_passing_variants_csv', 'output_isovar_csv', 'output_epitopes',
-    'output_antigens', 'output_input_predictions', 'output_cta_admission')
+    'output_pdf_report', 'output_neoepitope_report', 'output_tumor_board_dossier',
+    'output_json_file', 'output_passing_variants_csv', 'output_isovar_csv',
+    'output_epitopes', 'output_antigens', 'output_input_predictions',
+    'output_cta_admission')
 
 
 def _require_creatable_directory(path, flag):
@@ -1146,6 +1164,7 @@ def processing_annotation_available():
 # can name a snapshot rather than a path.
 _INPUT_FILE_FLAGS = (
     'vcf', 'maf', 'bam', 'json_variants', 'germline_vcf', 'genome_fasta', 'mhc_alleles_file',
+    'mhc_allele_status', 'selection_overrides',
     'prediction_cache', 'input_epitopes', 'input_pvacseq', 'input_lens', 'input_antigens',
     'input_isovar', 'input_manifest', 'input_cta_expression', 'input_topiary',
     'input_json_file', 'patient_background_pairs')
@@ -1330,6 +1349,8 @@ def write_run_summary(args, patient_info, source, products=None):
             ("native evidence", "output_epitopes"),
             ("policy exports", "output_policy_dir"),
             ("input predictions", "output_input_predictions"),
+            ("tumor board dossier", "output_tumor_board_dossier"),
+            ("HTML report", "output_html_report"),
             ("ASCII report", "output_ascii_report"),
             ("PDF report", "output_pdf_report")):
         path = getattr(args, attr, '') or ''
@@ -1682,32 +1703,47 @@ def _run_parsed_cli(args, args_list):
             human_only=getattr(args, 'pepsickle_human_only', False),
             threshold=getattr(args, 'pepsickle_threshold', 0.5))
 
-    # Cross-species MHC allele status / expression masking (#921)
+    # Cross-species MHC allele status / expression masking (#921, #932)
     mhc_status_audit = None
     mhc_status_path = getattr(args, 'mhc_allele_status', None)
     mhc_loh_alleles = getattr(args, 'mhc_loh_alleles', None)
-    if mhc_status_path or mhc_loh_alleles:
+    saved_mhc_bundle_dict = (
+        dataset.selection.get('mhc_allele_status_bundle')
+        if dataset is not None else None
+    )
+    if mhc_status_path or mhc_loh_alleles or saved_mhc_bundle_dict:
         from ..mhc_allele_status import (
             apply_mhc_allele_status_to_ranked,
+            bundle_from_dict,
             bundle_from_loh_alleles,
             load_mhc_allele_status,
             merge_mhc_allele_status_bundles,
         )
-        file_bundle = load_mhc_allele_status(mhc_status_path) if mhc_status_path else None
-        cli_bundle = bundle_from_loh_alleles(mhc_loh_alleles) if mhc_loh_alleles else None
-        status_bundle = merge_mhc_allele_status_bundles(file_bundle, cli_bundle)
+        if mhc_status_path or mhc_loh_alleles:
+            file_bundle = load_mhc_allele_status(mhc_status_path) if mhc_status_path else None
+            cli_bundle = bundle_from_loh_alleles(mhc_loh_alleles) if mhc_loh_alleles else None
+            status_bundle = merge_mhc_allele_status_bundles(file_bundle, cli_bundle)
+            mhc_policy = load_vaxrank_config(args).get('mhc_allele_status')
+        else:
+            status_bundle = bundle_from_dict(saved_mhc_bundle_dict)
+            mhc_policy = (
+                dataset.selection.get('mhc_allele_status_policy')
+                or load_vaxrank_config(args).get('mhc_allele_status')
+            )
         if status_bundle is not None and not status_bundle.is_empty():
-            merged_cfg = load_vaxrank_config(args)
             ranked_variants_with_vaccine_peptides, mhc_status_audit = (
                 apply_mhc_allele_status_to_ranked(
                     ranked_variants_with_vaccine_peptides,
                     status_bundle,
-                    policy=merged_cfg.get('mhc_allele_status'),
+                    policy=mhc_policy,
                 )
             )
             data['variants'] = ranked_variants_with_vaccine_peptides
+            args._masked_mhc_alleles = list(mhc_status_audit['masked_alleles'])
             if dataset is not None:
                 dataset.selection['mhc_allele_status'] = mhc_status_audit
+                dataset.selection['mhc_allele_status_bundle'] = status_bundle.to_dict()
+                dataset.selection['mhc_allele_status_policy'] = mhc_status_audit['policy']
             logger.info(
                 "Applied MHC allele status (%d allele(s), %d masked, %d epitope(s) adjusted).",
                 len(mhc_status_audit['alleles']),
@@ -1715,26 +1751,53 @@ def _run_parsed_cli(args, args_list):
                 mhc_status_audit['affected_epitope_count'],
             )
 
-    # AI-ready tumor_board_dossier.json + audited --selection-overrides replay (#922)
+    # AI-ready tumor_board_dossier.json + audited --selection-overrides replay (#922, #932)
     tumor_board_dossier = None
     tumor_board_overrides_audit = None
     dossier_path = getattr(args, 'output_tumor_board_dossier', None)
     interactive_review = bool(getattr(args, 'interactive_review_html', False))
     overrides_path = getattr(args, 'selection_overrides', None)
-    if interactive_review and getattr(args, 'output_dir', None) and not dossier_path:
-        dossier_path = os.path.join(args.output_dir, 'tumor_board_dossier.json')
-        args.output_tumor_board_dossier = dossier_path
-    if dossier_path or interactive_review or overrides_path:
+    saved_overrides_dict = (
+        dataset.selection.get('tumor_board_overrides_bundle')
+        if dataset is not None else None
+    )
+    if interactive_review and getattr(args, 'output_dir', None):
+        if not dossier_path:
+            dossier_path = os.path.join(args.output_dir, 'tumor_board_dossier.json')
+            args.output_tumor_board_dossier = dossier_path
+        if not getattr(args, 'output_html_report', None):
+            args.output_html_report = os.path.join(args.output_dir, 'vaccine_report.html')
+
+    tb_cfg = None
+    tb_alleles = None
+    tb_patient_id = ''
+    need_dossier = bool(
+        dossier_path or interactive_review or overrides_path or saved_overrides_dict
+    )
+    if need_dossier:
+        from ..external_input import LENS_PROVENANCE_MARKER
         from ..tumor_board import (
             build_tumor_board_dossier,
             load_tumor_board_overrides,
+            overrides_from_dict,
             validate_and_apply_overrides,
             write_tumor_board_dossier,
         )
-        tb_cfg = load_vaxrank_config(args).get('tumor_board')
-        tb_alleles = (
+        tb_cfg = (
+            load_vaxrank_config(args).get('tumor_board')
+            if overrides_path or not saved_overrides_dict
+            else (
+                dataset.selection.get('tumor_board_policy')
+                or load_vaxrank_config(args).get('tumor_board')
+            )
+        )
+        raw_tb_alleles = (
             getattr(patient_info, 'mhc_alleles', None)
             if patient_info is not None else None
+        )
+        tb_alleles = (
+            [a for a in raw_tb_alleles if a and a != LENS_PROVENANCE_MARKER]
+            if raw_tb_alleles else None
         )
         tb_patient_id = (
             getattr(patient_info, 'patient_id', '')
@@ -1748,8 +1811,15 @@ def _run_parsed_cli(args, args_list):
             dna_vaf_by_variant=data.get('dna_vaf_by_variant') or {},
             policy=tb_cfg,
         )
-        if overrides_path:
-            loaded_overrides = load_tumor_board_overrides(overrides_path)
+        if overrides_path or saved_overrides_dict:
+            loaded_overrides = (
+                load_tumor_board_overrides(overrides_path)
+                if overrides_path
+                else overrides_from_dict(
+                    saved_overrides_dict,
+                    source_label='dataset.selection.tumor_board_overrides_bundle',
+                )
+            )
             ranked_variants_with_vaccine_peptides, tumor_board_overrides_audit = (
                 validate_and_apply_overrides(
                     ranked_variants_with_vaccine_peptides,
@@ -1761,21 +1831,37 @@ def _run_parsed_cli(args, args_list):
             data['variants'] = ranked_variants_with_vaccine_peptides
             if dataset is not None:
                 dataset.selection['tumor_board_overrides'] = tumor_board_overrides_audit
+                dataset.selection['tumor_board_overrides_bundle'] = loaded_overrides.to_dict()
+                dataset.selection['tumor_board_policy'] = tumor_board_overrides_audit['policy']
             logger.info(
                 "Applied validated tumor board overrides from %s (%s/%s): "
                 "%d Accept, %d Review, %d Reject.",
-                overrides_path,
+                overrides_path or 'saved native dataset',
                 tumor_board_overrides_audit['reviewer_id'],
                 tumor_board_overrides_audit['reviewer_kind'],
                 len(tumor_board_overrides_audit['accepted_ids']),
                 len(tumor_board_overrides_audit['review_ids']),
                 len(tumor_board_overrides_audit['rejected_ids']),
             )
+
+    products = emit_outputs(args, ranked_variants_with_vaccine_peptides, source)
+    if need_dossier:
+        from ..tumor_board import build_tumor_board_dossier, write_tumor_board_dossier
+        if not (overrides_path or saved_overrides_dict):
+            # Enrich review dossier with emitted products and pool assignments
+            # without altering dossier_sha256 (which excludes post-assembly fields).
+            tumor_board_dossier = build_tumor_board_dossier(
+                ranked_variants_with_vaccine_peptides,
+                patient_id=tb_patient_id,
+                mhc_alleles=tb_alleles,
+                mhc_allele_status=mhc_status_audit,
+                dna_vaf_by_variant=data.get('dna_vaf_by_variant') or {},
+                products=products,
+                policy=tb_cfg,
+            )
         if dossier_path:
             write_tumor_board_dossier(tumor_board_dossier, dossier_path)
             logger.info("Wrote tumor board dossier to %s", dossier_path)
-
-    products = emit_outputs(args, ranked_variants_with_vaccine_peptides, source)
     prediction_configuration = effective_prediction_configuration(
         args, ranked_variants_with_vaccine_peptides, predictions, products,
         processing_predictions_by_key)
