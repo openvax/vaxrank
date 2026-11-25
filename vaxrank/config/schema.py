@@ -311,6 +311,25 @@ class MHCAlleleStatusConfigSchema(
     min_purity_for_bulk_ase_call: Optional[float] = None
 
 
+class TumorBoardConfigSchema(
+    msgspec.Struct,
+    frozen=True,
+    kw_only=True,
+    forbid_unknown_fields=True,
+):
+    """Per-trial policy for tumor board dossier hard gates, review flags, and override replay."""
+    forbid_override_exact_unsafe_self: Optional[bool] = None
+    forbid_override_all_mhc_lost: Optional[bool] = None
+    max_normal_alt_vaf: Optional[float] = None
+    min_retained_mhc_score: Optional[float] = None
+    require_dossier_sha256_match: Optional[bool] = None
+    require_citation_keys: Optional[bool] = None
+    require_rationale: Optional[bool] = None
+    max_gravy_review_threshold: Optional[float] = None
+    min_rna_alt_reads_review_threshold: Optional[int] = None
+    flag_dna_only_proxy_for_review: Optional[bool] = None
+
+
 class VaxrankConfigSchema(
     msgspec.Struct,
     frozen=True,
@@ -327,3 +346,4 @@ class VaxrankConfigSchema(
     mrna: Optional[MrnaConstructConfigSchema] = None
     compare: Optional[CompareConfigSchema] = None
     mhc_allele_status: Optional[MHCAlleleStatusConfigSchema] = None
+    tumor_board: Optional[TumorBoardConfigSchema] = None

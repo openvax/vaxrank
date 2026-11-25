@@ -1,0 +1,161 @@
+<section class="appendix" id="interactive-tumor-board">
+<h2>Interactive Tumor Board Review (Offline)</h2>
+<p class="note">
+  Self-contained client-side review workspace (no server required). Adjust Accept / Review / Reject decisions and notes below, then click <strong>Download tumor_board_overrides.json</strong> to replay with <code>--selection-overrides</code>.
+  Dossier SHA-256: <code>{{ tumor_board_dossier.dossier_sha256[:16] }}&hellip;</code>
+</p>
+<div class="tb-controls" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:10px 0 14px;padding:10px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:6px;">
+  <label>Reviewer ID: <input type="text" id="tb-reviewer-id" value="itb-reviewer" style="padding:4px 6px;"></label>
+  <label>Filter:
+    <select id="tb-filter" style="padding:4px 6px;">
+      <option value="all">All ({{ tumor_board_dossier.candidate_count }})</option>
+      <option value="Accept">Accept</option>
+      <option value="Review">Review</option>
+      <option value="Reject">Reject</option>
+      <option value="hard_gate">Hard-Gate Failed</option>
+    </select>
+  </label>
+  <label>Search: <input type="search" id="tb-search" placeholder="gene / id / sequence..." style="padding:4px 6px;"></label>
+  <button type="button" id="tb-export-btn" style="padding:6px 12px;background:#0f766e;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:600;">Download tumor_board_overrides.json</button>
+  <span id="tb-status-summary" class="note"></span>
+</div>
+
+<table class="pure-table pure-table-bordered" id="tb-table">
+  <thead>
+    <tr>
+      <th>Rank</th>
+      <th>Candidate</th>
+      <th>Score / RNA / MHC</th>
+      <th>Gates &amp; Review Flags</th>
+      <th>Decision</th>
+      <th>Rationale</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for c in tumor_board_dossier.candidates %}
+    <tr class="tb-row"
+        data-candidate-id="{{ c.candidate_id | e }}"
+        data-default-decision="{{ c.default_recommendation | e }}"
+        data-hard-gate="{{ 'true' if c.hard_gate_failures else 'false' }}"
+        data-search="{{ (c.candidate_id ~ ' ' ~ c.gene_name ~ ' ' ~ c.amino_acids) | lower | e }}">
+      <td>{{ c.rank }}</td>
+      <td>
+        <strong>{{ (c.gene_name or c.candidate_id) | e }}</strong><br>
+        <span class="note"><code>{{ c.candidate_id | e }}</code></span><br>
+        <span class="note"><code>{{ c.amino_acids | e }}</code></span>
+      </td>
+      <td class="note">
+        Score: <strong>{{ c.combined_score if c.combined_score is not none else '—' }}</strong><br>
+        RNA alt: {{ c.transcriptomic_integrity.n_rna_alt_reads if c.transcriptomic_integrity.n_rna_alt_reads is not none else '—' }}
+        {% if c.transcriptomic_integrity.is_dna_only_proxy %} <span class="badge badge-review">DNA-proxy</span>{% endif %}<br>
+        GRAVY: {{ c.construct_and_manufacturability.max_7mer_gravy if c.construct_and_manufacturability.max_7mer_gravy is not none else '—' }}
+      </td>
+      <td class="note">
+        {% for g in c.hard_gate_failures %}
+          <div><span class="badge badge-unsafe">HARD GATE: {{ g.gate | e }}</span> {{ g.detail | e }}</div>
+        {% endfor %}
+        {% for f in c.review_flags %}
+          <div><span class="badge badge-review">REVIEW: {{ f.flag | e }}</span> {{ f.detail | e }}</div>
+        {% endfor %}
+        {% if not c.hard_gate_failures and not c.review_flags %}
+          <span class="badge badge-clean">Clean</span>
+        {% endif %}
+      </td>
+      <td>
+        <select class="tb-decision" data-candidate-id="{{ c.candidate_id | e }}" style="padding:4px 6px;">
+          <option value="Accept" {% if c.default_recommendation == 'Accept' %}selected{% endif %} {% if c.hard_gate_failures %}disabled title="Blocked by deterministic hard gate"{% endif %}>Accept{% if c.hard_gate_failures %} (blocked){% endif %}</option>
+          <option value="Review" {% if c.default_recommendation == 'Review' %}selected{% endif %}>Review</option>
+          <option value="Reject" {% if c.default_recommendation == 'Reject' %}selected{% endif %}>Reject</option>
+        </select>
+      </td>
+      <td>
+        <textarea class="tb-rationale" rows="2" cols="28" placeholder="Clinical rationale / notes...">{% if c.hard_gate_failures %}Hard safety gate failed: {{ c.hard_gate_failures | map(attribute='gate') | join(', ') | e }}{% endif %}</textarea>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<script type="application/json" id="vaxrank-tumor-board-dossier">{{ tumor_board_dossier | tojson }}</script>
+<script>
+(function() {
+  var dossierEl = document.getElementById('vaxrank-tumor-board-dossier');
+  if (!dossierEl) return;
+  var dossier = JSON.parse(dossierEl.textContent);
+  var byId = {};
+  (dossier.candidates || []).forEach(function(c) { byId[c.candidate_id] = c; });
+
+  function updateView() {
+    var filterVal = document.getElementById('tb-filter').value;
+    var query = (document.getElementById('tb-search').value || '').trim().toLowerCase();
+    var counts = { Accept: 0, Review: 0, Reject: 0 };
+    document.querySelectorAll('#tb-table tbody tr.tb-row').forEach(function(row) {
+      var dec = row.querySelector('.tb-decision').value;
+      counts[dec] = (counts[dec] || 0) + 1;
+      var matchesFilter = (
+        filterVal === 'all' ||
+        (filterVal === 'hard_gate' && row.dataset.hardGate === 'true') ||
+        dec === filterVal
+      );
+      var matchesQuery = !query || (row.dataset.search || '').indexOf(query) !== -1;
+      row.style.display = (matchesFilter && matchesQuery) ? '' : 'none';
+    });
+    var summaryEl = document.getElementById('tb-status-summary');
+    if (summaryEl) {
+      summaryEl.textContent = 'Accept: ' + counts.Accept + ' | Review: ' + counts.Review + ' | Reject: ' + counts.Reject;
+    }
+  }
+
+  document.getElementById('tb-filter').addEventListener('change', updateView);
+  document.getElementById('tb-search').addEventListener('input', updateView);
+  document.querySelectorAll('.tb-decision').forEach(function(sel) {
+    sel.addEventListener('change', updateView);
+  });
+
+  document.getElementById('tb-export-btn').addEventListener('click', function() {
+    var reviewerId = (document.getElementById('tb-reviewer-id').value || 'itb-reviewer').trim();
+    var decisions = [];
+    document.querySelectorAll('#tb-table tbody tr.tb-row').forEach(function(row) {
+      var cid = row.dataset.candidateId;
+      var dec = row.querySelector('.tb-decision').value;
+      var rationale = (row.querySelector('.tb-rationale').value || '').trim();
+      var cand = byId[cid] || {};
+      var cited = [];
+      (cand.hard_gate_failures || []).forEach(function(g) { if (g.evidence_key) cited.push(g.evidence_key); });
+      (cand.review_flags || []).forEach(function(f) { if (f.evidence_key) cited.push(f.evidence_key); });
+      if (!cited.length && (cand.evidence_keys || []).length) {
+        cited.push('immunogenicity_and_geometry.target_epitope_count');
+      }
+      if (dec === 'Reject' && !rationale) {
+        rationale = 'Rejected during interactive tumor board review.';
+      }
+      decisions.push({
+        candidate_id: cid,
+        decision: dec,
+        confidence: 1.0,
+        cited_evidence_keys: Array.from(new Set(cited)),
+        rationale: rationale || ('Marked ' + dec + ' during interactive tumor board review.')
+      });
+    });
+    var payload = {
+      schema: 'vaxrank.tumor_board_overrides.v1',
+      dossier_sha256: dossier.dossier_sha256,
+      reviewer_id: reviewerId,
+      reviewer_kind: 'human',
+      decisions: decisions
+    };
+    var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'tumor_board_overrides.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  updateView();
+})();
+</script>
+</section>

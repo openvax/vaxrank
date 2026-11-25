@@ -1,0 +1,5 @@
+=== Tumor Board Selection Overrides Audit ===
+Reviewer: {{ tumor_board_overrides_audit.reviewer_id }} ({{ tumor_board_overrides_audit.reviewer_kind }}); dossier SHA-256: {{ tumor_board_overrides_audit.dossier_sha256 }}
+Decisions: {{ tumor_board_overrides_audit.accepted_ids | length }} Accept, {{ tumor_board_overrides_audit.review_ids | length }} Review, {{ tumor_board_overrides_audit.rejected_ids | length }} Reject
+{% for d in tumor_board_overrides_audit.decisions %}  {{ d.candidate_id }}: {{ d.decision }}{% if d.confidence is not none %} (conf={{ '%.2f' % d.confidence }}){% endif %} [{{ d.cited_evidence_keys | join(', ') }}] — {{ d.rationale }}
+{% endfor %}

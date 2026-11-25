@@ -556,6 +556,13 @@ def add_output_args(arg_parser):
         "--log-path",
         default="python.log",
         help="File path to write the vaxrank Python log to")
+    output_args_group.add_argument(
+        "--output-tumor-board-dossier",
+        default=None,
+        metavar="PATH",
+        help="Write the structured, AI-ready tumor_board_dossier.json bundle "
+             "(6-layer evidence, deterministic hard safety gates, review flags, "
+             "and cryptographic dossier_sha256).")
 
     design_group.add_argument(
         "--max-sources", "--max-mutations-in-report",
@@ -583,6 +590,15 @@ def add_output_args(arg_parser):
         help="Comma-separated list of MHC alleles with confirmed somatic LOH "
              "(e.g. 'HLA-A*02:01' or 'DLA-88*034:01'). Shorthand for marking "
              "those alleles status=lost under the mhc_allele_status policy.")
+    design_group.add_argument(
+        "--selection-overrides",
+        default=None,
+        metavar="PATH",
+        help="Path to a validated tumor_board_overrides.json file (exported "
+             "from --interactive-review-html or an automated AI reviewer). "
+             "Deterministically validated against the current dossier and "
+             "tumor_board policy (hard safety gates cannot be bypassed) "
+             "before construct assembly.")
 
 
 
@@ -956,6 +972,11 @@ def add_supplemental_report_args(arg_parser):
         '--report-candidate-details', action='store_true',
         help='Lead with detailed candidate windows and epitope tables; put products in an appendix. '
              'The default shows emitted products and a compact candidate ranking.')
+    report_args_group.add_argument(
+        '--interactive-review-html', action='store_true', default=False,
+        help='Embed a self-contained, zero-server interactive Tumor Board review '
+             'workspace in the HTML report (filter/sort, Accept/Review/Reject '
+             'toggles, notes, and one-click export of tumor_board_overrides.json).')
     # Primary option uses dashes; underscore version kept for backwards compatibility
     report_args_group.add_argument(
         "--cosmic-vcf-filename",
@@ -969,6 +990,8 @@ _PRIMARY_OUTPUT_FLAGS = (
     # (CLI flag, args attribute, one-line purpose)
     ("--output-csv",                    "output_csv",
         "ranked candidate windows as CSV"),
+    ("--output-tumor-board-dossier",    "output_tumor_board_dossier",
+        "AI-ready tumor_board_dossier.json bundle"),
     ("--output-xlsx-report",            "output_xlsx_report",
         "ranked candidate windows as XLSX"),
     ("--output-ascii-report",           "output_ascii_report",

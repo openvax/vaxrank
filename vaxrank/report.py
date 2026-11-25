@@ -203,7 +203,10 @@ class TemplateDataCreator(object):
             source_evidence=None,
             selection=None,
             host_reference=None,
-            mhc_allele_status=None):
+            mhc_allele_status=None,
+            tumor_board_dossier=None,
+            tumor_board_overrides_audit=None,
+            interactive_review_html=False):
         """
         Build a report from ranked candidates and actual assembly products.
 
@@ -242,6 +245,11 @@ class TemplateDataCreator(object):
         self.selection = selection or {}
         self.host_reference = host_reference
         self.mhc_allele_status = mhc_allele_status or self.selection.get('mhc_allele_status')
+        self.tumor_board_dossier = tumor_board_dossier
+        self.tumor_board_overrides_audit = (
+            tumor_board_overrides_audit or self.selection.get('tumor_board_overrides')
+        )
+        self.interactive_review_html = bool(interactive_review_html)
         self.prediction_configuration = args_for_report.get('_effective_prediction_configuration', {})
         self.processing_enabled = args_for_report.get('processing_aware_annotation')
         self.proxy_expression_summary = args_for_report.get('_proxy_expression_summary')
@@ -1626,6 +1634,9 @@ class TemplateDataCreator(object):
         )
         self.template_data['longitudinal_support'] = longitudinal
         self.template_data['mhc_allele_status'] = self.mhc_allele_status
+        self.template_data['tumor_board_dossier'] = self.tumor_board_dossier
+        self.template_data['tumor_board_overrides_audit'] = self.tumor_board_overrides_audit
+        self.template_data['interactive_review_html'] = self.interactive_review_html
         ranked_rows = self.template_data['ranked_candidates']
         selected_keys = {r['source_key'] for r in ranked_rows if r.get('selected_products')}
         self.template_data['has_selected_candidates'] = bool(selected_keys)
@@ -1759,7 +1770,8 @@ def make_pdf_report(
     ensure_parent_dir(pdf_report_path)
     logger.info('Rendering PDF report with %s (a few seconds to a minute for large reports)', backend)
     with tempfile.NamedTemporaryFile(mode='w', suffix='.html') as f:
-        render_report(template_data, f, 'templates/template.html')
+        pdf_template_data = dict(template_data, interactive_review_html=False)
+        render_report(pdf_template_data, f, 'templates/template.html')
         f.flush()
 
         if backend == 'pdfkit':

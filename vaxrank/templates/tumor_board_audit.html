@@ -1,0 +1,26 @@
+<section class="appendix" id="tumor-board-audit">
+<h2>Tumor Board Selection Overrides Audit</h2>
+<p class="note">
+  Reviewer: <strong>{{ tumor_board_overrides_audit.reviewer_id | e }}</strong> ({{ tumor_board_overrides_audit.reviewer_kind | e }}) &middot;
+  Dossier SHA-256: <code>{{ tumor_board_overrides_audit.dossier_sha256[:16] }}&hellip;</code> &middot;
+  Accepted: <strong>{{ tumor_board_overrides_audit.accepted_ids | length }}</strong> &middot;
+  Review: <strong>{{ tumor_board_overrides_audit.review_ids | length }}</strong> &middot;
+  Rejected: <strong>{{ tumor_board_overrides_audit.rejected_ids | length }}</strong>
+</p>
+{% if tumor_board_overrides_audit.decisions %}
+<table class="pure-table pure-table-bordered">
+  <thead><tr><th>Candidate</th><th>Decision</th><th>Confidence</th><th>Cited evidence keys</th><th>Rationale</th></tr></thead>
+  <tbody>
+  {% for d in tumor_board_overrides_audit.decisions %}
+    <tr>
+      <td><code>{{ d.candidate_id | e }}</code></td>
+      <td><span class="badge {% if d.decision == 'Reject' %}badge-unsafe{% elif d.decision == 'Review' %}badge-review{% else %}badge-clean{% endif %}">{{ d.decision | e }}</span></td>
+      <td>{{ '%.2f' % d.confidence if d.confidence is not none else '—' }}</td>
+      <td class="note"><code>{{ d.cited_evidence_keys | join(', ') | e }}</code></td>
+      <td class="note">{{ d.rationale | e }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+</section>
