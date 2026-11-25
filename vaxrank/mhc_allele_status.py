@@ -29,6 +29,7 @@ from __future__ import annotations
 import csv
 import json
 import math
+import re
 from dataclasses import dataclass, field, replace
 from numbers import Real
 from pathlib import Path
@@ -50,15 +51,10 @@ def normalize_mhc_allele_name(allele: str) -> str:
     text = str(allele or "").strip()
     if not text:
         raise ValueError("MHC allele name must be non-empty")
-    try:
-        parsed = mhcgnomes.parse(text, raise_on_error=True)
+    parsed = mhcgnomes.parse(text, raise_on_error=False)
+    if parsed is not None:
         return parsed.to_string()
-    except Exception:
-        # Try explicit cross-species fallbacks only via mhcgnomes (never prefix hacks)
-        parsed = mhcgnomes.parse(text, raise_on_error=False)
-        if parsed is not None:
-            return parsed.to_string()
-        return text
+    return text
 
 
 def _optional_float(value: Any, field_name: str, *, min_val: float | None = None,
@@ -204,13 +200,20 @@ class MHCAlleleStatusPolicy:
 
 @dataclass(frozen=True)
 class MHCAlleleStatus:
-    """Per-allele presentation status and multi-assay quantitative evidence."""
+    """Per-allele presentation status and multi-assay quantitative evidence.
+
+    Explicitly separates permanent DNA structural/mutational evidence
+    (``dna_copy_number``, ``dna_loh``, ``dna_somatic_variants``) from
+    transcriptional RNA expression evidence (bulk ASE and scRNA tumor-cluster
+    vs immune-control nTPM).
+    """
     allele: str
     status: str = "unknown"
-    # DNA MHC LOH (e.g. LOHHLA / DASH / Polysolver)
+    # DNA MHC LOH & somatic mutations (e.g. LOHHLA / DASH / LILAC / POLYSOLVER)
     dna_copy_number: float | None = None
     dna_loh: bool | None = None
     dna_loh_pvalue: float | None = None
+    dna_somatic_variants: tuple[dict[str, Any], ...] = field(default_factory=tuple)
     # Bulk RNA-seq allele-specific expression (e.g. HLApers / T1K / arcasHLA)
     bulk_rna_tpm: float | None = None
     bulk_rna_allele_ratio: float | None = None
@@ -242,6 +245,13 @@ class MHCAlleleStatus:
         object.__setattr__(
             self, "dna_loh_pvalue",
             _optional_float(self.dna_loh_pvalue, "dna_loh_pvalue", min_val=0.0, max_val=1.0),
+        )
+        raw_vars = self.dna_somatic_variants or ()
+        if isinstance(raw_vars, str):
+            raw_vars = json.loads(raw_vars) if raw_vars.strip() else ()
+        object.__setattr__(
+            self, "dna_somatic_variants",
+            tuple(dict(v) for v in raw_vars if isinstance(v, dict)),
         )
         object.__setattr__(
             self, "bulk_rna_tpm",
@@ -282,6 +292,7 @@ class MHCAlleleStatus:
             "dna_copy_number": self.dna_copy_number,
             "dna_loh": self.dna_loh,
             "dna_loh_pvalue": self.dna_loh_pvalue,
+            "dna_somatic_variants": list(self.dna_somatic_variants),
             "bulk_rna_tpm": self.bulk_rna_tpm,
             "bulk_rna_allele_ratio": self.bulk_rna_allele_ratio,
             "tumor_purity": self.tumor_purity,
@@ -290,6 +301,83 @@ class MHCAlleleStatus:
             "scrna_immune_control_ntpm": self.scrna_immune_control_ntpm,
             "scrna_resolvable_umis": self.scrna_resolvable_umis,
             "scrna_chemistry": self.scrna_chemistry,
+            "assay_source": self.assay_source,
+            "notes": self.notes,
+        }
+
+
+_DISRUPTED_WORDS = frozenset({
+    "lost", "loss", "loh", "lof", "mutated", "deleted", "deletion",
+    "silenced", "deficient", "truncating", "frameshift", "nonsense", "homdel",
+})
+_NEGATION_WORDS = frozenset({
+    "no", "not", "non", "none", "absent", "without", "intact",
+    "wildtype", "wt", "normal", "retained", "unmutated", "undeleted",
+    "unmodified", "benign", "silent", "synonymous",
+})
+
+
+def _status_text_is_disrupted(text: str) -> bool:
+    """Return True only for affirmative disruption labels, never negated strings
+    like ``no_loh``, ``not_deleted``, ``unmutated``, or ``non-truncating``."""
+    raw = (text or "").strip().lower()
+    if not raw:
+        return False
+    tokens = [t for t in re.split(r"[^a-z0-9]+", raw) if t]
+    if not tokens:
+        return False
+    if any(tok in ("intact", "wildtype", "wt", "normal", "retained", "unmutated", "undeleted") for tok in tokens):
+        return False
+    for idx, tok in enumerate(tokens):
+        if tok in _DISRUPTED_WORDS:
+            if idx > 0 and tokens[idx - 1] in ("no", "not", "non", "without"):
+                continue
+            return True
+    return False
+
+
+@dataclass(frozen=True)
+class APMGeneStatus:
+    """Typed per-gene status for an antigen presentation / IFN-gamma pathway gene,
+    separating DNA somatic mutations/copy loss from RNA expression."""
+    gene: str
+    dna_status: str = "unknown"
+    rna_status: str = "unknown"
+    dna_variants: tuple[dict[str, Any], ...] = field(default_factory=tuple)
+    rna_ntpm: float | None = None
+    immune_control_ntpm: float | None = None
+    assay_source: str = ""
+    notes: str = ""
+
+    def __post_init__(self):
+        object.__setattr__(self, "gene", str(self.gene or "").strip().upper())
+        object.__setattr__(self, "dna_status", str(self.dna_status or "unknown").strip().lower())
+        object.__setattr__(self, "rna_status", str(self.rna_status or "unknown").strip().lower())
+        object.__setattr__(
+            self, "dna_variants",
+            tuple(dict(v) for v in (self.dna_variants or ()) if isinstance(v, dict)),
+        )
+        object.__setattr__(self, "rna_ntpm", _optional_float(self.rna_ntpm, "rna_ntpm", min_val=0.0))
+        object.__setattr__(
+            self, "immune_control_ntpm",
+            _optional_float(self.immune_control_ntpm, "immune_control_ntpm", min_val=0.0),
+        )
+        object.__setattr__(self, "assay_source", str(self.assay_source or "").strip())
+        object.__setattr__(self, "notes", str(self.notes or "").strip())
+
+    @property
+    def is_disrupted(self) -> bool:
+        return _status_text_is_disrupted(self.dna_status) or _status_text_is_disrupted(self.rna_status)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "gene": self.gene,
+            "dna_status": self.dna_status,
+            "rna_status": self.rna_status,
+            "dna_variants": list(self.dna_variants),
+            "rna_ntpm": self.rna_ntpm,
+            "immune_control_ntpm": self.immune_control_ntpm,
+            "is_disrupted": self.is_disrupted,
             "assay_source": self.assay_source,
             "notes": self.notes,
         }
@@ -305,17 +393,31 @@ class APMStatus:
     jak1_status: str = ""
     jak2_status: str = ""
     notes: str = ""
+    genes: tuple[APMGeneStatus, ...] = field(default_factory=tuple)
+
+    def __post_init__(self):
+        raw_genes = self.genes or ()
+        parsed = []
+        for g in raw_genes:
+            if isinstance(g, APMGeneStatus):
+                parsed.append(g)
+            elif isinstance(g, dict):
+                parsed.append(APMGeneStatus(**{
+                    k: v for k, v in g.items()
+                    if k in ("gene", "dna_status", "rna_status", "dna_variants",
+                             "rna_ntpm", "immune_control_ntpm", "assay_source", "notes")
+                }))
+        object.__setattr__(self, "genes", tuple(parsed))
 
     def any_recorded(self) -> bool:
-        return any(
+        return bool(self.genes) or any(
             bool(getattr(self, k))
             for k in ("b2m_status", "tap1_status", "tap2_status",
                       "nlrc5_status", "jak1_status", "jak2_status", "notes")
         )
 
     def disrupted_genes(self) -> list[str]:
-        disrupted_tokens = ("lost", "loh", "lof", "mutated", "deleted", "silenced", "deficient", "truncating")
-        out = []
+        out: list[str] = []
         for label, attr in (
             ("B2M", "b2m_status"),
             ("TAP1", "tap1_status"),
@@ -324,9 +426,11 @@ class APMStatus:
             ("JAK1", "jak1_status"),
             ("JAK2", "jak2_status"),
         ):
-            val = (getattr(self, attr) or "").strip().lower()
-            if val and any(tok in val for tok in disrupted_tokens):
+            if _status_text_is_disrupted(getattr(self, attr) or ""):
                 out.append(label)
+        for gs in self.genes:
+            if gs.is_disrupted and gs.gene not in out:
+                out.append(gs.gene)
         return out
 
     def to_dict(self) -> dict[str, Any]:
@@ -338,6 +442,7 @@ class APMStatus:
             "jak1_status": self.jak1_status,
             "jak2_status": self.jak2_status,
             "notes": self.notes,
+            "genes": [g.to_dict() for g in self.genes],
             "disrupted_genes": self.disrupted_genes(),
         }
 
@@ -377,11 +482,17 @@ class ResolvedMHCAlleleDecision:
     reason_codes: tuple[str, ...]
     caveats: tuple[str, ...]
     badge: str
+    dna_status: str = "unknown"
+    rna_status: str = "unknown"
+    loss_mechanism: str = "unknown"
 
     def to_dict(self) -> dict[str, Any]:
         return {
             **self.record.to_dict(),
             "effective_status": self.effective_status,
+            "dna_status": self.dna_status,
+            "rna_status": self.rna_status,
+            "loss_mechanism": self.loss_mechanism,
             "ranking_weight": round(float(self.ranking_weight), 6),
             "masked": self.masked,
             "reason_codes": list(self.reason_codes),
@@ -398,16 +509,60 @@ _STATUS_BADGE = {
     "unknown": "Unknown",
 }
 
+_TRUNCATING_VARIANT_TOKENS = frozenset({
+    "truncating", "lof", "frameshift", "nonsense", "prematurestop",
+    "stopgained", "stop", "spliceacceptor", "splicedonor", "spliceloss",
+    "startloss", "startlost", "exondeletion", "exonicdeletion", "homdel",
+    "disruptive",
+})
+_MISSENSE_VARIANT_TOKENS = frozenset({
+    "missense", "substitution", "inframe", "nonsynonymous",
+})
+
+
+def _classify_dna_somatic_variants(
+    variants: tuple[dict[str, Any], ...],
+) -> tuple[bool, bool]:
+    """Return ``(has_truncating_lof, has_missense_or_inframe)`` from recorded
+    DNA somatic variant dicts on an MHC allele."""
+    has_lof = False
+    has_missense = False
+    for var in variants:
+        if not isinstance(var, dict):
+            continue
+        if var.get("is_lof") is True or var.get("truncating") is True:
+            has_lof = True
+            continue
+        raw = " ".join(
+            str(var.get(k) or "")
+            for k in ("impact", "effect_class", "consequence", "effect", "classification")
+        ).lower()
+        normalized = re.sub(r"[^a-z0-9]+", " ", raw).strip()
+        compact_tokens = set(normalized.split()) | {
+            t.replace("_", "") for t in re.split(r"[^a-z0-9_]+", raw) if t
+        }
+        if any(tok in ("silent", "synonymous", "benign", "intronic", "noncoding") for tok in compact_tokens):
+            continue
+        if "inframe" in normalized.replace(" ", ""):
+            has_missense = True
+            continue
+        if any(tok in _TRUNCATING_VARIANT_TOKENS for tok in compact_tokens):
+            has_lof = True
+        elif any(tok in _MISSENSE_VARIANT_TOKENS for tok in compact_tokens):
+            has_missense = True
+    return has_lof, has_missense
+
 
 def resolve_effective_status(
     record: MHCAlleleStatus,
     policy: MHCAlleleStatusPolicy | dict[str, Any] | None = None,
 ) -> ResolvedMHCAlleleDecision:
-    """Derive effective presentation status, caveats, and ranking weight from
-    multi-assay evidence under ``policy``.
+    """Derive effective presentation status, separate DNA vs RNA status,
+    caveats, and ranking weight from multi-assay evidence under ``policy``.
 
     Never conflates ``unresolvable`` (e.g. 10x 3' scRNA with low UMIs or
-    low-purity bulk RNA) with confirmed ``lost`` or ``silenced``.
+    low-purity bulk RNA) with confirmed ``lost`` or ``silenced``, and never
+    lets low-UMI scRNA short-circuit clean high-purity bulk RNA ASE.
     """
     pol = MHCAlleleStatusPolicy.resolve(policy)
     reasons: list[str] = []
@@ -431,7 +586,32 @@ def resolve_effective_status(
     if record.scrna_chemistry and "3p" in record.scrna_chemistry.lower() and scrna_low_umis:
         caveats.append("scrna_3p_exon2_3_coverage_gap")
 
-    # Compute continuous expression ratio when available and unconfounded
+    # 1. DNA axis: copy-number LOH and/or somatic truncating LoF variants
+    has_dna_lof, has_dna_missense = _classify_dna_somatic_variants(
+        record.dna_somatic_variants
+    )
+    dna_loh_confirmed = record.dna_loh is True or (
+        record.dna_copy_number is not None
+        and record.dna_copy_number <= pol.dna_loh_max_copy_number
+    )
+    if dna_loh_confirmed:
+        dna_status = "lost"
+        if has_dna_lof:
+            reasons.append("dna_truncating_lof_variant")
+    elif has_dna_lof:
+        dna_status = "truncating_lof"
+    elif has_dna_missense:
+        dna_status = "missense_or_inframe"
+        caveats.append("dna_somatic_missense_variant")
+    elif record.dna_loh is False or (
+        record.dna_copy_number is not None
+        and record.dna_copy_number > pol.dna_loh_max_copy_number
+    ):
+        dna_status = "intact"
+    else:
+        dna_status = "unknown"
+
+    # 2. RNA axis: purity-independent scRNA first (when resolvable), else bulk RNA ASE
     scrna_ratio: float | None = None
     if (not scrna_low_umis
             and record.scrna_tumor_cluster_ntpm is not None
@@ -439,48 +619,86 @@ def resolve_effective_status(
             and record.scrna_immune_control_ntpm > 0):
         scrna_ratio = record.scrna_tumor_cluster_ntpm / record.scrna_immune_control_ntpm
 
+    rna_reason = ""
+    if scrna_ratio is not None:
+        if scrna_ratio <= pol.silenced_tumor_to_immune_ratio:
+            rna_status = "silenced"
+            rna_reason = "scrna_tumor_cluster_silenced"
+        else:
+            rna_status = "expressed"
+            rna_reason = "scrna_tumor_cluster_expressed"
+    elif record.bulk_rna_allele_ratio is not None:
+        if record.bulk_rna_allele_ratio <= pol.silenced_bulk_allele_ratio:
+            if purity_confounded:
+                rna_status = "unresolvable"
+                rna_reason = "bulk_ase_low_but_purity_confounded"
+            else:
+                rna_status = "silenced"
+                rna_reason = "bulk_rna_ase_silenced"
+        else:
+            rna_status = "expressed"
+            rna_reason = "bulk_rna_ase_expressed"
+            if purity_confounded:
+                caveats.append("infiltrate_may_mask_tumor_loss")
+    elif scrna_low_umis:
+        rna_status = "unresolvable"
+        rna_reason = "scrna_insufficient_resolvable_umis"
+    else:
+        rna_status = "unknown"
+
+    # 3. Effective presentation status & loss mechanism
     effective = record.status
     if effective != "unknown":
         reasons.append(f"explicit_status:{effective}")
+        if dna_status in ("lost", "truncating_lof") and rna_status == "silenced":
+            loss_mechanism = "dna_and_rna"
+        elif dna_status == "lost":
+            loss_mechanism = "dna_loh"
+        elif dna_status == "truncating_lof":
+            loss_mechanism = "dna_truncating_lof"
+        elif rna_status == "silenced":
+            loss_mechanism = "rna_silenced"
+        elif effective in ("lost", "silenced"):
+            loss_mechanism = "explicit_override"
+        elif effective == "retained":
+            loss_mechanism = "none"
+        else:
+            loss_mechanism = effective
     else:
-        # 1. DNA copy-number LOH (highest specificity for genomic loss)
-        if record.dna_loh is True or (
-            record.dna_copy_number is not None
-            and record.dna_copy_number <= pol.dna_loh_max_copy_number
-        ):
+        if dna_status == "lost":
             effective = "lost"
             reasons.append("dna_loh_confirmed")
-        # 2. Single-cell tumor-cluster expression (purity-independent)
-        elif scrna_low_umis:
+            if rna_reason:
+                reasons.append(rna_reason)
+            loss_mechanism = "dna_and_rna" if rna_status == "silenced" else "dna_loh"
+        elif dna_status == "truncating_lof":
+            effective = "lost"
+            reasons.append("dna_truncating_lof_variant")
+            if rna_reason:
+                reasons.append(rna_reason)
+            loss_mechanism = (
+                "dna_and_rna" if rna_status == "silenced" else "dna_truncating_lof"
+            )
+        elif rna_status == "silenced":
+            effective = "silenced"
+            reasons.append(rna_reason)
+            loss_mechanism = "rna_silenced"
+        elif rna_status == "expressed":
+            effective = "retained"
+            reasons.append(rna_reason)
+            loss_mechanism = "none"
+        elif rna_status == "unresolvable":
             effective = "unresolvable"
-            reasons.append("scrna_insufficient_resolvable_umis")
-        elif scrna_ratio is not None:
-            if scrna_ratio <= pol.silenced_tumor_to_immune_ratio:
-                effective = "silenced"
-                reasons.append("scrna_tumor_cluster_silenced")
-            else:
-                effective = "retained"
-                reasons.append("scrna_tumor_cluster_expressed")
-        # 3. Bulk RNA allele-specific expression (subject to purity guard)
-        elif record.bulk_rna_allele_ratio is not None:
-            if record.bulk_rna_allele_ratio <= pol.silenced_bulk_allele_ratio:
-                if purity_confounded:
-                    effective = "unresolvable"
-                    reasons.append("bulk_ase_low_but_purity_confounded")
-                else:
-                    effective = "silenced"
-                    reasons.append("bulk_rna_ase_silenced")
-            else:
-                effective = "retained"
-                reasons.append("bulk_rna_ase_expressed")
-                if purity_confounded:
-                    caveats.append("infiltrate_may_mask_tumor_loss")
-        elif record.dna_loh is False:
+            reasons.append(rna_reason)
+            loss_mechanism = "unresolvable"
+        elif dna_status == "intact":
             effective = "retained"
             reasons.append("dna_no_loh")
+            loss_mechanism = "none"
         else:
             effective = "unknown"
             reasons.append("no_decisive_assay_evidence")
+            loss_mechanism = "unknown"
 
     # Determine ranking weight
     masked = False
@@ -512,12 +730,16 @@ def resolve_effective_status(
         reason_codes=tuple(dict.fromkeys(reasons)),
         caveats=tuple(dict.fromkeys(caveats)),
         badge=_STATUS_BADGE[effective],
+        dna_status=dna_status,
+        rna_status=rna_status,
+        loss_mechanism=loss_mechanism,
     )
 
 
 def _record_from_mapping(row: dict[str, Any]) -> MHCAlleleStatus:
     allowed = {
         "allele", "status", "dna_copy_number", "dna_loh", "dna_loh_pvalue",
+        "dna_somatic_variants",
         "bulk_rna_tpm", "bulk_rna_allele_ratio", "tumor_purity",
         "bulk_purity_confounded", "scrna_tumor_cluster_ntpm",
         "scrna_immune_control_ntpm", "scrna_resolvable_umis",
@@ -527,6 +749,38 @@ def _record_from_mapping(row: dict[str, Any]) -> MHCAlleleStatus:
     if "allele" not in kwargs or not str(kwargs["allele"] or "").strip():
         raise ValueError(f"MHC allele status record missing required 'allele' field: {row!r}")
     return MHCAlleleStatus(**kwargs)
+
+
+def bundle_from_dict(
+    data: dict[str, Any] | list[Any],
+    *,
+    source_path: str = "",
+) -> MHCAlleleStatusBundle:
+    """Reconstruct an ``MHCAlleleStatusBundle`` from a parsed JSON dict or list."""
+    if isinstance(data, list):
+        alleles = [_record_from_mapping(item) for item in data]
+        return MHCAlleleStatusBundle(alleles=tuple(alleles), source_path=source_path)
+    if not isinstance(data, dict):
+        raise ValueError(f"Expected dict or list for MHC allele status bundle, got {type(data).__name__}")
+    raw_alleles = data.get("alleles")
+    if raw_alleles is None:
+        raw_alleles = []
+    if not isinstance(raw_alleles, list):
+        raise ValueError("'alleles' in MHC allele status bundle must be a list")
+    alleles = [_record_from_mapping(item) for item in raw_alleles]
+    apm = None
+    if isinstance(data.get("apm"), dict):
+        apm_fields: dict[str, Any] = {
+            k: str(v or "").strip()
+            for k, v in data["apm"].items()
+            if k in ("b2m_status", "tap1_status", "tap2_status",
+                     "nlrc5_status", "jak1_status", "jak2_status", "notes")
+        }
+        if isinstance(data["apm"].get("genes"), list):
+            apm_fields["genes"] = data["apm"]["genes"]
+        apm = APMStatus(**apm_fields)
+    resolved_src = source_path or str(data.get("source_path") or "")
+    return MHCAlleleStatusBundle(alleles=tuple(alleles), apm=apm, source_path=resolved_src)
 
 
 def load_mhc_allele_status(path: str | Path) -> MHCAlleleStatusBundle:
@@ -539,27 +793,7 @@ def load_mhc_allele_status(path: str | Path) -> MHCAlleleStatusBundle:
     if suffix == ".json":
         with open(p, encoding="utf-8") as handle:
             data = json.load(handle)
-        if isinstance(data, list):
-            alleles = [_record_from_mapping(item) for item in data]
-            return MHCAlleleStatusBundle(alleles=tuple(alleles), source_path=str(p))
-        if not isinstance(data, dict):
-            raise ValueError(f"Expected JSON object or list in {p}")
-        raw_alleles = data.get("alleles")
-        if raw_alleles is None:
-            raw_alleles = []
-        if not isinstance(raw_alleles, list):
-            raise ValueError(f"'alleles' in {p} must be a list")
-        alleles = [_record_from_mapping(item) for item in raw_alleles]
-        apm = None
-        if isinstance(data.get("apm"), dict):
-            apm_fields = {
-                k: str(v or "").strip()
-                for k, v in data["apm"].items()
-                if k in ("b2m_status", "tap1_status", "tap2_status",
-                         "nlrc5_status", "jak1_status", "jak2_status", "notes")
-            }
-            apm = APMStatus(**apm_fields)
-        return MHCAlleleStatusBundle(alleles=tuple(alleles), apm=apm, source_path=str(p))
+        return bundle_from_dict(data, source_path=str(p))
 
     delimiter = "\t" if suffix in (".tsv", ".txt") else ","
     alleles = []
@@ -618,13 +852,17 @@ def apply_mhc_allele_status_to_ranked(
 ) -> tuple[list, dict[str, Any]]:
     """Apply policy-resolved MHC allele status to ranked vaccine peptides.
 
-    Zeroes (or continuously scales under ``continuous_ratio``) positive ranking
-    credit on ``CandidateEpitope.per_allele_scores`` for affected alleles while
-    preserving all raw ``CandidateEpitope.predictions`` intact. Recomputes
+    Removes (or continuously scales under ``continuous_ratio``) positive ranking
+    credit on ``CandidateEpitope.per_allele_scores`` (and ``ms_scoring`` for
+    masked alleles) on target tumor epitopes while preserving all raw
+    ``CandidateEpitope.predictions`` intact and leaving autoimmune
+    ``self_epitopes`` unmasked (normal tissues retain intact MHC). Recomputes
     ``VaccinePeptide`` scores and re-sorts both per-source windows and sources.
 
     Returns ``(updated_ranked, audit_dict)``.
     """
+    from .ranking import rank_constructs
+
     pol = MHCAlleleStatusPolicy.resolve(policy)
     decisions_by_allele = {
         rec.allele: resolve_effective_status(rec, pol)
@@ -644,27 +882,73 @@ def apply_mhc_allele_status_to_ranked(
             vp_changed = False
             new_epitopes = []
             for ep in vp.epitopes:
-                if not ep.per_allele_scores:
+                # Somatic tumor MHC LOH/silencing does NOT affect normal healthy
+                # tissues; never mask self-reference or non-targetable epitopes.
+                if not ep.is_targetable or ep.occurs_in_self_reference:
+                    new_epitopes.append(ep)
+                    continue
+                if not ep.per_allele_scores and not ep.ms_scoring:
                     new_epitopes.append(ep)
                     continue
                 ep_touched = False
                 new_scores = dict(ep.per_allele_scores)
-                for raw_allele, score in ep.per_allele_scores.items():
+                new_ms_scoring = dict(ep.ms_scoring) if ep.ms_scoring else {}
+                ep_masked_alleles: list[str] = []
+                for raw_allele, score in list(ep.per_allele_scores.items()):
                     canonical = normalize_mhc_allele_name(raw_allele)
                     decision = decisions_by_allele.get(canonical)
                     if decision is None or decision.ranking_weight == 1.0:
                         continue
-                    adjusted = float(score) * float(decision.ranking_weight)
-                    delta = float(score) - adjusted
-                    if abs(delta) > 1e-12:
-                        new_scores[raw_allele] = adjusted
-                        total_credit_removed += delta
-                        allele_credit_removed[canonical] = (
-                            allele_credit_removed.get(canonical, 0.0) + delta
-                        )
+                    if decision.masked:
+                        # Remove key completely so ms_increment cannot leak MS boost
+                        # through a zero-valued per_allele_scores entry.
+                        new_scores.pop(raw_allele, None)
+                        ep_masked_alleles.append(canonical)
+                        delta = float(score)
+                        if abs(delta) > 1e-12:
+                            total_credit_removed += delta
+                            allele_credit_removed[canonical] = (
+                                allele_credit_removed.get(canonical, 0.0) + delta
+                            )
                         ep_touched = True
+                    else:
+                        adjusted = float(score) * float(decision.ranking_weight)
+                        delta = float(score) - adjusted
+                        if abs(delta) > 1e-12:
+                            new_scores[raw_allele] = adjusted
+                            total_credit_removed += delta
+                            allele_credit_removed[canonical] = (
+                                allele_credit_removed.get(canonical, 0.0) + delta
+                            )
+                            ep_touched = True
+
+                # Also strip masked alleles from ms_scoring directly
+                if new_ms_scoring:
+                    for ms_allele in list(new_ms_scoring.keys()):
+                        ms_canonical = normalize_mhc_allele_name(ms_allele)
+                        ms_dec = decisions_by_allele.get(ms_canonical)
+                        if ms_dec is not None and ms_dec.masked:
+                            new_ms_scoring.pop(ms_allele, None)
+                            if ms_canonical not in ep_masked_alleles:
+                                ep_masked_alleles.append(ms_canonical)
+                            ep_touched = True
+
                 if ep_touched:
-                    new_epitopes.append(replace(ep, per_allele_scores=new_scores))
+                    old_ms_inc = float(ep.ms_increment)
+                    new_ep = replace(
+                        ep,
+                        per_allele_scores=new_scores,
+                        ms_scoring=new_ms_scoring,
+                    )
+                    ms_delta = old_ms_inc - float(new_ep.ms_increment)
+                    if ms_delta > 1e-12:
+                        total_credit_removed += ms_delta
+                        if len(ep_masked_alleles) == 1:
+                            only_a = ep_masked_alleles[0]
+                            allele_credit_removed[only_a] = (
+                                allele_credit_removed.get(only_a, 0.0) + ms_delta
+                            )
+                    new_epitopes.append(new_ep)
                     affected_epitopes += 1
                     vp_changed = True
                     source_touched = True
@@ -677,25 +961,53 @@ def apply_mhc_allele_status_to_ranked(
                 new_vps.append(vp)
 
         if source_touched:
-            new_vps.sort(key=lambda p: p.combined_score, reverse=True)
+            if len(new_vps) > 1:
+                def _vp_window_sort_key(p):
+                    try:
+                        return (-p.combined_score, p.lexicographic_sort_key())
+                    except AttributeError:
+                        return (
+                            -p.combined_score,
+                            -(p.target_epitope_score or 0.0),
+                            p.self_epitope_score or 0.0,
+                        )
+                new_vps.sort(key=_vp_window_sort_key)
             desc = getattr(source, "short_description", None) or str(source)
             affected_sources.append(desc)
         updated_ranked.append((source, new_vps))
 
-    # Re-sort sources by top candidate combined_score (descending), preserving
-    # relative order on exact ties.
-    updated_ranked.sort(
-        key=lambda item: (item[1][0].combined_score if item[1] else float("-inf")),
-        reverse=True,
-    )
+    # Re-sort sources using canonical vaxrank source ranking (combined_score,
+    # comparable RNA support, target_epitope_score) while preserving tie order.
+    updated_ranked = rank_constructs(updated_ranked)
 
     masked_alleles = [
         allele for allele, dec in decisions_by_allele.items() if dec.masked
+    ]
+    lost_alleles = [
+        allele for allele, dec in decisions_by_allele.items()
+        if dec.effective_status == "lost"
+    ]
+    silenced_alleles = [
+        allele for allele, dec in decisions_by_allele.items()
+        if dec.effective_status == "silenced"
+    ]
+    dna_lost_alleles = [
+        allele for allele, dec in decisions_by_allele.items()
+        if dec.dna_status in ("lost", "truncating_lof")
+    ]
+    rna_silenced_alleles = [
+        allele for allele, dec in decisions_by_allele.items()
+        if dec.rna_status == "silenced"
     ]
     unresolvable_alleles = [
         allele for allele, dec in decisions_by_allele.items()
         if dec.effective_status == "unresolvable"
     ]
+    disrupted_apm_genes = (
+        bundle.apm.disrupted_genes()
+        if bundle.apm and bundle.apm.any_recorded()
+        else []
+    )
 
     audit = {
         "schema": "vaxrank.mhc_allele_status_audit.v1",
@@ -710,6 +1022,18 @@ def apply_mhc_allele_status_to_ranked(
         ],
         "masked_alleles": masked_alleles,
         "unresolvable_alleles": unresolvable_alleles,
+        "loss_of_mhc": {
+            "has_loss": bool(lost_alleles or silenced_alleles),
+            "lost_alleles": lost_alleles,
+            "silenced_alleles": silenced_alleles,
+            "dna_lost_alleles": dna_lost_alleles,
+            "rna_silenced_alleles": rna_silenced_alleles,
+            "unresolvable_alleles": unresolvable_alleles,
+        },
+        "loss_of_apm": {
+            "has_loss": bool(disrupted_apm_genes),
+            "disrupted_genes": disrupted_apm_genes,
+        },
         "apm": bundle.apm.to_dict() if bundle.apm and bundle.apm.any_recorded() else None,
         "affected_epitope_count": affected_epitopes,
         "affected_sources": affected_sources,

@@ -372,3 +372,184 @@ def test_cli_flags_for_tumor_board_dossier_and_overrides():
         "--output-dir", "out/",
     ])
     assert args_ext.selection_overrides == "overrides.json"
+
+
+def test_hard_gate_blocks_review_and_omission_and_disables_review_in_html():
+    c1 = _make_candidate("TP53_p.R175H", "EVVRHCPHHERCSDSDGLAPPQHLI", {"HLA-B*07:02": 4.0}, n_alt_reads=30)
+    c2 = _make_candidate("ARTIFACT_p.A1V", "ACDEFGHIKLMNPQRSTVWYACDEF", {"HLA-B*07:02": 3.0}, n_alt_reads=15)
+    ranked = [c1, c2]
+    dossier = build_tumor_board_dossier(
+        ranked,
+        patient_id="PT-HARD",
+        mhc_alleles=["HLA-B*07:02"],
+        dna_vaf_by_variant={c2[0]: {"normal_alt_vaf": 0.15}},
+    )
+    sha = dossier["dossier_sha256"]
+
+    # Attempting to override a hard-gate failure to Review MUST fail
+    bad_review = TumorBoardOverrides(
+        dossier_sha256=sha,
+        reviewer_id="rev-1",
+        reviewer_kind="human",
+        decisions=(
+            TumorBoardDecision(
+                candidate_id="ARTIFACT_p.A1V",
+                decision="Review",
+                cited_evidence_keys=("genomic_telemetry.normal_alt_vaf",),
+                rationale="Try to sneak past hard gate via Review.",
+            ),
+        ),
+    )
+    with pytest.raises(TumorBoardValidationError, match="Only 'Reject' is permitted"):
+        validate_and_apply_overrides(ranked, dossier, bad_review)
+
+    # Omitting the hard-gate-failed candidate MUST STILL exclude it!
+    omitted_overrides = TumorBoardOverrides(
+        dossier_sha256=sha,
+        reviewer_id="rev-1",
+        reviewer_kind="human",
+        decisions=(
+            TumorBoardDecision(
+                candidate_id="TP53_p.R175H",
+                decision="Accept",
+                cited_evidence_keys=("immunogenicity_and_geometry.best_percentile_rank",),
+                rationale="Clean candidate.",
+            ),
+        ),
+    )
+    filtered, audit = validate_and_apply_overrides(ranked, dossier, omitted_overrides)
+    assert [s.short_description for s, _ in filtered] == ["TP53_p.R175H"]
+    assert "ARTIFACT_p.A1V" in audit["rejected_ids"]
+    assert audit["auto_rejected_hard_gate_ids"] == ["ARTIFACT_p.A1V"]
+
+    # Interactive HTML must disable BOTH Accept and Review for hard-gate rows
+    env = Environment(loader=PackageLoader("vaxrank", "templates"))
+    html = env.get_template("interactive_review.html").render(tumor_board_dossier=dossier)
+    assert html.count('disabled title="Blocked by deterministic hard gate"') >= 2
+    assert "Review (blocked)" in html
+
+
+def test_all_restricting_mhc_lost_ignores_non_binder_predictions():
+    from mhctools.pred import Prediction
+    from vaxrank.candidate_epitope import CandidateEpitope
+    from vaxrank.vaccine_peptide import VaccinePeptide
+
+    aa = "WYRSTVQPMLKIHGFEDCAWQRSTV"
+    frag = SimpleNamespace(
+        amino_acids=aa,
+        gene_name="LOHONLY",
+        mutant_amino_acid_start_offset=4,
+        mutant_amino_acid_end_offset=5,
+        n_alt_reads=20,
+        n_ref_reads=5,
+        n_overlapping_reads=25,
+        n_alt_reads_supporting_protein_sequence=20,
+        n_other_reads=0,
+        n_mutant_amino_acids=1,
+        variant=SimpleNamespace(short_description="LOHONLY_p.L2P"),
+    )
+    preds = (
+        Prediction(
+            peptide=aa[:9], allele="HLA-A*02:01", kind="pMHC_affinity",
+            value=45.0, percentile_rank=0.4, score=4.0, source_sequence_name="LOHONLY",
+        ),
+        # 40,000 nM non-binder on retained allele must NOT suppress MHC-LOH hard gate!
+        Prediction(
+            peptide=aa[:9], allele="HLA-B*07:02", kind="pMHC_affinity",
+            value=40000.0, percentile_rank=65.0, score=0.002, source_sequence_name="LOHONLY",
+        ),
+    )
+    ep = CandidateEpitope(
+        sequence=aa[:9],
+        source_sequence=aa,
+        offset=0,
+        overlaps_mutation=True,
+        overlaps_targetable=True,
+        occurs_in_reference=False,
+        per_allele_scores={"HLA-A*02:01": 4.0},
+        predictions=preds,
+    )
+    vp = VaccinePeptide(mutant_protein_fragment=frag, epitopes=[ep])
+    ranked = [(frag.variant, [vp])]
+    bundle = MHCAlleleStatusBundle(
+        alleles=(
+            MHCAlleleStatus(allele="HLA-A*02:01", dna_loh=True, dna_copy_number=0.0),
+            MHCAlleleStatus(allele="HLA-B*07:02", status="retained"),
+        )
+    )
+    ranked, mhc_audit = apply_mhc_allele_status_to_ranked(ranked, bundle)
+    dossier = build_tumor_board_dossier(
+        ranked,
+        patient_id="PT-NONBINDER",
+        mhc_alleles=["HLA-A*02:01", "HLA-B*07:02"],
+        mhc_allele_status=mhc_audit,
+    )
+    cand = dossier["candidates"][0]
+    assert cand["tumor_evolution_and_mhc"]["all_restricting_mhc_lost_or_silenced"] is True
+    assert any(g["gate"] == "all_restricting_mhc_lost_or_silenced" for g in cand["hard_gate_failures"])
+
+
+def test_zero_vaf_preserved_and_dossier_sha256_invariant_to_products():
+    from vaxrank.tumor_board import overrides_from_dict
+
+    c1 = _make_candidate("TP53_p.R175H", "EVVRHCPHHERCSDSDGLAPPQHLI", {"HLA-B*07:02": 4.0}, n_alt_reads=30)
+    ranked = [c1]
+    pre_assembly = build_tumor_board_dossier(
+        ranked,
+        patient_id="PT-ZERO",
+        mhc_alleles=["HLA-B*07:02"],
+        dna_vaf_by_variant={c1[0]: {"tumor_vaf": 0.0, "normal_alt_vaf": 0.0}},
+    )
+    assert pre_assembly["candidates"][0]["genomic_telemetry"]["tumor_vaf"] == 0.0
+    assert pre_assembly["candidates"][0]["genomic_telemetry"]["normal_alt_vaf"] == 0.0
+
+    # Simulate post-assembly product & pool attachment
+    fake_construct = SimpleNamespace(
+        name="P1",
+        sequence="EVVRHCPHHERCSDSDGLAPPQHLI",
+        components={"pool": 1},
+    )
+    post_assembly = build_tumor_board_dossier(
+        ranked,
+        patient_id="PT-ZERO",
+        mhc_alleles=["HLA-B*07:02"],
+        dna_vaf_by_variant={c1[0]: {"tumor_vaf": 0.0, "normal_alt_vaf": 0.0}},
+        products={"peptide": [fake_construct]},
+    )
+    assert post_assembly["candidates"][0]["construct_and_manufacturability"]["emitted_products"] == ["P1"]
+    assert post_assembly["candidates"][0]["construct_and_manufacturability"]["peptide_pool"] == 1
+    assert pre_assembly["dossier_sha256"] == post_assembly["dossier_sha256"]
+
+    # Round-trip overrides_from_dict
+    ov = TumorBoardOverrides(
+        dossier_sha256=post_assembly["dossier_sha256"],
+        reviewer_id="rev-rt",
+        reviewer_kind="human",
+        decisions=(
+            TumorBoardDecision(
+                candidate_id="TP53_p.R175H",
+                decision="Accept",
+                cited_evidence_keys=("genomic_telemetry.normal_alt_vaf",),
+                rationale="Zero normal VAF.",
+            ),
+        ),
+    )
+    restored = overrides_from_dict(ov.to_dict())
+    assert restored == ov
+
+
+def test_entry_point_flag_registration_for_mhc_status_and_tumor_board():
+    from vaxrank.cli.entry_point import _ARG_GROUPS, _INPUT_FILE_FLAGS, _OUTPUT_FILE_FLAGS
+
+    assert "mhc_allele_status" in _INPUT_FILE_FLAGS
+    assert "selection_overrides" in _INPUT_FILE_FLAGS
+    assert "output_tumor_board_dossier" in _OUTPUT_FILE_FLAGS
+    all_grouped = {k for _, keys in _ARG_GROUPS for k in keys}
+    for flag in (
+        "mhc_allele_status",
+        "mhc_loh_alleles",
+        "selection_overrides",
+        "output_tumor_board_dossier",
+        "interactive_review_html",
+    ):
+        assert flag in all_grouped

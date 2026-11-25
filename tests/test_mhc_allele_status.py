@@ -310,12 +310,14 @@ def test_mhc_allele_status_report_templates_render():
     html_out = env.get_template("mhc_allele_status.html").render(mhc_allele_status=audit)
     assert "MHC-LOH" in html_out
     assert "MHC-Silenced" in html_out
-    assert "APM disruption: B2M" in html_out
+    assert "Loss of APM: B2M" in html_out
+    assert "DNA Status" in html_out
+    assert "RNA Status" in html_out
 
     txt_out = env.get_template("mhc_allele_status.txt").render(mhc_allele_status=audit)
     assert "HLA-A*02:01: MHC-LOH" in txt_out
     assert "HLA-B*07:02: MHC-Silenced" in txt_out
-    assert "DISRUPTED: B2M" in txt_out
+    assert "LOSS OF APM: B2M" in txt_out
 
 
 def test_cli_flags_for_mhc_allele_status():
@@ -335,3 +337,206 @@ def test_cli_flags_for_mhc_allele_status():
         "--mhc-loh-alleles", "DLA-88*034:01",
     ])
     assert args_ext.mhc_loh_alleles == "DLA-88*034:01"
+
+
+def test_apm_negation_words_not_falsely_disrupted():
+    from vaxrank.mhc_allele_status import APMGeneStatus
+
+    clean_apm = APMStatus(
+        b2m_status="no_loh",
+        tap1_status="not_deleted",
+        tap2_status="unmutated",
+        nlrc5_status="non-truncating",
+        jak1_status="wildtype",
+        jak2_status="intact",
+        genes=(
+            APMGeneStatus(gene="CALR", dna_status="not_mutated", rna_status="normal"),
+            APMGeneStatus(gene="ERAP1", dna_status="intact", rna_status="retained"),
+        ),
+    )
+    assert clean_apm.disrupted_genes() == []
+
+    disrupted_apm = APMStatus(
+        b2m_status="frameshift_lof",
+        tap1_status="intact",
+        genes=(
+            APMGeneStatus(
+                gene="NLRC5",
+                dna_status="intact",
+                rna_status="silenced",
+                rna_ntpm=0.4,
+                immune_control_ntpm=45.0,
+            ),
+        ),
+    )
+    assert disrupted_apm.disrupted_genes() == ["B2M", "NLRC5"]
+
+
+def test_low_umi_scrna_does_not_short_circuit_high_purity_bulk_ase():
+    rec = MHCAlleleStatus(
+        allele="HLA-A*02:01",
+        scrna_tumor_cluster_ntpm=0.0,
+        scrna_immune_control_ntpm=100.0,
+        scrna_resolvable_umis=2,
+        scrna_chemistry="10x_3p",
+        bulk_rna_allele_ratio=0.02,
+        tumor_purity=0.80,
+    )
+    dec = resolve_effective_status(rec)
+    assert dec.effective_status == "silenced"
+    assert dec.rna_status == "silenced"
+    assert dec.dna_status == "unknown"
+    assert dec.loss_mechanism == "rna_silenced"
+    assert dec.masked is True
+    assert "scrna_insufficient_resolvable_umis" in dec.caveats
+
+
+def test_dna_somatic_lof_vs_missense_and_separate_dna_rna_axes():
+    lof_rec = MHCAlleleStatus(
+        allele="DLA-88*034:01",
+        dna_somatic_variants=({"consequence": "frameshift", "hgvs_p": "p.R102fs"},),
+        bulk_rna_allele_ratio=0.45,
+        tumor_purity=0.70,
+    )
+    lof_dec = resolve_effective_status(lof_rec)
+    assert lof_dec.dna_status == "truncating_lof"
+    assert lof_dec.rna_status == "expressed"
+    assert lof_dec.effective_status == "lost"
+    assert lof_dec.loss_mechanism == "dna_truncating_lof"
+    assert lof_dec.masked is True
+
+    missense_rec = MHCAlleleStatus(
+        allele="H2-Kb",
+        dna_somatic_variants=({"consequence": "missense", "hgvs_p": "p.V55A"},),
+        bulk_rna_allele_ratio=0.48,
+        tumor_purity=0.75,
+    )
+    mis_dec = resolve_effective_status(missense_rec)
+    assert mis_dec.dna_status == "missense_or_inframe"
+    assert mis_dec.rna_status == "expressed"
+    assert mis_dec.effective_status == "retained"
+    assert "dna_somatic_missense_variant" in mis_dec.caveats
+    assert mis_dec.masked is False
+
+
+def test_masking_preserves_self_epitopes_and_strips_ms_increment():
+    from vaxrank.candidate_epitope import CandidateEpitope
+    from vaxrank.vaccine_peptide import VaccinePeptide
+
+    aa = "EVVRHCPHHERCSDSDGLAPPQHLI"
+    frag = SimpleNamespace(
+        amino_acids=aa,
+        gene_name="TP53",
+        mutant_amino_acid_start_offset=4,
+        mutant_amino_acid_end_offset=5,
+        n_alt_reads=20,
+        n_ref_reads=10,
+        n_overlapping_reads=30,
+        n_alt_reads_supporting_protein_sequence=20,
+        n_other_reads=0,
+        n_mutant_amino_acids=1,
+        variant=SimpleNamespace(short_description="TP53_p.R175H"),
+    )
+    target_preds = (
+        Prediction(
+            peptide=aa[:9],
+            allele="HLA-A*02:01",
+            kind="pMHC_affinity",
+            value=50.0,
+            percentile_rank=0.4,
+            score=1.0,
+            source_sequence_name="TP53",
+        ),
+    )
+    target_ep = CandidateEpitope(
+        sequence=aa[:9],
+        source_sequence=aa,
+        offset=0,
+        overlaps_mutation=True,
+        overlaps_targetable=True,
+        occurs_in_reference=False,
+        per_allele_scores={"HLA-A*02:01": 1.0},
+        ms_scoring={"HLA-A*02:01": {"baseline": 1.0, "adjusted": 2.5}},
+        predictions=target_preds,
+    )
+    self_preds = (
+        Prediction(
+            peptide=aa[10:19],
+            allele="HLA-A*02:01",
+            kind="pMHC_affinity",
+            value=40.0,
+            percentile_rank=0.3,
+            score=3.0,
+            source_sequence_name="TP53",
+        ),
+    )
+    self_ep = CandidateEpitope(
+        sequence=aa[10:19],
+        source_sequence=aa,
+        offset=10,
+        overlaps_mutation=False,
+        overlaps_targetable=False,
+        occurs_in_reference=True,
+        per_allele_scores={"HLA-A*02:01": 3.0},
+        predictions=self_preds,
+    )
+    vp = VaccinePeptide(mutant_protein_fragment=frag, epitopes=[target_ep, self_ep])
+    assert vp.target_epitope_score == pytest.approx(2.5)
+    assert vp.self_epitope_score == pytest.approx(3.0)
+
+    bundle = bundle_from_loh_alleles("HLA-A*02:01")
+    updated, audit = apply_mhc_allele_status_to_ranked([(frag.variant, [vp])], bundle)
+    new_vp = updated[0][1][0]
+    assert new_vp.target_epitope_score == pytest.approx(0.0)
+    assert new_vp.target_epitopes[0].ms_increment == pytest.approx(0.0)
+    assert "HLA-A*02:01" not in new_vp.target_epitopes[0].per_allele_scores
+    # Normal-tissue self-epitope score MUST remain completely unmasked
+    assert new_vp.self_epitope_score == pytest.approx(3.0)
+    assert audit["loss_of_mhc"]["has_loss"] is True
+    assert audit["loss_of_mhc"]["dna_lost_alleles"] == ["HLA-A*02:01"]
+
+
+def test_resolve_target_alleles_excludes_masked_mhc_alleles():
+    from vaxrank.cli.entry_point import resolve_target_alleles
+
+    args = SimpleNamespace(
+        vcf="a.vcf",
+        _declared_mhc_alleles=["HLA-A*02:01", "HLA-B*07:02", "DLA-88*034:01"],
+        _masked_mhc_alleles=["A0201", "DLA-88*034:01"],
+    )
+    assert resolve_target_alleles(args) == ["HLA-B*07:02"]
+
+
+def test_bundle_from_dict_roundtrip_preserves_variants_and_apm_genes():
+    from vaxrank.mhc_allele_status import APMGeneStatus, bundle_from_dict
+
+    bundle = MHCAlleleStatusBundle(
+        alleles=(
+            MHCAlleleStatus(
+                allele="HLA-A*02:01",
+                dna_loh=True,
+                dna_somatic_variants=({"gene": "HLA-A", "consequence": "nonsense"},),
+            ),
+        ),
+        apm=APMStatus(
+            b2m_status="lof_mutated",
+            genes=(
+                APMGeneStatus(
+                    gene="B2M",
+                    dna_status="truncating_lof",
+                    rna_status="silenced",
+                    dna_variants=({"consequence": "frameshift"},),
+                    rna_ntpm=1.2,
+                ),
+            ),
+        ),
+        source_path="in_memory.json",
+    )
+    restored = bundle_from_dict(bundle.to_dict())
+    assert len(restored.alleles) == 1
+    assert restored.alleles[0].dna_somatic_variants == ({"gene": "HLA-A", "consequence": "nonsense"},)
+    assert restored.apm is not None
+    assert len(restored.apm.genes) == 1
+    assert restored.apm.genes[0].gene == "B2M"
+    assert restored.apm.genes[0].dna_status == "truncating_lof"
+    assert restored.apm.genes[0].rna_ntpm == pytest.approx(1.2)
