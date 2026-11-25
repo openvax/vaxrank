@@ -419,6 +419,33 @@ apm_variants:
   extra_mhc_genes: []
 
 
+# Per-trial policy for bulk RNA-seq MHC ASE estimation & companion tool ingestion.
+mhc_expression:
+  kmer_size: 21
+  min_discriminating_kmers: 5
+  min_locus_supporting_reads: 10
+  default_tumor_purity: null
+  lohhla_pvalue_threshold: 0.01
+  dash_deletion_threshold: 0.5
+  lilac_min_copy_number: 0.5
+
+
+# Per-trial policy for single-cell RNA-seq tumor-cluster extraction, nTPM, and MHC ASE.
+scrna_tumor:
+  min_cells_per_cluster: 5
+  min_somatic_variant_cells_for_tumor: 3
+  min_somatic_variant_fraction_for_tumor: 0.05
+  max_immune_marker_ntpm_for_tumor: 1500.0
+  min_immune_marker_ntpm_for_control: 1000.0
+  max_stromal_marker_ntpm_for_tumor: 3000.0
+  silenced_apm_tumor_to_immune_ratio: 0.1
+  min_scrna_resolvable_umis: 20
+  chemistry: unknown
+  tumor_markers: []
+  explicit_tumor_clusters: []
+  explicit_immune_clusters: []
+
+
 # Per-trial policy for tumor_board_dossier.json hard gates, review flags, and --selection-overrides.
 tumor_board:
   forbid_override_exact_unsafe_self: true

@@ -326,6 +326,43 @@ class APMVariantsConfigSchema(
     extra_mhc_genes: Optional[list[str]] = None
 
 
+class MHCExpressionConfigSchema(
+    msgspec.Struct,
+    frozen=True,
+    kw_only=True,
+    forbid_unknown_fields=True,
+):
+    """Per-trial policy for bulk RNA-seq MHC ASE estimation & companion tool ingestion."""
+    kmer_size: Optional[int] = None
+    min_discriminating_kmers: Optional[int] = None
+    min_locus_supporting_reads: Optional[int] = None
+    default_tumor_purity: Optional[float] = None
+    lohhla_pvalue_threshold: Optional[float] = None
+    dash_deletion_threshold: Optional[float] = None
+    lilac_min_copy_number: Optional[float] = None
+
+
+class SCRNATumorConfigSchema(
+    msgspec.Struct,
+    frozen=True,
+    kw_only=True,
+    forbid_unknown_fields=True,
+):
+    """Per-trial policy for single-cell tumor-cluster extraction, nTPM, and MHC ASE."""
+    min_cells_per_cluster: Optional[int] = None
+    min_somatic_variant_cells_for_tumor: Optional[int] = None
+    min_somatic_variant_fraction_for_tumor: Optional[float] = None
+    max_immune_marker_ntpm_for_tumor: Optional[float] = None
+    min_immune_marker_ntpm_for_control: Optional[float] = None
+    max_stromal_marker_ntpm_for_tumor: Optional[float] = None
+    silenced_apm_tumor_to_immune_ratio: Optional[float] = None
+    min_scrna_resolvable_umis: Optional[int] = None
+    chemistry: Optional[str] = None
+    tumor_markers: Optional[list[str]] = None
+    explicit_tumor_clusters: Optional[list[str]] = None
+    explicit_immune_clusters: Optional[list[str]] = None
+
+
 class TumorBoardConfigSchema(
     msgspec.Struct,
     frozen=True,
@@ -362,4 +399,6 @@ class VaxrankConfigSchema(
     compare: Optional[CompareConfigSchema] = None
     mhc_allele_status: Optional[MHCAlleleStatusConfigSchema] = None
     apm_variants: Optional[APMVariantsConfigSchema] = None
+    mhc_expression: Optional[MHCExpressionConfigSchema] = None
+    scrna_tumor: Optional[SCRNATumorConfigSchema] = None
     tumor_board: Optional[TumorBoardConfigSchema] = None
