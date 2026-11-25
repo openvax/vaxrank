@@ -482,6 +482,7 @@ _ARG_GROUPS = (
     ("MHC", (
         'mhc_predictor', 'mhc_alleles', 'mhc_alleles_file',
         'mhc_epitope_lengths', 'mhc_allele_status', 'mhc_loh_alleles',
+        'detect_apm_variants',
     )),
     ("Reference comparisons", (
         'comparison_reference', 'patient_background_baseline', 'patient_background_pairs',
@@ -1706,15 +1707,16 @@ def _run_parsed_cli(args, args_list):
             human_only=getattr(args, 'pepsickle_human_only', False),
             threshold=getattr(args, 'pepsickle_threshold', 0.5))
 
-    # Cross-species MHC allele status / expression masking (#921, #932)
+    # Cross-species MHC allele status / expression masking (#921, #932, #935)
     mhc_status_audit = None
     mhc_status_path = getattr(args, 'mhc_allele_status', None)
     mhc_loh_alleles = getattr(args, 'mhc_loh_alleles', None)
+    detected_mhc_apm_bundle = getattr(args, '_detected_dna_mhc_apm_bundle', None)
     saved_mhc_bundle_dict = (
         dataset.selection.get('mhc_allele_status_bundle')
         if dataset is not None else None
     )
-    if mhc_status_path or mhc_loh_alleles or saved_mhc_bundle_dict:
+    if mhc_status_path or mhc_loh_alleles or detected_mhc_apm_bundle or saved_mhc_bundle_dict:
         from ..mhc_allele_status import (
             apply_mhc_allele_status_to_ranked,
             bundle_from_dict,
@@ -1722,10 +1724,13 @@ def _run_parsed_cli(args, args_list):
             load_mhc_allele_status,
             merge_mhc_allele_status_bundles,
         )
-        if mhc_status_path or mhc_loh_alleles:
+        if mhc_status_path or mhc_loh_alleles or detected_mhc_apm_bundle:
             file_bundle = load_mhc_allele_status(mhc_status_path) if mhc_status_path else None
             cli_bundle = bundle_from_loh_alleles(mhc_loh_alleles) if mhc_loh_alleles else None
-            status_bundle = merge_mhc_allele_status_bundles(file_bundle, cli_bundle)
+            user_bundle = merge_mhc_allele_status_bundles(file_bundle, cli_bundle)
+            status_bundle = merge_mhc_allele_status_bundles(
+                detected_mhc_apm_bundle, user_bundle
+            )
             mhc_policy = load_vaxrank_config(args).get('mhc_allele_status')
         else:
             status_bundle = bundle_from_dict(saved_mhc_bundle_dict)
@@ -2119,6 +2124,29 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
         df = isovar_results_to_dataframe(isovar_results)
         ensure_parent_dir(args.output_isovar_csv)
         df.to_csv(args.output_isovar_csv, index=False)
+
+    # Cross-species DNA somatic MHC & APM variant / LoF detection (#935)
+    if getattr(args, 'detect_apm_variants', True):
+        from ..apm_variants import detect_dna_mhc_and_apm_variants
+        apm_pol = load_vaxrank_config(args).get('apm_variants')
+        dna_vaf_map = extract_dna_vaf_by_variant(
+            loaded_variants,
+            tumor_sample_name=getattr(args, 'tumor_sample_name', None),
+        )
+        apm_detection = detect_dna_mhc_and_apm_variants(
+            loaded_variants,
+            isovar_results=isovar_results,
+            patient_mhc_alleles=resolve_target_alleles(args),
+            dna_vaf_by_variant=dna_vaf_map,
+            policy=apm_pol,
+        )
+        if apm_detection.has_findings:
+            args._detected_dna_mhc_apm_bundle = apm_detection.to_mhc_allele_status_bundle()
+            logger.info(
+                "Detected %d DNA somatic MHC/APM variant(s) (%s).",
+                len(apm_detection.variants),
+                ", ".join(sorted({f"{v.gene}:{v.impact_class}" for v in apm_detection.variants})),
+            )
 
     from ..hitlist_evidence import LocalHitlistLookup
     # Pooled direct inputs are enriched later by the shared scorer.
