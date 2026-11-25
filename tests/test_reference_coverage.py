@@ -257,3 +257,25 @@ def test_cli_reports_native_coverage_and_replays_offline(inputs, tmp_path, monke
                 assert 'Catalogue riborf-mouse 3: Not searched' in text
                 if filename == 'vaccine_report.txt':
                     assert 'Minimum protein length: 8 aa' in text
+
+
+def test_inventory_detaches_nested_mapping_proxy_layers():
+    from types import MappingProxyType, SimpleNamespace
+    from vaxrank.reference_coverage import _inventory
+
+    nested_layer = MappingProxyType({
+        'role': 'host',
+        'kind': 'extra_orf',
+        'source': 'catalog:fixture',
+        'filters': MappingProxyType({'kind': 'ribosome', 'nested': (MappingProxyType({'a': 1}),)}),
+    })
+    class _StubProteome:
+        identity = 'sha256:abc'
+        reference = SimpleNamespace(taxon_id=9606, species='human', genome_build='GRCh38')
+        layers = (nested_layer,)
+
+        def __iter__(self):
+            return iter(())
+
+    inv = _inventory(_StubProteome())
+    assert inv['included'][0]['layers'][0]['filters'] == {'kind': 'ribosome', 'nested': [{'a': 1}]}

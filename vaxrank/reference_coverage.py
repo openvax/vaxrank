@@ -1,6 +1,7 @@
 """Frozen coverage of a supplied host inventory, without acquiring catalogues."""
 
 from collections import Counter
+from collections.abc import Mapping
 from copy import deepcopy
 import json
 
@@ -11,10 +12,22 @@ DISCOVER_CATALOGUES = object()
 SCHEMA = 'vaxrank.host_catalogue_coverage.v1'
 
 
+def _detach_value(value):
+    """Recursively detach nested read-only mappings (e.g. MappingProxyType from
+    oncoref layers) and mutable containers into plain JSON-safe copies."""
+    if isinstance(value, Mapping):
+        return {k: _detach_value(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_detach_value(v) for v in value]
+    if isinstance(value, tuple):
+        return [_detach_value(v) for v in value]
+    return deepcopy(value)
+
+
 def _inventory(proteome):
     counts = Counter(e.kind for e in proteome)
     sources = Counter(e.source for e in proteome if e.kind == 'extra_orf')
-    layers = [deepcopy(dict(layer)) for layer in proteome.layers
+    layers = [_detach_value(layer) for layer in proteome.layers
               if layer.get('role') == 'host' and layer.get('kind') == 'extra_orf']
     labels = sorted(set(sources) | {layer['source'] for layer in layers})
     return dict(host_reference_sha256=proteome.identity,
