@@ -100,8 +100,8 @@ one-screen summary; `vaxrank help TOPIC` prints one group of options
 (`variants`, `isovar`, `cta`, `predict`, `design`, `peptide`, `mrna`,
 `annotation`, `output`, `advanced`) and `vaxrank help all` prints every option.
 `vaxrank run FLAGS` is an optional spelling of the bare form. Other commands are
-`vaxrank policies [show NAME]`, `vaxrank config`, `vaxrank replay FILE` and
-`vaxrank help`. `vaxrank --version` prints the installed release.
+`vaxrank compare RUN_A RUN_B`, `vaxrank policies [show NAME]`, `vaxrank config`,
+`vaxrank replay FILE` and `vaxrank help`. `vaxrank --version` prints the installed release.
 
 Besides VCF + BAM input, it designs directly from a LENS or pVACseq report when
 MHC prediction has happened upstream:
@@ -117,6 +117,14 @@ reused by default. [Input workflows](https://openvax.github.io/vaxrank/input-wor
 reports, saved Vaxrank evidence, combining several reports in one run, and when
 to compute new predictions instead.
 
+Key formulation, tumor-evolution, and review workflows (all configurable in per-trial YAML policies):
+
+- **Multi-pool SLP partitioning**: `--peptide-num-pools 4` separates competing same-MHC peptides across injection pools and balances hydrophobicity/charge (`peptide.pool_partition`).
+- **Synthesis-safe mRNA CDS & joint ordering**: `--mrna-cds-synthesis-safe`, `--mrna-codon-optimizer`, `--mrna-optimize-antigen-order`, and `--mrna-junction-cleavage-scoring` (`mrna.cds_optimization`, `mrna.junction_optimization`).
+- **Cross-species MHC allele status & expression masking**: `--mhc-allele-status FILE` and `--mhc-loh-alleles` mask tumor-lost or transcriptionally silenced MHC alleles (HLA, canine DLA, murine H-2, swine SLA) without masking normal-tissue self-epitopes (`mhc_allele_status`).
+- **Run comparison**: `vaxrank compare RUN_A RUN_B` computes rank-preservation statistics, per-target attribution diffs, and peptide/mRNA construct diffs across policies or RNA-vs-DNA runs.
+- **Tumor board review & AI-ready dossier**: `--output-tumor-board-dossier`, `--interactive-review-html`, and audited `--selection-overrides` replay with deterministic hard safety gates (`tumor_board`).
+
 Companion command sharing the installed package:
 
 | Command | Purpose | Documented in |
@@ -130,7 +138,7 @@ Full documentation: <https://openvax.github.io/vaxrank/>. In reading order:
 1. [Installation](https://openvax.github.io/vaxrank/installation/): reference annotation and PDF backends.
 2. [Input workflows](https://openvax.github.io/vaxrank/input-workflows/): VCF/BAM, LENS, pVACseq, Topiary tables, CTA expression, antigen sequences and saved evidence.
 3. [Vaccine designs](https://openvax.github.io/vaxrank/vaccine-designs/): the design axes, peptide and mRNA construct files, linker library, manifest schema.
-4. [Analysis outputs](https://openvax.github.io/vaxrank/outputs/): report formats and the figure commands.
+4. [Analysis outputs](https://openvax.github.io/vaxrank/outputs/): report formats, dossiers and selection explanations.
 5. [Configuration](https://openvax.github.io/vaxrank/configuration/): YAML config, override order, named policy bundles, RNA reconstruction context, Topiary scoring DSL.
 6. [How Vaxrank works](https://openvax.github.io/vaxrank/how-it-works/): pipeline stages, ranking criteria, data model, module map.
 

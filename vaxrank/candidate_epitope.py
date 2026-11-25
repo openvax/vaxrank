@@ -486,7 +486,13 @@ class Peptide(DataclassSerializable):
             kind, predictor=predictor, version=version)
         if not candidates:
             return None
-        return max(candidates, key=lambda p: p.score)
+        scored = [
+            p for p in candidates
+            if p.score is not None and math.isfinite(p.score)
+        ]
+        if not scored:
+            return None
+        return max(scored, key=lambda p: p.score)
 
     # Kind-named sugar for the common ``best(kind)`` calls. For
     # predictor / version pinning, use ``best`` directly.

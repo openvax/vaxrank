@@ -361,10 +361,12 @@ def attribute_peptide(rows, genotype, policy, default_methods=None) -> tuple:
     # a broadcast allele must not be relabelled "from_input" on a second
     # pass, or the audit record would claim the input paired a peptide with
     # an allele it never mentioned.
+    from .candidate_epitope import stated_or_blank
     from_input = tuple(sorted({
-        row.get("allele") or ""
+        stated
         for row in rows
-        if (row.get("allele") or "") and is_allele_scoped_kind(row.get("kind"))
+        if is_allele_scoped_kind(row.get("kind"))
+        and (stated := stated_or_blank(row.get("allele")))
     }))
     # An explicit genotype is the patient's actual typing and wins outright.
     # Unioning the input's alleles in would mean an explicit genotype could
@@ -457,7 +459,8 @@ def attribute_frame(df, policy, *, genotype_for=None, default_methods=None,
     # dicts to discover that costs real time on every scoring pass.
     if "kind" not in df.columns:
         return {}
-    allele_free = df["allele"].map(lambda a: not (a or "")) if (
+    from .candidate_epitope import stated_or_blank
+    allele_free = df["allele"].map(lambda a: not stated_or_blank(a)) if (
         "allele" in df.columns) else True
     peptide_level = df["kind"].map(is_peptide_level_kind)
     if not bool((peptide_level & allele_free).any()):
@@ -475,8 +478,8 @@ def attribute_frame(df, policy, *, genotype_for=None, default_methods=None,
     for row in records:
         key = tuple(row.get(column) for column in identity)
         rows_by_identity.setdefault(key, []).append(row)
-        if is_peptide_level_kind(row.get("kind")) and not (
-                row.get("allele") or ""):
+        if is_peptide_level_kind(row.get("kind")) and not stated_or_blank(
+                row.get("allele")):
             has_allele_free.add(key)
 
     attributions = {}
@@ -515,6 +518,7 @@ def apply_attribution(df, attributions, policy, *, group_columns=None):
     if not policy.narrows or not attributions:
         return df
 
+    from .candidate_epitope import stated_or_blank
     import pandas as pd
 
     group_columns = list(group_columns or ())
@@ -525,7 +529,7 @@ def apply_attribution(df, attributions, policy, *, group_columns=None):
         attributed = attributions.get(key)
         if (attributed is None
                 or not is_peptide_level_kind(row.get("kind"))
-                or (row.get("allele") or "")):
+                or stated_or_blank(row.get("allele"))):
             out.append(row)
             continue
         for attribution in attributed:

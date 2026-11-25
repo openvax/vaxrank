@@ -958,11 +958,17 @@ def _pick_canonical_predictor(affinity_preds):
     return sorted(affinity_preds, key=rank)[0]
 
 
-def normalize_hla_allele(allele):
-    """LENS emits alleles as 'HLA-A01:01'; vaxrank output uses 'HLA-A*01:01'."""
+def normalize_mhc_allele(allele):
+    """Cross-species MHC allele normalization via mhcgnomes (e.g. 'HLA-A01:01'
+    -> 'HLA-A*01:01', 'H2-Kb' -> 'H2-K*b', 'DLA-88*034:01' -> 'DLA-88*034:01')."""
     if not allele:
         return allele
     return parse_prediction_allele(allele)
+
+
+def normalize_hla_allele(allele):
+    """Backward-compatible alias for :func:`normalize_mhc_allele`."""
+    return normalize_mhc_allele(allele)
 
 
 def lens_epitope_position(peptide, peptide_context):

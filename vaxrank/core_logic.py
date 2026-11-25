@@ -289,6 +289,11 @@ def vaccine_peptides_for_variant(
 
     if isovar_result.passes_all_filters:
         long_protein_fragment = MutantProteinFragment.from_isovar_result(isovar_result)
+        if long_protein_fragment is None:
+            logger.info(
+                "RNA assembly produced no protein fragment for %s",
+                variant.short_description)
+            return []
     elif allow_dna_only_fallback:
         # Derive protein sequence length from vaccine config
         vc = vaccine_config or VaccineConfig(
@@ -298,7 +303,7 @@ def vaccine_peptides_for_variant(
         long_protein_fragment = MutantProteinFragment.from_variant_dna(
             variant, protein_sequence_length,
             effects=([isovar_result.predicted_effect]
-                     if isovar_result.predicted_effect is not None else []))
+                     if isovar_result.predicted_effect is not None else None))
         if long_protein_fragment is None:
             logger.info(
                 "DNA-only fallback produced no protein fragment for %s",

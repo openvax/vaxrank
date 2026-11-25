@@ -1434,7 +1434,7 @@ def lens_vaccine_entry(metadata, selection, genome=None, options=None):
         for record in selection.records]
     (n_total, n_alt_reads, n_ref_reads, n_alt_protein), provenance = max(
         observations, key=lambda o: (o[0][1], o[0][0]),
-        default=((0, 0, 0, 0), ("", "")))
+        default=((0, 0, 0, 0), ("", "", "")))
     metadata.vaccine_peptide = external_vaccine_peptide(
         variant=metadata.variant,
         selection=selection,

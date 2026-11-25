@@ -284,10 +284,11 @@ comes from `--antigen-content` and `--peptide-antigens-per-construct`.
 | Flag | Purpose |
 |---|---|
 | `--output-dir` | Where to write the construct files |
-| `--peptide-linker` | Inter-antigen spacer (e.g. `AAY`, `(G4S)2`); default `G4S3` |
+| `--peptide-linker` | Inter-antigen spacer (e.g. `AAY`, `(G4S)2`); default `(G4S)2` (use `G4Sx3` or `(G4S)3` for a 3-repeat) |
 | `--peptide-max-antigen-length-aa` | Maximum requested antigen window length; preserve required target content |
-| `--peptide-n-terminal-acetyl` | Add an N-terminal acetylation note to the manifest |
-| `--peptide-c-terminal-amide` | Add a C-terminal amide note to the manifest |
+| `--peptide-num-pools` | Partition SLP constructs into *K* injection pools (default `1`) minimizing within-pool same-MHC competition, cysteine pairing, and GRAVY/charge variance (configurable via `peptide.pool_partition`) |
+| `--peptide-n-terminal-acetyl` | Add an N-terminal acetylation note to the manifest (also accounted for in pool charge at pH 7.0) |
+| `--peptide-c-terminal-amide` | Add a C-terminal amide note to the manifest (also accounted for in pool charge at pH 7.0) |
 
 ## mRNA construct files
 
@@ -303,8 +304,8 @@ Construct anatomy:
 |---|---|
 | `--output-dir` | Where to write construct files (or `--output-dir/mrna/` in multi-mode) |
 | `--mrna-signal-peptide` | Leader peptide: `HLA-A`, `HLA-B`, `tPA`, `IgK`, `CD8A`, `CD28` |
-| `--mrna-5p-utr` | 5' UTR (e.g. `HBB`, `HBB_FI` tandem) |
-| `--mrna-3p-utr` | 3' UTR |
+| `--mrna-5p-utr` | 5' UTR (e.g. `HBB`, `HBA1`, `BNT162b2`, `mRNA1273`) |
+| `--mrna-3p-utr` | 3' UTR (e.g. `HBB_FI` tandem AES/mtRNR1, `HBB`, `HBA1`) |
 | `--mrna-include-mitd` / `--mrna-no-mitd` | Include the BioNTech MITD trafficking domain |
 | `--mrna-mitd` | Which MITD variant (`HLA-A` / `HLA-B`) |
 | `--mrna-max-length-nt` | Hard cap on construct length before poly(A), including UTRs and all coding elements |
@@ -330,23 +331,31 @@ PolyA tail:
 | `--mrna-poly-a-first-segment` | Length of the first segment when segmented |
 | `--mrna-poly-a-segment-linker` | Inter-segment linker sequence |
 
-Codon optimization:
+Codon optimization & synthesis-safe CDS QC:
 
 | Flag | Purpose |
 |---|---|
-| `--mrna-codon-species` | Target organism for codon usage (default `h_sapiens`) |
+| `--mrna-codon-species` | Target organism for codon usage (default `auto`, resolved from host genome/taxon, falling back to `h_sapiens`) |
 | `--mrna-codon-method` | DnaChisel optimization strategy |
+| `--mrna-cds-synthesis-safe` | Enable synthesis-safe CDS constraints (windowed GC bounds, homopolymer cap, T7 class II terminator & Type IIS restriction-site avoidance, sense-strand uridine depletion; customizable via `mrna.cds_optimization`) |
+| `--mrna-codon-optimizer` | CDS optimizer backend: `dnachisel` (default) or external `lineardesign` |
 | `--mrna-csv-no-full-rows` | Skip the `full` polyA'd rows in `mrna-sequence-parts.csv` (saves disk space) |
 
-### Junction linker optimization
+### Joint antigen ordering, linker & cleavage optimization
 
-A per-junction, MHC-aware linker swap minimizes predicted presentation of
-chimeric k-mers spanning antigen junctions.
+A per-junction, MHC-aware optimizer minimizes predicted presentation of
+chimeric k-mers spanning antigen junctions (plus optional signal-peptide and
+MITD boundaries). Enabling `--mrna-optimize-antigen-order` jointly optimizes
+antigen order and per-junction linkers using exact Held-Karp dynamic programming
+for constructs up to 12 antigens and deterministic 2-opt/Or-opt local search for
+larger strings (configurable via `mrna.junction_optimization`).
 
 | Flag | Purpose |
 |---|---|
 | `--mrna-linker` | Default inter-antigen spacer (e.g. `(G4S)2`) |
 | `--mrna-optimize-linkers` / `--mrna-no-optimize-linkers` | Require / disable junction prediction; auto by default |
+| `--mrna-optimize-antigen-order` | Jointly optimize antigen ordering and per-junction linkers |
+| `--mrna-junction-cleavage-scoring` | Proteasomal cleavage boundary scoring (`none` or `pepsickle`) |
 | `--mrna-junction-predictor` | One MHCtools model for new junction queries; leaves candidate scores unchanged |
 | `--mrna-junction-alleles` | Query alleles; defaults to the declared manifest genotype or VCF/BAM `--mhc-alleles` |
 | `--mrna-junction-predictor-path` / `--mrna-junction-predictor-models-path` | Independent executable / weights locations |

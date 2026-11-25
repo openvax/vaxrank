@@ -23,6 +23,8 @@ classification rule.
 | `--output-csv` | The same ranked candidate rows and columns as the workbook |
 | `--output-json-file` | Explicit legacy ranked-object JSON export |
 | `--output-policy-dir` | Optional resolved configuration and policy decision/evidence tables |
+| `--output-tumor-board-dossier` | Machine-readable 6-layer `tumor_board_dossier.json` with deterministic hard safety gates and soft review flags |
+| `--interactive-review-html` | Embed self-contained offline tumor-board review UI into HTML report (exports `tumor_board_overrides.json` for `--selection-overrides` replay) |
 
 CSV/XLSX candidate rows use one schema for VCF/BAM, external and native inputs.
 `source_rank` orders the ranked source groups; `window_rank` orders candidate
