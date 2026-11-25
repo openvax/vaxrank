@@ -56,7 +56,13 @@ def _project_pair(pair, start, end):
         return dict(result, reason='zero_length_peptide_comparator')
     internal_indel = any(
         len(edit['reference_bases']) != edit['observed_interval'][1] - edit['observed_interval'][0]
-        and bounds[0] <= edit['observed_interval'][0] <= bounds[1]
+        and (
+            (edit['observed_interval'][0] == edit['observed_interval'][1]
+             and bounds[0] < edit['observed_interval'][0] < bounds[1])
+            or (edit['observed_interval'][0] < edit['observed_interval'][1]
+                and edit['observed_interval'][0] < bounds[1]
+                and edit['observed_interval'][1] > bounds[0])
+        )
         for edit in pair['removed_edits'])
     return dict(result, state='available', sequence=sequence, reason=None,
                 same_length=len(sequence) == end - start,

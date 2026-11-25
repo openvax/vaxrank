@@ -113,7 +113,7 @@ class GenePathwayCheck(object):
         try:
             effect = variant.effects().top_priority_effect()
             effect = select_varcode_effect_outcome(effect)
-            effect_description = effect.short_description
+            effect_description = effect.short_description if effect is not None else ""
             overlapping_gene_ids = variant.gene_ids
         except ValueError:
             # Variant is on a contig not in the reference genome

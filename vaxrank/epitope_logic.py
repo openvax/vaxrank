@@ -196,12 +196,18 @@ def predict_epitopes(
     if annotate is not None:
         annotate(predictions_df)
 
-    # ``default_methods`` (per-kind ``prediction_method_name`` defaults
-    # for unqualified DSL refs) is required when multi-predictor data
-    # is in play — without it, ``affinity.value`` is ambiguous and
-    # topiary raises. Single-predictor runs leave ``default_methods``
-    # unset and the DSL resolves the only available method.
-    default_methods = getattr(epitope_config, 'default_methods', None) or None
+    # ``default_methods`` / ``default_versions`` (per-kind canonical defaults
+    # for unqualified DSL refs) are required when multi-predictor or
+    # multi-version data is in play — without them, ``affinity.value`` is
+    # ambiguous and topiary raises.
+    from .epitope_dsl import (
+        resolve_default_methods,
+        resolve_default_versions,
+        validate_default_methods,
+    )
+    validate_default_methods(epitope_config, predictions_df)
+    default_methods = resolve_default_methods(epitope_config, predictions_df) or None
+    default_versions = resolve_default_versions(epitope_config, predictions_df) or None
 
     # Apply the configured filter (default: affinity or percentile-rank cutoff)
     # so that rows dropped by the filter are never scored or WT-predicted.
@@ -239,6 +245,7 @@ def predict_epitopes(
             predictions_df, filter_node,
             group_keys=prediction_group_columns(predictions_df),
             default_methods=default_methods,
+            default_versions=default_versions,
             kind_support=kind_support)
         if predictions_df.empty:
             return []
@@ -455,14 +462,19 @@ def predict_epitopes(
                     percentile_rank=wt_percentile_rank,
                 )
 
+        prediction_value = finite_prediction_value(row.get("value"))
         prediction_score = finite_prediction_value(row.get("score"))
-        if prediction_score is None:
+        if prediction_score is None and prediction_value is not None:
             raise ValueError(
                 "Topiary prediction row is missing a finite score")
-        mutant_pred = (_prediction_from_row(row, peptide=peptide, score=prediction_score,
-                                            percentile_rank=percentile_rank)
-                       if finite_prediction_value(row.get('value')) is not None
-                       or finite_prediction_value(row.get('score')) is not None else None)
+        mutant_pred = (
+            _prediction_from_row(
+                row, peptide=peptide, score=prediction_score,
+                percentile_rank=percentile_rank,
+            )
+            if prediction_value is not None or prediction_score is not None
+            else None
+        )
         rows.append({
             'peptide': peptide,
             'source': antigen.amino_acids,

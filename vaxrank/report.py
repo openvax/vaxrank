@@ -66,6 +66,28 @@ JINJA_ENVIRONMENT = jinja2.Environment(
 )
 
 
+def _format_report_allele(allele):
+    """Format an MHC allele for compact report tables via ``mhcgnomes``.
+
+    Human HLA alleles omit the redundant ``HLA-`` prefix (e.g. ``A*02:01``),
+    while non-human alleles retain their species prefix (e.g. ``DLA-88*034:01``,
+    ``H2-K*b``, ``SLA-1*04:01``) so cross-species tables remain unambiguous.
+    """
+    text = str(allele or "").strip()
+    if not text:
+        return ""
+    try:
+        import mhcgnomes
+        parsed = mhcgnomes.parse(text, raise_on_error=False)
+        if parsed is not None:
+            if getattr(parsed, "species_prefix", None) == "HLA":
+                return parsed.to_string(include_species=False)
+            return parsed.to_string()
+    except Exception:
+        pass
+    return text
+
+
 def display_epitope_value(value):
     """Format missing numeric evidence only at the presentation boundary."""
     if cells.missing(value):
@@ -810,7 +832,7 @@ class TemplateDataCreator(object):
             ('Score',
                 finite_prediction_value(cells.number(epitope.per_allele_scores.get(row_allele)))
                 if row_allele else None),
-            ('Allele', row_allele.replace('HLA-', '')),
+            ('Allele', _format_report_allele(row_allele)),
             ('WT sequence', wt_peptide_sequence),
             ('WT IC50', wt_ic50_str),
         ])

@@ -60,6 +60,7 @@ Issue: openvax/vaxrank#269.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Optional
 
 from .vaccine_library import antigen_description
@@ -130,10 +131,12 @@ class AlleleCoverage:
 
 
 def _min(a: Optional[float], b: Optional[float]) -> Optional[float]:
-    """min() that treats None as 'no data' rather than raising."""
-    if a is None:
-        return b
-    if b is None:
+    """min() that treats None and NaN as 'no data' rather than raising or poisoning."""
+    a_valid = a is not None and not math.isnan(a)
+    b_valid = b is not None and not math.isnan(b)
+    if not a_valid:
+        return b if b_valid else None
+    if not b_valid:
         return a
     return a if a < b else b
 
