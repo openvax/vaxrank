@@ -341,7 +341,7 @@ Codon optimization & synthesis-safe CDS QC:
 | `--mrna-codon-optimizer` | CDS optimizer backend: `dnachisel` (default) or external `lineardesign` |
 | `--mrna-csv-no-full-rows` | Skip the `full` polyA'd rows in `mrna-sequence-parts.csv` (saves disk space) |
 
-### Joint antigen ordering, linker & cleavage optimization
+### Junction linker optimization
 
 A per-junction, MHC-aware optimizer minimizes predicted presentation of
 chimeric k-mers spanning antigen junctions (plus optional signal-peptide and
