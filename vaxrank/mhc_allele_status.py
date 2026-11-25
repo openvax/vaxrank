@@ -869,14 +869,60 @@ def _merge_apm_status(
     )
 
 
+def _merge_allele_records(
+    base: MHCAlleleStatus,
+    override: MHCAlleleStatus,
+) -> MHCAlleleStatus:
+    """Combine complementary multi-assay fields (DNA LOH/variants, bulk RNA ASE,
+    scRNA tumor-cluster nTPM) for the same canonical MHC allele, letting
+    explicit non-empty values in ``override`` take precedence."""
+    combined_vars = list(base.dna_somatic_variants)
+    for v in override.dna_somatic_variants:
+        if v not in combined_vars:
+            combined_vars.append(v)
+
+    def _pick(ov, bv):
+        return ov if ov is not None else bv
+
+    status = override.status if override.status != "unknown" else base.status
+    assay_src = "; ".join(
+        dict.fromkeys(s for s in (base.assay_source, override.assay_source) if s)
+    )
+    notes = "; ".join(
+        dict.fromkeys(s for s in (base.notes, override.notes) if s)
+    )
+    return MHCAlleleStatus(
+        allele=override.allele,
+        status=status,
+        dna_copy_number=_pick(override.dna_copy_number, base.dna_copy_number),
+        dna_loh=_pick(override.dna_loh, base.dna_loh),
+        dna_loh_pvalue=_pick(override.dna_loh_pvalue, base.dna_loh_pvalue),
+        dna_somatic_variants=tuple(combined_vars),
+        bulk_rna_tpm=_pick(override.bulk_rna_tpm, base.bulk_rna_tpm),
+        bulk_rna_allele_ratio=_pick(override.bulk_rna_allele_ratio, base.bulk_rna_allele_ratio),
+        tumor_purity=_pick(override.tumor_purity, base.tumor_purity),
+        bulk_purity_confounded=_pick(override.bulk_purity_confounded, base.bulk_purity_confounded),
+        scrna_tumor_cluster_ntpm=_pick(
+            override.scrna_tumor_cluster_ntpm, base.scrna_tumor_cluster_ntpm
+        ),
+        scrna_immune_control_ntpm=_pick(
+            override.scrna_immune_control_ntpm, base.scrna_immune_control_ntpm
+        ),
+        scrna_resolvable_umis=_pick(override.scrna_resolvable_umis, base.scrna_resolvable_umis),
+        scrna_chemistry=override.scrna_chemistry or base.scrna_chemistry,
+        assay_source=assay_src,
+        notes=notes,
+    )
+
+
 def merge_mhc_allele_status_bundles(
     base: MHCAlleleStatusBundle | None,
     override: MHCAlleleStatusBundle | None,
 ) -> MHCAlleleStatusBundle | None:
     """Merge two bundles (e.g. auto-detected DNA MHC/APM variants +
-    ``--mhc-allele-status`` file + ``--mhc-loh-alleles``). Entries in
-    ``override`` take precedence per canonical ``mhcgnomes`` allele while
-    preserving complementary DNA somatic variants and APM gene evidence."""
+    ``--mhc-allele-status`` file + ``--mhc-loh-alleles``). Complementary
+    multi-assay axes (DNA, bulk RNA, scRNA) are combined per canonical
+    ``mhcgnomes`` allele while explicit values in ``override`` win."""
     if base is None and override is None:
         return None
     if base is None:
@@ -886,14 +932,7 @@ def merge_mhc_allele_status_bundles(
     merged: dict[str, MHCAlleleStatus] = {r.allele: r for r in base.alleles}
     for r in override.alleles:
         prev = merged.get(r.allele)
-        if prev is not None and prev.dna_somatic_variants:
-            combined_vars = list(prev.dna_somatic_variants)
-            for v in r.dna_somatic_variants:
-                if v not in combined_vars:
-                    combined_vars.append(v)
-            merged[r.allele] = replace(r, dna_somatic_variants=tuple(combined_vars))
-        else:
-            merged[r.allele] = r
+        merged[r.allele] = _merge_allele_records(prev, r) if prev is not None else r
     apm = _merge_apm_status(base.apm, override.apm)
     src = "; ".join(s for s in (base.source_path, override.source_path) if s)
     return MHCAlleleStatusBundle(alleles=tuple(merged.values()), apm=apm, source_path=src)
