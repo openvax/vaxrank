@@ -445,3 +445,27 @@ def test_per_trial_yaml_pool_policy_governs_tiers_charge_and_weights(tmp_path):
         PeptidePoolPolicy(allele_competition_weight=-1.0)
 
 
+def test_minimal_epitope_constructs_retain_mhc_alleles_for_pool_partition():
+    # Minimal-epitope peptide constructs have a trimmed construct.sequence (9-mer)
+    # shorter than the parent VaccinePeptide.amino_acids (16-mer), referenced via
+    # seg["sources"][i]["candidate_sequence"].
+    ranked = [
+        _make_candidate(0, "ALQSTVNGKPRDFYMA", {"HLA-A*02:01": 0.2}),
+        _make_candidate(1, "GLQSTVNGKPRDFYMA", {"HLA-A*02:01": 0.3}),
+    ]
+    opts = PeptideConstructConfig(
+        mode="minimal_epitope",
+        antigen_content="minimal_epitope",
+        min_antigen_length_aa=8,
+        max_antigen_length_aa=15,
+        num_pools=2,
+    )
+    constructs = assemble_peptide_constructs(
+        ranked, opts, target_alleles=["HLA-A*02:01"]
+    )
+    assert len(constructs) == 2
+    assert constructs[0].components["pool_profile"]["strong_alleles"] == ["HLA-A*02:01"]
+    assert constructs[1].components["pool_profile"]["strong_alleles"] == ["HLA-A*02:01"]
+    assert constructs[0].pool != constructs[1].pool
+
+

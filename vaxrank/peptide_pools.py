@@ -223,6 +223,10 @@ def _extract_construct_epitopes(construct, vp_by_sequence: dict[str, list]):
     for seg in construct.antigens or ():
         for vp in vp_by_sequence.get(seg.get('aa', ''), ()):
             _add(vp)
+        for src in seg.get('sources') or ():
+            if isinstance(src, dict):
+                for vp in vp_by_sequence.get(src.get('candidate_sequence', ''), ()):
+                    _add(vp)
 
     epitopes = []
     for vp in matched:

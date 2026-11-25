@@ -287,6 +287,7 @@ def optimize_cds_dna(
     frozen_segments: tuple = (),
     policy: Optional[MRNACDSOptimizationPolicy] = None,
     reverse_translate_fn=reverse_translate,
+    stop_codon: str = "",
 ) -> str:
     """Optimize coding DNA under DnaChisel (with synthesis-safe rules) or LinearDesign."""
     if not amino_acids:
@@ -295,6 +296,18 @@ def optimize_cds_dna(
     frozen_segments = sorted(frozen_segments)
 
     if resolved.optimizer == "lineardesign":
+        species_norm = str(species or "").strip().lower()
+        if species_norm and species_norm not in ("h_sapiens", "human", "homo_sapiens", "9606"):
+            logger.warning(
+                "LinearDesign external backend uses its built-in human codon usage table "
+                "and ignores requested codon_species=%r.",
+                species,
+            )
+        if resolved.has_active_constraints or avoid_patterns:
+            logger.warning(
+                "LinearDesign external backend does not enforce DnaChisel synthesis "
+                "constraints or avoid_patterns; inspect sequence_qc on emitted constructs."
+            )
         parts = []
         cursor = 0
         for start_aa, end_aa, blessed_dna in frozen_segments:
@@ -339,9 +352,18 @@ def optimize_cds_dna(
     suffix_aa = amino_acids[cursor:]
     if suffix_aa:
         initial_parts.append(reverse_translate_fn(suffix_aa))
-    initial = "".join(initial_parts)
+    initial_coding = "".join(initial_parts)
+    coding_len = len(initial_coding)
+    stop_dna = str(stop_codon or "").strip().upper().replace("U", "T")
+    initial = initial_coding + stop_dna
 
-    hard_constraints = [EnforceTranslation()]
+    if stop_dna:
+        hard_constraints = [
+            EnforceTranslation(location=Location(0, coding_len)),
+            AvoidChanges(location=Location(coding_len, len(initial))),
+        ]
+    else:
+        hard_constraints = [EnforceTranslation()]
     for start_nt, end_nt in frozen_nt_ranges:
         hard_constraints.append(AvoidChanges(location=Location(start_nt, end_nt)))
     for pattern in avoid_patterns:
@@ -365,11 +387,30 @@ def optimize_cds_dna(
         motif = resolve_restriction_motif(site)
         extra_constraints.append(AvoidPattern(motif))
 
-    objectives = [CodonOptimize(species=species, method=method)]
+    coding_loc = Location(0, coding_len, strand=1) if stop_dna else None
+    objectives = [
+        CodonOptimize(species=species, method=method, location=coding_loc)
+        if coding_loc is not None
+        else CodonOptimize(species=species, method=method)
+    ]
     if resolved.uridine_depletion and resolved.uridine_depletion_weight > 0:
-        objectives.append(AvoidPattern("T", boost=resolved.uridine_depletion_weight))
+        objectives.append(
+            AvoidPattern(
+                "T",
+                location=Location(0, coding_len, strand=1),
+                strand=1,
+                boost=resolved.uridine_depletion_weight,
+            )
+        )
     if resolved.avoid_uu_dinucleotides:
-        objectives.append(AvoidPattern("TT", boost=max(resolved.uridine_depletion_weight, 1.0)))
+        objectives.append(
+            AvoidPattern(
+                "TT",
+                location=Location(0, coding_len, strand=1),
+                strand=1,
+                boost=max(resolved.uridine_depletion_weight, 1.0),
+            )
+        )
 
     problem = DnaOptimizationProblem(
         sequence=initial,
@@ -380,7 +421,7 @@ def optimize_cds_dna(
     try:
         problem.resolve_constraints()
         problem.optimize()
-        return problem.sequence
+        return problem.sequence[:coding_len]
     except NoSolutionError:
         if not extra_constraints:
             raise
@@ -402,7 +443,7 @@ def optimize_cds_dna(
         )
         relaxed.resolve_constraints()
         relaxed.optimize()
-        return relaxed.sequence
+        return relaxed.sequence[:coding_len]
 
 
 def _compute_cai(coding_dna: str, species: Optional[str]) -> Optional[float]:

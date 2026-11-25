@@ -84,7 +84,14 @@ def test_coverage_detaches_nested_source_metadata_from_the_in_memory_proteome():
     proteome = mouse_reference()
     host = HostReference(proteome)
     before = host.coverage
-    proteome.layers[-1]['catalog']['records'] = 999
+    # Newer oncoref freezes nested layer dicts in MappingProxyType; verify
+    # detachment both on mutable callers and via HostReference.coverage copy.
+    nested_catalog = proteome.layers[-1]['catalog']
+    if isinstance(nested_catalog, dict):
+        nested_catalog['records'] = 999
+        assert host.coverage == before
+    mutated = host.coverage
+    mutated['inventory']['included'][0]['layers'][0]['catalog']['records'] = 999
     assert host.coverage == before
 
 
@@ -257,3 +264,25 @@ def test_cli_reports_native_coverage_and_replays_offline(inputs, tmp_path, monke
                 assert 'Catalogue riborf-mouse 3: Not searched' in text
                 if filename == 'vaccine_report.txt':
                     assert 'Minimum protein length: 8 aa' in text
+
+
+def test_inventory_detaches_nested_mapping_proxy_layers():
+    from types import MappingProxyType, SimpleNamespace
+    from vaxrank.reference_coverage import _inventory
+
+    nested_layer = MappingProxyType({
+        'role': 'host',
+        'kind': 'extra_orf',
+        'source': 'catalog:fixture',
+        'filters': MappingProxyType({'kind': 'ribosome', 'nested': (MappingProxyType({'a': 1}),)}),
+    })
+    class _StubProteome:
+        identity = 'sha256:abc'
+        reference = SimpleNamespace(taxon_id=9606, species='human', genome_build='GRCh38')
+        layers = (nested_layer,)
+
+        def __iter__(self):
+            return iter(())
+
+    inv = _inventory(_StubProteome())
+    assert inv['included'][0]['layers'][0]['filters'] == {'kind': 'ribosome', 'nested': [{'a': 1}]}

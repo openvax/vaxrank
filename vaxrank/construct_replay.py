@@ -84,6 +84,31 @@ def resolved_saved_design(args, config, dataset):
                 key = {'5p_utr': 'utr_5p', '3p_utr': 'utr_3p'}.get(key, key)
                 if key in values:
                     values[key] = getattr(cli, attribute)
+        if modality == 'mrna':
+            if 'mrna_cds_synthesis_safe' in explicit and getattr(cli, 'mrna_cds_synthesis_safe', False):
+                from .mrna_cds import MRNACDSOptimizationPolicy
+                baseline = MRNACDSOptimizationPolicy().to_dict()
+                preset = MRNACDSOptimizationPolicy.synthesis_safe().to_dict()
+                cur = dict(values.get('cds_optimization') or {})
+                for k, v in preset.items():
+                    if k not in cur or cur[k] is None or cur[k] == baseline.get(k):
+                        cur[k] = v
+                values['cds_optimization'] = cur
+            if 'mrna_codon_optimizer' in explicit and getattr(cli, 'mrna_codon_optimizer', None) is not None:
+                cur = dict(values.get('cds_optimization') or {})
+                cur['optimizer'] = getattr(cli, 'mrna_codon_optimizer')
+                values['cds_optimization'] = cur
+            if 'mrna_optimize_antigen_order' in explicit and getattr(cli, 'mrna_optimize_antigen_order', False):
+                cur = dict(values.get('junction_optimization') or {})
+                cur['optimize_order'] = True
+                values['junction_optimization'] = cur
+            if (
+                'mrna_junction_cleavage_scoring' in explicit
+                and getattr(cli, 'mrna_junction_cleavage_scoring', None) is not None
+            ):
+                cur = dict(values.get('junction_optimization') or {})
+                cur['cleavage_scoring'] = getattr(cli, 'mrna_junction_cleavage_scoring')
+                values['junction_optimization'] = cur
     limit = (getattr(cli, 'max_sources', None) if 'max_sources' in explicit
              else dataset.selection.get('run_configuration', {}).get('effective_design', {}).get('max_ranked_sources'))
     vaccine = msgspec.to_builtins(vaccine_config_from_args(cli, merged_config=config))
@@ -220,14 +245,23 @@ def _assembly_identity(args, ranked, options, context):
     if configuration.get('num_pools', 1) == 1:
         configuration.pop('num_pools', None)
     from .peptide_pools import PeptidePoolPolicy
-    if PeptidePoolPolicy.resolve(configuration.get('pool_partition')) == PeptidePoolPolicy():
+    resolved_pool = PeptidePoolPolicy.resolve(configuration.get('pool_partition'))
+    if resolved_pool == PeptidePoolPolicy():
         configuration.pop('pool_partition', None)
+    else:
+        configuration['pool_partition'] = resolved_pool.to_dict()
     from .mrna_cds import MRNACDSOptimizationPolicy
-    if MRNACDSOptimizationPolicy.resolve(configuration.get('cds_optimization')) == MRNACDSOptimizationPolicy():
+    resolved_cds = MRNACDSOptimizationPolicy.resolve(configuration.get('cds_optimization'))
+    if resolved_cds == MRNACDSOptimizationPolicy():
         configuration.pop('cds_optimization', None)
+    else:
+        configuration['cds_optimization'] = resolved_cds.to_dict()
     from .junction_swap import MRNAJunctionOptimizationPolicy
-    if MRNAJunctionOptimizationPolicy.resolve(configuration.get('junction_optimization')) == MRNAJunctionOptimizationPolicy():
+    resolved_junc = MRNAJunctionOptimizationPolicy.resolve(configuration.get('junction_optimization'))
+    if resolved_junc == MRNAJunctionOptimizationPolicy():
         configuration.pop('junction_optimization', None)
+    else:
+        configuration['junction_optimization'] = resolved_junc.to_dict()
     from .antigen_allocation import AntigenAllocation
     if AntigenAllocation.resolve(configuration.get('antigen_allocation')) == AntigenAllocation(mode='ranked'):
         configuration.pop('antigen_allocation', None)

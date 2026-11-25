@@ -15,6 +15,7 @@ from vaxrank.mrna_cds import (
     MRNACDSOptimizationPolicy,
     T7_CLASS_II_TERMINATOR,
     compute_mrna_sequence_qc,
+    optimize_cds_dna,
     resolve_restriction_motif,
 )
 from vaxrank.patient_info import PatientInfo
@@ -231,3 +232,91 @@ def test_mrna_assembly_reports_yaml_policy_and_cli_integration(tmp_path):
 
     # JSON roundtrip of sequence_qc & cds_optimization
     json.dumps(constructs[0].elements)
+
+
+def test_uridine_depletion_only_penalizes_sense_strand_u_not_a():
+    # Poly-lysine (AAA vs AAG) has zero sense-strand T/U codons. Before adding
+    # strand=1, AvoidPattern("T") matched antisense T (sense A) and forced AAG.
+    # With strand=1 and uridine depletion on, a poly-phenylalanine (TTT vs TTC)
+    # MUST prefer TTC (fewer sense-strand T), while lysine AAA is NOT penalized
+    # as a sense-strand U.
+    aa_f = "F" * 12
+    dna_f = optimize_cds_dna(
+        aa_f,
+        species="h_sapiens",
+        method="match_codon_usage",
+        policy=MRNACDSOptimizationPolicy(
+            uridine_depletion=True,
+            uridine_depletion_weight=5.0,
+            avoid_uu_dinucleotides=True,
+        ),
+    )
+    assert dna_f.count("TTC") == 12
+    assert dna_f.count("TTT") == 0
+
+    # Verify stop-codon boundary prevents terminal homopolymer / PacI across CDS+TAA
+    # Terminal IN* with ATTAAT + TAA = ATTAATTAA (PacI = TTAATTAA!)
+    aa_paci = "M" + "G" * 8 + "IN"
+    dna_paci = optimize_cds_dna(
+        aa_paci,
+        species="h_sapiens",
+        policy=MRNACDSOptimizationPolicy(
+            avoid_restriction_sites=("PacI",),
+            max_homopolymer_length=4,
+        ),
+        stop_codon="TAA",
+    )
+    assert "TTAATTAA" not in (dna_paci + "TAA")
+    qc = compute_mrna_sequence_qc(
+        dna_paci + "TAA",
+        species="h_sapiens",
+        policy=MRNACDSOptimizationPolicy(
+            avoid_restriction_sites=("PacI",),
+            max_homopolymer_length=4,
+        ),
+    )
+    assert qc["synthesis_flags"] == []
+    assert qc["max_homopolymer_length"] <= 4
+
+
+def test_mrna_cds_synthesis_safe_cli_overrides_default_yaml_false():
+    from vaxrank.mrna_cds import MRNACDSOptimizationPolicy
+
+    # Simulate default.yaml populating avoid_t7_terminator=False, uridine_depletion=False
+    merged = load_vaxrank_config(config_path="builtin:default")
+    yaml_cds = dict(merged["mrna"]["cds_optimization"])
+    assert yaml_cds["avoid_t7_terminator"] is False
+    assert yaml_cds["uridine_depletion"] is False
+
+    baseline = MRNACDSOptimizationPolicy().to_dict()
+    preset = MRNACDSOptimizationPolicy.synthesis_safe().to_dict()
+    for k, v in preset.items():
+        cur = yaml_cds.get(k)
+        if k not in yaml_cds or cur is None or cur == baseline.get(k):
+            yaml_cds[k] = v
+    resolved = MRNACDSOptimizationPolicy.resolve(yaml_cds)
+    assert resolved.avoid_t7_terminator is True
+    assert resolved.uridine_depletion is True
+    assert resolved.max_homopolymer_length == 5
+
+
+def test_lineardesign_warns_on_non_human_species_and_active_constraints(monkeypatch, caplog):
+    import logging
+
+    monkeypatch.setattr("vaxrank.mrna_cds.shutil.which", lambda _: "/usr/local/bin/lineardesign")
+    monkeypatch.setattr(
+        "vaxrank.mrna_cds.subprocess.run",
+        lambda *a, **kw: SimpleNamespace(returncode=0, stdout="mRNA sequence: ATGTTC\n", stderr=""),
+    )
+    with caplog.at_level(logging.WARNING, logger="vaxrank.mrna_cds"):
+        dna = optimize_cds_dna(
+            "MF",
+            species="m_musculus",
+            policy=MRNACDSOptimizationPolicy(
+                optimizer="lineardesign",
+                avoid_t7_terminator=True,
+            ),
+        )
+    assert dna == "ATGTTC"
+    assert any("ignores requested codon_species" in rec.message for rec in caplog.records)
+    assert any("does not enforce DnaChisel synthesis" in rec.message for rec in caplog.records)

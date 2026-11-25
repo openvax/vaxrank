@@ -449,3 +449,72 @@ def test_cli_flags_for_joint_mrna_optimization():
     ])
     assert args.mrna_optimize_antigen_order is True
     assert args.mrna_junction_cleavage_scoring == "pepsickle"
+
+
+def test_joint_optimization_accepts_lower_total_cost_and_reserves_start_codon_nt(caplog):
+    import logging
+
+    # Case 1: Custom policy where cleavage_penalty_weight outweighs mild_burden_weight:
+    # reordering should be accepted whenever total_cost < default_total_cost!
+    antigens = [
+        ("G1_p.A1V", "ACDEFGHIKLMNPQRSTVWY"),
+        ("G2_p.B2L", "WYRSTVQPMLKIHGFEDCAW"),
+        ("G3_p.C3K", "MNPQRSTVWYACDEFGHIKL"),
+    ]
+    ranked = [_make_ranked_source(name, seq, score=30 - idx) for idx, (name, seq) in enumerate(antigens)]
+
+    # Make G1->G2 have 0 mild burden but high cleavage penalty (1.0), while G2->G1
+    # has 1 mild burden (weight=1.0) and 0 cleavage penalty (weight=50.0) -> lower total_cost!
+    rank_table = {}
+    for lseq in ("GGGGSGGGGS", "AAA"):
+        for a, b in ((antigens[1][1], antigens[0][1]), (antigens[2][1], antigens[0][1])):
+            kms = junction_kmers(a, lseq, b, k_lengths=(9,))
+            rank_table[(kms[0], "HLA-A*02:01")] = 1.5  # mild only
+
+    def _cleave(left_aa, linker_aa, right_aa):
+        # Penalize whenever G1 precedes another antigen (so putting G1 last avoids penalty)
+        if left_aa == antigens[0][1]:
+            return 1.0
+        return 0.0
+
+    predictor = CountingStubPredictor(alleles=["HLA-A*02:01"], rank_table=rank_table)
+    cfg = RNAConstructConfig(
+        codon_species="human",
+        antigens_per_construct=5,
+        max_constructs=1,
+        include_mitd=False,
+        signal_peptide="HLA_B",
+        optimize_linkers=True,
+        junction_swap_candidates=("(G4S)2", "AAA"),
+        junction_kmer_lengths=(9,),
+        junction_optimization={
+            "optimize_order": True,
+            "strong_burden_weight": 100.0,
+            "mild_burden_weight": 1.0,
+            "cleavage_penalty_weight": 50.0,
+        },
+    )
+    constructs = assemble_mrna_constructs(
+        ranked,
+        options=cfg,
+        mhc_predictor=predictor,
+        mhc_alleles=["HLA-A*02:01"],
+        cleavage_scorer=_cleave,
+    )
+    js = constructs[0].elements["junction_swap"]
+    assert js["total_cost"] < js["default_total_cost"]
+    assert js["reordered"] is True
+
+    # Case 2: Warning logged when optimize_order=True without predictor/alleles
+    with caplog.at_level(logging.WARNING, logger="vaxrank.mrna"):
+        assemble_mrna_constructs(
+            ranked[:2],
+            options=RNAConstructConfig(
+                codon_species="human",
+                include_mitd=False,
+                signal_peptide=None,
+                optimize_linkers=False,
+                junction_optimization={"optimize_order": True},
+            ),
+        )
+    assert any("Joint mRNA junction optimization" in rec.message for rec in caplog.records)
