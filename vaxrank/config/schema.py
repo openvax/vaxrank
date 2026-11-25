@@ -311,6 +311,21 @@ class MHCAlleleStatusConfigSchema(
     min_purity_for_bulk_ase_call: Optional[float] = None
 
 
+class APMVariantsConfigSchema(
+    msgspec.Struct,
+    frozen=True,
+    kw_only=True,
+    forbid_unknown_fields=True,
+):
+    """Per-trial policy for cross-species DNA somatic MHC & APM variant detection."""
+    enabled: Optional[bool] = None
+    flag_missense_as_review: Optional[bool] = None
+    auto_mask_mhc_gene_lof_when_homozygous_locus: Optional[bool] = None
+    min_rna_alt_reads_confirmed: Optional[int] = None
+    extra_apm_genes: Optional[list[str]] = None
+    extra_mhc_genes: Optional[list[str]] = None
+
+
 class TumorBoardConfigSchema(
     msgspec.Struct,
     frozen=True,
@@ -346,4 +361,5 @@ class VaxrankConfigSchema(
     mrna: Optional[MrnaConstructConfigSchema] = None
     compare: Optional[CompareConfigSchema] = None
     mhc_allele_status: Optional[MHCAlleleStatusConfigSchema] = None
+    apm_variants: Optional[APMVariantsConfigSchema] = None
     tumor_board: Optional[TumorBoardConfigSchema] = None

@@ -825,12 +825,58 @@ def bundle_from_loh_alleles(alleles_input: str | list[str] | tuple[str, ...]) ->
     return MHCAlleleStatusBundle(alleles=records, source_path="cli:--mhc-loh-alleles")
 
 
+def _merge_apm_status(
+    base: APMStatus | None,
+    override: APMStatus | None,
+) -> APMStatus | None:
+    if base is None or not base.any_recorded():
+        return override if (override and override.any_recorded()) else None
+    if override is None or not override.any_recorded():
+        return base
+    merged_genes: dict[str, APMGeneStatus] = {g.gene: g for g in base.genes}
+    for og in override.genes:
+        bg = merged_genes.get(og.gene)
+        if bg is None:
+            merged_genes[og.gene] = og
+        else:
+            combined_vars = list(bg.dna_variants)
+            for v in og.dna_variants:
+                if v not in combined_vars:
+                    combined_vars.append(v)
+            merged_genes[og.gene] = APMGeneStatus(
+                gene=og.gene,
+                dna_status=og.dna_status if og.dna_status != "unknown" else bg.dna_status,
+                rna_status=og.rna_status if og.rna_status != "unknown" else bg.rna_status,
+                dna_variants=tuple(combined_vars),
+                rna_ntpm=og.rna_ntpm if og.rna_ntpm is not None else bg.rna_ntpm,
+                immune_control_ntpm=(
+                    og.immune_control_ntpm
+                    if og.immune_control_ntpm is not None
+                    else bg.immune_control_ntpm
+                ),
+                assay_source="; ".join(s for s in (bg.assay_source, og.assay_source) if s),
+                notes="; ".join(s for s in (bg.notes, og.notes) if s),
+            )
+    return APMStatus(
+        b2m_status=override.b2m_status or base.b2m_status,
+        tap1_status=override.tap1_status or base.tap1_status,
+        tap2_status=override.tap2_status or base.tap2_status,
+        nlrc5_status=override.nlrc5_status or base.nlrc5_status,
+        jak1_status=override.jak1_status or base.jak1_status,
+        jak2_status=override.jak2_status or base.jak2_status,
+        notes="; ".join(s for s in (base.notes, override.notes) if s),
+        genes=tuple(merged_genes.values()),
+    )
+
+
 def merge_mhc_allele_status_bundles(
     base: MHCAlleleStatusBundle | None,
     override: MHCAlleleStatusBundle | None,
 ) -> MHCAlleleStatusBundle | None:
-    """Merge two bundles (e.g. ``--mhc-allele-status`` file + ``--mhc-loh-alleles``).
-    Entries in ``override`` take precedence per canonical ``mhcgnomes`` allele."""
+    """Merge two bundles (e.g. auto-detected DNA MHC/APM variants +
+    ``--mhc-allele-status`` file + ``--mhc-loh-alleles``). Entries in
+    ``override`` take precedence per canonical ``mhcgnomes`` allele while
+    preserving complementary DNA somatic variants and APM gene evidence."""
     if base is None and override is None:
         return None
     if base is None:
@@ -839,8 +885,16 @@ def merge_mhc_allele_status_bundles(
         return base
     merged: dict[str, MHCAlleleStatus] = {r.allele: r for r in base.alleles}
     for r in override.alleles:
-        merged[r.allele] = r
-    apm = override.apm if (override.apm and override.apm.any_recorded()) else base.apm
+        prev = merged.get(r.allele)
+        if prev is not None and prev.dna_somatic_variants:
+            combined_vars = list(prev.dna_somatic_variants)
+            for v in r.dna_somatic_variants:
+                if v not in combined_vars:
+                    combined_vars.append(v)
+            merged[r.allele] = replace(r, dna_somatic_variants=tuple(combined_vars))
+        else:
+            merged[r.allele] = r
+    apm = _merge_apm_status(base.apm, override.apm)
     src = "; ".join(s for s in (base.source_path, override.source_path) if s)
     return MHCAlleleStatusBundle(alleles=tuple(merged.values()), apm=apm, source_path=src)
 

@@ -409,6 +409,16 @@ mhc_allele_status:
   min_purity_for_bulk_ase_call: 0.5
 
 
+# Per-trial policy for cross-species DNA somatic MHC & APM variant/LoF detection.
+apm_variants:
+  enabled: true
+  flag_missense_as_review: true
+  auto_mask_mhc_gene_lof_when_homozygous_locus: true
+  min_rna_alt_reads_confirmed: 1
+  extra_apm_genes: []
+  extra_mhc_genes: []
+
+
 # Per-trial policy for tumor_board_dossier.json hard gates, review flags, and --selection-overrides.
 tumor_board:
   forbid_override_exact_unsafe_self: true

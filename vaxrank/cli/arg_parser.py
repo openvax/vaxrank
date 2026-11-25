@@ -575,6 +575,15 @@ def add_output_args(arg_parser):
              "design, not only its length. --max-mutations-in-report is "
              "the older spelling of the same option.")
     design_group.add_argument(
+        "--no-detect-apm-variants",
+        dest="detect_apm_variants",
+        action="store_false",
+        default=True,
+        help="Disable automatic cross-species detection of DNA somatic MHC and "
+             "APM/IFN-gamma pathway variants (B2M, TAP1/2, NLRC5, JAK1/2, "
+             "HLA-A/B/C, DLA-88, H2-K1/D1, SLA-1/2/3, etc.) from direct variant inputs.",
+    )
+    design_group.add_argument(
         "--mhc-allele-status",
         default=None,
         metavar="PATH",
