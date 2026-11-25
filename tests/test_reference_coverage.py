@@ -84,7 +84,14 @@ def test_coverage_detaches_nested_source_metadata_from_the_in_memory_proteome():
     proteome = mouse_reference()
     host = HostReference(proteome)
     before = host.coverage
-    proteome.layers[-1]['catalog']['records'] = 999
+    # Newer oncoref freezes nested layer dicts in MappingProxyType; verify
+    # detachment both on mutable callers and via HostReference.coverage copy.
+    nested_catalog = proteome.layers[-1]['catalog']
+    if isinstance(nested_catalog, dict):
+        nested_catalog['records'] = 999
+        assert host.coverage == before
+    mutated = host.coverage
+    mutated['inventory']['included'][0]['layers'][0]['catalog']['records'] = 999
     assert host.coverage == before
 
 
