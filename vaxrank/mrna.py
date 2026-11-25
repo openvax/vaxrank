@@ -271,7 +271,7 @@ def resolve_named_mrna_element(table, name, kind):
 
 def codon_optimize(amino_acids, species=None, method="use_best_codon",
                    avoid_patterns=(), frozen_segments=(),
-                   cds_optimization=None):
+                   cds_optimization=None, stop_codon=""):
     """Back-translate and codon-optimize an amino-acid sequence to DNA.
 
     Parameters
@@ -294,6 +294,10 @@ def codon_optimize(amino_acids, species=None, method="use_best_codon",
         Optional synthesis-safe CDS policy (GC window, homopolymer cap,
         T7 terminator / restriction-site avoidance, uridine depletion, or
         LinearDesign backend).
+    stop_codon : str, optional
+        Trailing stop codon (e.g. ``"TAA"``) included as a locked suffix
+        during constraint resolution so terminal CDS + stop boundaries cannot
+        violate homopolymer, T7 terminator, or restriction-site rules.
 
     Returns
     -------
@@ -312,6 +316,7 @@ def codon_optimize(amino_acids, species=None, method="use_best_codon",
         frozen_segments=tuple(frozen_segments),
         policy=cds_optimization,
         reverse_translate_fn=reverse_translate,
+        stop_codon=stop_codon,
     )
 
 
@@ -605,11 +610,22 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
     utr_3p_dna = resolve_named_mrna_element(
         UTRS_3P, options.utr_3p, "3' UTR")
 
+    from .junction_swap import MRNAJunctionOptimizationPolicy
+    junction_opt_policy = MRNAJunctionOptimizationPolicy.resolve(
+        options.junction_optimization)
+
     selected_antigens = antigens_for_assembly(
         ranked_vaccine_peptides, options, 'mrna', source_evidence=source_evidence)
     packing_linker = packing_linker_amino_acids(options, linker)
     def assembled_length(group):
-        start_aa = int(not signal_peptide_aa and not group[0].amino_acids.startswith('M'))
+        if signal_peptide_aa:
+            start_aa = 0
+        elif junction_opt_policy.optimize_order:
+            # Conservative +1 AA (+3 nt) reservation when antigen reordering
+            # could place a non-Met-initiated antigen first.
+            start_aa = int(not all(a.amino_acids.startswith('M') for a in group))
+        else:
+            start_aa = int(not group[0].amino_acids.startswith('M'))
         protein_length = (len(signal_peptide_aa) + start_aa + sum(len(a.amino_acids) for a in group)
                           + max(0, len(group) - 1) * len(packing_linker)
                           + (len(packing_linker) + len(mitd_aa) if mitd_aa else 0))
@@ -630,9 +646,18 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
     options = replace(options, codon_species=resolve_codon_species(
         options.codon_species, host.host_taxon_id))
 
-    from .junction_swap import MRNAJunctionOptimizationPolicy
-    junction_opt_policy = MRNAJunctionOptimizationPolicy.resolve(
-        options.junction_optimization)
+    if (junction_opt_policy.optimize_order or junction_opt_policy.cleavage_scoring != 'none') and (
+        not options.optimize_linkers or mhc_predictor is None or not mhc_alleles
+    ):
+        logger.warning(
+            "Joint mRNA junction optimization / cleavage scoring was requested "
+            "(optimize_order=%s, cleavage_scoring=%s), but optimize_linkers=%s "
+            "or no junction MHC predictor/alleles are available; falling back "
+            "to fixed input antigen order and shared linker.",
+            junction_opt_policy.optimize_order,
+            junction_opt_policy.cleavage_scoring,
+            options.optimize_linkers,
+        )
 
     constructs = []
     for i, antigen_group in enumerate(packed):
@@ -703,13 +728,11 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
                         mitd_aa and junction_opt_policy.include_mitd_boundary)
                     n_total_junctions = n_junctions + (1 if use_mitd_boundary else 0)
                     improved = (
+                        swap.default_total_cost is not None
+                        and swap.total_cost is not None
+                        and swap.total_cost < swap.default_total_cost - 1e-12
+                    ) if (swap.default_total_cost is not None and swap.total_cost is not None) else (
                         (swap.strong_burden, swap.burden) < (default_strong, default_mild)
-                        or (
-                            (swap.strong_burden, swap.burden) == (default_strong, default_mild)
-                            and swap.default_total_cost is not None
-                            and swap.total_cost is not None
-                            and swap.total_cost < swap.default_total_cost - 1e-12
-                        )
                     )
                     if improved:
                         names = [names[idx] for idx in swap.antigen_order]
@@ -762,8 +785,8 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
                             'fixed_order_burden_mild': swap.fixed_order_burden,
                             'default_burden_strong': default_strong,
                             'default_burden_mild': default_mild,
-                            'signal_peptide_burden_strong': swap.signal_peptide_strong_burden,
-                            'signal_peptide_burden_mild': swap.signal_peptide_burden,
+                            'signal_peptide_burden_strong': swap.default_signal_peptide_strong_burden,
+                            'signal_peptide_burden_mild': swap.default_signal_peptide_burden,
                             'cleavage_status': swap.cleavage_status,
                             'cleavage_penalty': swap.default_cleavage_penalty,
                             'default_cleavage_penalty': swap.default_cleavage_penalty,
@@ -847,6 +870,8 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
             options.mitd if options.include_mitd else None,
             per_junction_linkers=per_junction_linkers,
             pre_mitd_linker=pre_mitd_linker)
+        from .mrna_cds import MRNACDSOptimizationPolicy, compute_mrna_sequence_qc
+        cds_policy = MRNACDSOptimizationPolicy.resolve(options.cds_optimization)
         coding_dna = codon_optimize(
             protein,
             species=options.codon_species,
@@ -854,9 +879,12 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
             avoid_patterns=options.avoid_patterns,
             frozen_segments=frozen_segments,
             cds_optimization=options.cds_optimization,
+            stop_codon=(
+                STOP_CODON
+                if (cds_policy.has_active_constraints or options.avoid_patterns)
+                else ""
+            ),
         )
-        from .mrna_cds import MRNACDSOptimizationPolicy, compute_mrna_sequence_qc
-        cds_policy = MRNACDSOptimizationPolicy.resolve(options.cds_optimization)
         # Three sequence views: cds_nt = back-translated protein + STOP;
         # no_polya_nt = 5' UTR + cds_nt + 3' UTR; full_nt = no_polya_nt
         # + polyA tail. ``sequence`` keeps full_nt for back-compat with

@@ -182,6 +182,8 @@ class JunctionSwapResult:
     fixed_order_strong_burden: int | None = None
     signal_peptide_burden: int = 0
     signal_peptide_strong_burden: int = 0
+    default_signal_peptide_burden: int = 0
+    default_signal_peptide_strong_burden: int = 0
     cleavage_penalty: float = 0.0
     default_cleavage_penalty: float = 0.0
     cleavage_status: str = 'disabled'
@@ -1121,6 +1123,8 @@ def optimize_antigen_order_and_linkers(
         fixed_order_strong_burden=fixed_strong,
         signal_peptide_burden=sp_mild,
         signal_peptide_strong_burden=sp_strong,
+        default_signal_peptide_burden=start_stats[0][1],
+        default_signal_peptide_strong_burden=start_stats[0][0],
         cleavage_penalty=round(total_cleavage_pen, 6),
         default_cleavage_penalty=round(default_cleavage_pen, 6),
         cleavage_status=cleavage_status,

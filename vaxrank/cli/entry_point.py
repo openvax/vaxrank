@@ -813,10 +813,13 @@ def _emit_mrna_constructs(args, ranked, target_dir):
     cds_opt_yaml = yaml_kwargs.get('cds_optimization')
     cds_opt_dict = dict(cds_opt_yaml) if isinstance(cds_opt_yaml, dict) else {}
     if getattr(args, 'mrna_cds_synthesis_safe', False):
+        baseline = MRNACDSOptimizationPolicy().to_dict()
         preset = MRNACDSOptimizationPolicy.synthesis_safe().to_dict()
-        # Apply synthesis-safe defaults without clobbering explicit YAML overrides.
+        # Apply synthesis-safe defaults over baseline/default.yaml values while
+        # preserving explicit per-trial YAML customizations away from baseline.
         for k, v in preset.items():
-            if k not in cds_opt_dict or cds_opt_dict[k] is None:
+            cur = cds_opt_dict.get(k)
+            if k not in cds_opt_dict or cur is None or cur == baseline.get(k):
                 cds_opt_dict[k] = v
     cli_optimizer = getattr(args, 'mrna_codon_optimizer', None)
     if cli_optimizer is not None:

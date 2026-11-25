@@ -153,12 +153,24 @@ def _load_predictions_tsv(tsv_path: Path) -> tuple[list[dict[str, Any]], dict[st
         for line in handle:
             if line.startswith("#"):
                 # Inspect Topiary/vaxrank JSON comment headers for policy metadata
+                # (including ``#vaxrank_dataset=json:{...}`` native TSV headers).
                 stripped = line.lstrip("#").strip()
-                if stripped.startswith("{") and ("selection_policy" in stripped or "run_configuration" in stripped):
+                json_text = ""
+                if stripped.startswith("vaxrank_dataset=json:"):
+                    json_text = stripped[len("vaxrank_dataset=json:"):].strip()
+                elif stripped.startswith("{") and ("selection_policy" in stripped or "run_configuration" in stripped):
+                    json_text = stripped
+                if json_text:
                     try:
-                        parsed = json.loads(stripped)
+                        parsed = json.loads(json_text)
                         if isinstance(parsed, dict):
-                            policy_meta = parsed.get("run_configuration") or parsed
+                            selection = parsed.get("selection")
+                            if isinstance(selection, dict) and isinstance(selection.get("run_configuration"), dict):
+                                policy_meta = selection["run_configuration"]
+                            elif isinstance(parsed.get("run_configuration"), dict):
+                                policy_meta = parsed["run_configuration"]
+                            else:
+                                policy_meta = parsed
                     except json.JSONDecodeError:
                         pass
                 continue
@@ -170,6 +182,8 @@ def _load_predictions_tsv(tsv_path: Path) -> tuple[list[dict[str, Any]], dict[st
 
     reader = csv.DictReader(data_lines, delimiter="\t")
     by_key: dict[str, dict[str, Any]] = {}
+    used_value_only = False
+    used_higher_is_better = False
     for row in reader:
         key = (
             str(row.get("source_identifier") or row.get("variant") or row.get("source_sequence_name") or "").strip()
@@ -177,21 +191,40 @@ def _load_predictions_tsv(tsv_path: Path) -> tuple[list[dict[str, Any]], dict[st
         )
         if not key:
             continue
-        score = _parse_float(
+        raw_score = _parse_float(
             row.get("combined_score")
             or row.get("score")
             or row.get("target_epitope_score")
-            or row.get("value")
         )
+        if raw_score is not None:
+            score = raw_score
+            lower_is_better = False
+            used_higher_is_better = True
+        else:
+            score = _parse_float(row.get("value"))
+            kind = str(row.get("kind") or "").strip().lower()
+            # Raw pMHC_affinity IC50 ``value`` is lower-is-better.
+            lower_is_better = bool(score is not None and (not kind or "affinity" in kind or "ic50" in kind))
+            if lower_is_better:
+                used_value_only = True
         expr = _parse_float(
             row.get("expression_score") or row.get("Variant allele RNA read count")
         )
         gene = str(row.get("gene_name") or row.get("gene") or "").strip()
         aa = str(row.get("amino_acids") or row.get("peptide") or "").strip()
         existing = by_key.get(key)
-        if existing is None or (
-            score is not None and (existing["combined_score"] is None or score > existing["combined_score"])
-        ):
+        better = False
+        if existing is None:
+            better = True
+        elif score is not None:
+            prev = existing["combined_score"]
+            if prev is None:
+                better = True
+            elif lower_is_better:
+                better = score < prev
+            else:
+                better = score > prev
+        if better:
             by_key[key] = {
                 "target_key": key,
                 "source_rank": 0,
@@ -208,10 +241,13 @@ def _load_predictions_tsv(tsv_path: Path) -> tuple[list[dict[str, Any]], dict[st
                 "cta_targeting": "",
             }
 
+    ascending = used_value_only and not used_higher_is_better
     records = sorted(
         by_key.values(),
         key=lambda r: (
-            -(r["combined_score"] if r["combined_score"] is not None else float("-inf")),
+            (r["combined_score"] if r["combined_score"] is not None else float("inf"))
+            if ascending
+            else -(r["combined_score"] if r["combined_score"] is not None else float("-inf")),
             r["target_key"],
         ),
     )
@@ -559,15 +595,27 @@ def _attribute_target_change(
 def _extract_peptide_slots(manifest: list[dict[str, Any]]) -> list[dict[str, Any]]:
     slots = []
     for entry in manifest:
-        seq = str(entry.get("sequence") or "").strip()
-        names = list(entry.get("antigen_names") or [])
-        label = names[0] if names else str(entry.get("name") or "")
-        slots.append({
-            "construct_name": str(entry.get("name") or ""),
-            "antigen_label": label,
-            "sequence": seq,
-            "pool": entry.get("pool"),
-        })
+        cname = str(entry.get("name") or "")
+        pool = entry.get("pool")
+        antigens = entry.get("antigens") or []
+        if antigens:
+            for ag in antigens:
+                slots.append({
+                    "construct_name": cname,
+                    "antigen_label": str(ag.get("name") or ""),
+                    "sequence": str(ag.get("aa") or entry.get("sequence") or "").strip(),
+                    "pool": pool,
+                })
+        else:
+            seq = str(entry.get("sequence") or "").strip()
+            names = list(entry.get("antigen_names") or [])
+            label = names[0] if names else cname
+            slots.append({
+                "construct_name": cname,
+                "antigen_label": label,
+                "sequence": seq,
+                "pool": pool,
+            })
     return slots
 
 
@@ -697,12 +745,20 @@ def _policy_summary(policy_meta: dict[str, Any] | None) -> dict[str, Any]:
     if not policy_meta:
         return {}
     out: dict[str, Any] = {}
-    for key in ("name", "policy_name", "digest", "sha256", "policy_sha256"):
+    for key in (
+        "name", "policy_name", "digest", "sha256", "policy_sha256", "effective_sha256",
+    ):
         if key in policy_meta and policy_meta[key] is not None:
             out[key] = policy_meta[key]
-    vp = policy_meta.get("vaccine_peptides") or {}
+    vp = policy_meta.get("vaccine_peptides") or policy_meta.get("effective_vaccine_peptides") or {}
     if isinstance(vp, dict) and vp.get("combined_score_expr"):
         out["combined_score_expr"] = vp["combined_score_expr"]
+    if isinstance(policy_meta.get("effective_design"), dict):
+        eff_design = policy_meta["effective_design"]
+        if eff_design.get("vaccine_types"):
+            out["vaccine_types"] = eff_design["vaccine_types"]
+        if eff_design.get("max_ranked_sources") is not None:
+            out["max_ranked_sources"] = eff_design["max_ranked_sources"]
     return out
 
 

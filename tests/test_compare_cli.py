@@ -418,3 +418,48 @@ def test_compare_candidate_predictions_tsv_inputs(tmp_path):
     assert comp["rank_preservation"]["spearman_rho"] == pytest.approx(-1.0)
     assert [r["gene_name"] for r in comp["gained_in_top_k"]] == ["KRAS"]
 
+
+def test_compare_parses_native_tsv_dataset_header_ic50_sort_and_linked_peptide_slots(tmp_path):
+    from vaxrank.compare import _extract_peptide_slots, _load_predictions_tsv, _policy_summary
+
+    tsv = tmp_path / "candidate_predictions.tsv"
+    meta = {
+        "selection": {
+            "run_configuration": {
+                "effective_sha256": "deadbeef1234",
+                "effective_vaccine_peptides": {"combined_score_expr": "target_epitope_score * 2"},
+                "effective_design": {"vaccine_types": ["mrna"], "max_ranked_sources": 20},
+            }
+        }
+    }
+    tsv.write_text(
+        f"#vaxrank_dataset=json:{json.dumps(meta)}\n"
+        "source_identifier\tgene_name\tpeptide\tkind\tvalue\n"
+        "STRONG_p.A1V\tSTRONG\tSIINFEKL\tpMHC_affinity\t15.0\n"
+        "WEAK_p.B2L\tWEAK\tAAAAAAAA\tpMHC_affinity\t25000.0\n"
+    )
+    records, policy_meta = _load_predictions_tsv(tsv)
+    # Lower IC50 value (15 nM) MUST rank #1 ahead of 25,000 nM!
+    assert [r["gene_name"] for r in records] == ["STRONG", "WEAK"]
+    ps = _policy_summary(policy_meta)
+    assert ps["effective_sha256"] == "deadbeef1234"
+    assert ps["combined_score_expr"] == "target_epitope_score * 2"
+    assert ps["vaccine_types"] == ["mrna"]
+
+    # Multi-antigen linked peptide construct expands per-antigen slots
+    linked_manifest = [{
+        "modality": "peptide",
+        "name": "peptide_001",
+        "sequence": "ACDEFGHIKAAAAMNPQRSTVW",
+        "antigen_names": ["G1_p.A1V", "G2_p.B2L"],
+        "pool": 1,
+        "antigens": [
+            {"name": "G1_p.A1V", "aa": "ACDEFGHIK"},
+            {"name": "G2_p.B2L", "aa": "MNPQRSTVW"},
+        ],
+    }]
+    slots = _extract_peptide_slots(linked_manifest)
+    assert len(slots) == 2
+    assert [s["antigen_label"] for s in slots] == ["G1_p.A1V", "G2_p.B2L"]
+    assert [s["sequence"] for s in slots] == ["ACDEFGHIK", "MNPQRSTVW"]
+
