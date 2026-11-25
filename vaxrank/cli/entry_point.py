@@ -1715,6 +1715,66 @@ def _run_parsed_cli(args, args_list):
                 mhc_status_audit['affected_epitope_count'],
             )
 
+    # AI-ready tumor_board_dossier.json + audited --selection-overrides replay (#922)
+    tumor_board_dossier = None
+    tumor_board_overrides_audit = None
+    dossier_path = getattr(args, 'output_tumor_board_dossier', None)
+    interactive_review = bool(getattr(args, 'interactive_review_html', False))
+    overrides_path = getattr(args, 'selection_overrides', None)
+    if interactive_review and getattr(args, 'output_dir', None) and not dossier_path:
+        dossier_path = os.path.join(args.output_dir, 'tumor_board_dossier.json')
+        args.output_tumor_board_dossier = dossier_path
+    if dossier_path or interactive_review or overrides_path:
+        from ..tumor_board import (
+            build_tumor_board_dossier,
+            load_tumor_board_overrides,
+            validate_and_apply_overrides,
+            write_tumor_board_dossier,
+        )
+        tb_cfg = load_vaxrank_config(args).get('tumor_board')
+        tb_alleles = (
+            getattr(patient_info, 'mhc_alleles', None)
+            if patient_info is not None else None
+        )
+        tb_patient_id = (
+            getattr(patient_info, 'patient_id', '')
+            if patient_info is not None else ''
+        )
+        tumor_board_dossier = build_tumor_board_dossier(
+            ranked_variants_with_vaccine_peptides,
+            patient_id=tb_patient_id,
+            mhc_alleles=tb_alleles,
+            mhc_allele_status=mhc_status_audit,
+            dna_vaf_by_variant=data.get('dna_vaf_by_variant') or {},
+            policy=tb_cfg,
+        )
+        if overrides_path:
+            loaded_overrides = load_tumor_board_overrides(overrides_path)
+            ranked_variants_with_vaccine_peptides, tumor_board_overrides_audit = (
+                validate_and_apply_overrides(
+                    ranked_variants_with_vaccine_peptides,
+                    tumor_board_dossier,
+                    loaded_overrides,
+                    policy=tb_cfg,
+                )
+            )
+            data['variants'] = ranked_variants_with_vaccine_peptides
+            if dataset is not None:
+                dataset.selection['tumor_board_overrides'] = tumor_board_overrides_audit
+            logger.info(
+                "Applied validated tumor board overrides from %s (%s/%s): "
+                "%d Accept, %d Review, %d Reject.",
+                overrides_path,
+                tumor_board_overrides_audit['reviewer_id'],
+                tumor_board_overrides_audit['reviewer_kind'],
+                len(tumor_board_overrides_audit['accepted_ids']),
+                len(tumor_board_overrides_audit['review_ids']),
+                len(tumor_board_overrides_audit['rejected_ids']),
+            )
+        if dossier_path:
+            write_tumor_board_dossier(tumor_board_dossier, dossier_path)
+            logger.info("Wrote tumor board dossier to %s", dossier_path)
+
     products = emit_outputs(args, ranked_variants_with_vaccine_peptides, source)
     prediction_configuration = effective_prediction_configuration(
         args, ranked_variants_with_vaccine_peptides, predictions, products,
@@ -1782,6 +1842,9 @@ def _run_parsed_cli(args, args_list):
                    if getattr(args, '_design_dataset', None) is not None else {}),
         host_reference=getattr(getattr(args, '_design_dataset', None), 'host_reference', None),
         mhc_allele_status=mhc_status_audit,
+        tumor_board_dossier=tumor_board_dossier,
+        tumor_board_overrides_audit=tumor_board_overrides_audit,
+        interactive_review_html=interactive_review,
     ).compute_template_data()
     if args.output_ascii_report:
         make_ascii_report(template_data=template_data, ascii_report_path=args.output_ascii_report)

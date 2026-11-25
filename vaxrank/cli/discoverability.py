@@ -252,6 +252,7 @@ OUTPUT_LABELS = (
     ("ASCII report", "output_ascii_report"),
     ("HTML report", "output_html_report"),
     ("PDF report", "output_pdf_report"),
+    ("tumor board dossier", "output_tumor_board_dossier"),
 )
 
 

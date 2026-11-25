@@ -407,3 +407,17 @@ mhc_allele_status:
   silenced_tumor_to_immune_ratio: 0.1
   silenced_bulk_allele_ratio: 0.1
   min_purity_for_bulk_ase_call: 0.5
+
+
+# Per-trial policy for tumor_board_dossier.json hard gates, review flags, and --selection-overrides.
+tumor_board:
+  forbid_override_exact_unsafe_self: true
+  forbid_override_all_mhc_lost: true
+  max_normal_alt_vaf: 0.02
+  min_retained_mhc_score: 0.0
+  require_dossier_sha256_match: true
+  require_citation_keys: true
+  require_rationale: true
+  max_gravy_review_threshold: 2.0
+  min_rna_alt_reads_review_threshold: 3
+  flag_dna_only_proxy_for_review: true

@@ -5,6 +5,7 @@ Vaccine Design Report
 
 {% if input_coverage %}{% include "templates/input_coverage.txt" %}{% endif %}
 {% if mhc_allele_status %}{% include "templates/mhc_allele_status.txt" %}{% endif %}
+{% if tumor_board_overrides_audit %}{% include "templates/tumor_board_audit.txt" %}{% endif %}
 {% if host_coverage is defined %}{% include "templates/host_coverage.txt" %}{% endif %}
 {% if ranked_candidates is defined %}{% include "templates/ranking.txt" %}{% endif %}
 {% include "templates/products.txt" %}
