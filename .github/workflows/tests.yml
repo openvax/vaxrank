@@ -30,6 +30,9 @@ jobs:
       - name: Install supported Hitlist and the consumer
         run: |
           python -m pip install pytest
+          # CPU-only Ubuntu runner: install official CPU PyTorch wheel first so
+          # pip does not download multi-GB unused CUDA runtime packages (#732).
+          bash scripts/pip_install.sh --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple 'torch>=2.0.0'
           bash scripts/pip_install.sh '.' 'hitlist${{ matrix.hitlist }}'
           python -m pip check
       - name: Verify archived bundles, capture and offline replay
@@ -84,11 +87,16 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install 'setuptools>=77.0.3' pytest pytest-cov ruff
+          # CPU-only Ubuntu runner: install official CPU PyTorch wheel first so
+          # pip does not download multi-GB unused CUDA runtime packages (#732).
+          # Keep GPU-equipped workflows explicit if any are added.
+          bash scripts/pip_install.sh --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple 'torch>=2.0.0'
           # Exercise the portable Hitlist evidence consumer on every supported
           # Python, alongside the common CTA policy. Resolve together:
           # an earlier base-only install can leave an orphaned PirlyGenes pin.
           bash scripts/pip_install.sh '.' 'topiary[weirdo]>=5.95.0,<6'
           python -m pip check
+          python -c "import torch; print('torch:', torch.__version__, 'cuda:', torch.cuda.is_available()); assert '+cpu' in torch.__version__, f'Expected CPU torch wheel, got {torch.__version__}'"
           python -c "from vaxrank.cta_reference_adapter import require_common_cta_data; require_common_cta_data()"
       - name: Check package and CLI startup
         run: |
@@ -210,6 +218,10 @@ jobs:
       - name: Install rendering libraries
         run: sudo apt-get update && sudo apt-get install -y libpango-1.0-0 libpangocairo-1.0-0
       - name: Install supported msgspec and application dependencies
-        run: bash scripts/pip_install.sh . pytest "msgspec==${{ matrix.msgspec-version }}"
+        run: |
+          # CPU-only Ubuntu runner: install official CPU PyTorch wheel first (#732).
+          bash scripts/pip_install.sh --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple 'torch>=2.0.0'
+          bash scripts/pip_install.sh . pytest "msgspec==${{ matrix.msgspec-version }}"
+          python -m pip check
       - name: Exercise actual CLI input-error handling
         run: pytest -q tests/test_cli_errors.py
