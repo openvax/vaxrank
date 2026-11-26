@@ -39,6 +39,20 @@ def platform_cache_home(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def restore_logging_state():
+    """Restore stdlib logging handlers/levels after every test (#882).
+
+    Direct tests of ``configure_logging`` or CLI entry points bind handlers to
+    captured streams and temporary log files; restoring after each test ensures
+    stale handlers never leak into subsequent tests.
+    """
+    from vaxrank.cli.entry_point import preserve_logging_state
+
+    with preserve_logging_state():
+        yield
+
+
+@pytest.fixture(autouse=True)
 def isolate_hitlist_data(tmp_path, monkeypatch):
     """Automatic evidence lookup must never read the developer's installed data."""
     path = tmp_path / 'hitlist-data'
