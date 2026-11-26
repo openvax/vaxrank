@@ -269,3 +269,322 @@ def test_normalize_observation_gates_hitlist_perturbed_and_excluded_elutions():
     # Perturbed rows still do not award positive MS boost in support_features.
     feat = support_features([drug, apm, excluded_elution], A)
     assert feat['resolved'] == 0 and feat['presence'] == 0 and feat['reference'] == 0 and feat['direct'] is False
+
+
+class _FakeEvidenceStore:
+    """Minimal verified EvidenceStore test double exercising the v2 typed contract."""
+
+    def __init__(self, manifest, tables):
+        self.manifest = manifest
+        self._tables = tables
+        self.bindings = {name: object() for name in tables}
+
+    def query(self, evidence_type, *, where=None, limit=None):
+        df = self._tables[evidence_type].copy()
+        if where:
+            for key, value in where.items():
+                if isinstance(value, (list, tuple, set)):
+                    df = df.loc[df[key].isin(value)]
+                else:
+                    df = df.loc[df[key] == value]
+        return df
+
+
+def _write_fake_store_dir(tmp_path, manifest):
+    import json
+    pkg = tmp_path / 'evidence_store_pkg'
+    pkg.mkdir(parents=True, exist_ok=True)
+    (pkg / 'manifest.json').write_text(json.dumps(manifest, sort_keys=True), encoding='utf-8')
+    return pkg
+
+
+def test_evidence_store_reanalysis_counts_once_and_independent_origins_count_separately(tmp_path, monkeypatch):
+    """#820: one reviewed origin across original + reanalysis counts once; two independent origins count separately."""
+    import vaxrank.ms_lookup as ms_lookup
+
+    manifest = {
+        'schema_version': 6,
+        'package_family': 'supporting',
+        'files': {'typed/mhc_observations.parquet': 'deadbeef'},
+    }
+    pkg = _write_fake_store_dir(tmp_path, manifest)
+
+    tables = {
+        'mhc_positive_ms': pd.DataFrame([
+            # Abelin 2017 original monoallelic observation
+            dict(
+                observation_id='obs-abelin-1',
+                peptide_sequence='SIINFEKLA',
+                has_ptm=False,
+                is_non_peptide_ligand=False,
+                is_potential_contaminant=False,
+                source_dataset='iedb',
+                source_assay_id='iedb:101',
+                source_pmid='28228285',
+                source_reference_iri='https://doi.org/10.1016/abelin2017',
+                peptide_mhc_restriction=A,
+                restriction_evidence='monoallelic',
+            ),
+            # Sarkizova 2020 reanalysis of the exact same origin (different PMID, different acquisition)
+            dict(
+                observation_id='obs-sarkizova-reanalysis',
+                peptide_sequence='SIINFEKLA',
+                has_ptm=False,
+                is_non_peptide_ligand=False,
+                is_potential_contaminant=False,
+                source_dataset='iedb',
+                source_assay_id='iedb:202',
+                source_pmid='31844290',
+                source_reference_iri='https://doi.org/10.1038/sarkizova2020',
+                peptide_mhc_restriction=A,
+                restriction_evidence='monoallelic',
+            ),
+            # Independent second monoallelic origin
+            dict(
+                observation_id='obs-independent-origin',
+                peptide_sequence='SIINFEKLA',
+                has_ptm=False,
+                is_non_peptide_ligand=False,
+                is_potential_contaminant=False,
+                source_dataset='iedb',
+                source_assay_id='iedb:303',
+                source_pmid='33333333',
+                source_reference_iri='https://doi.org/10.1038/other2021',
+                peptide_mhc_restriction=A,
+                restriction_evidence='monoallelic',
+            ),
+        ]),
+        'assay_context': pd.DataFrame([
+            dict(observation_id='obs-abelin-1', arm_id='arm-abelin', condition_id='721_221_a0201',
+                 arm_link_status='linked', cell_line_name='721.221', sample_attribution='reviewed'),
+            dict(observation_id='obs-sarkizova-reanalysis', arm_id='arm-sarkizova', condition_id='721_221_a0201',
+                 arm_link_status='linked', cell_line_name='721.221', sample_attribution='reviewed'),
+            dict(observation_id='obs-independent-origin', arm_id='arm-other', condition_id='k562_a0201',
+                 arm_link_status='linked', cell_line_name='K562', sample_attribution='reviewed'),
+        ]),
+        'reviewed_lineage': pd.DataFrame([
+            dict(claim_id='c1', arm_id='arm-abelin', lineage_axis='experimental_origin',
+                 lineage_status='resolved', identity_ids=['origin:MSV000080527:721_221_hla_a_02_01']),
+            dict(claim_id='c2', arm_id='arm-sarkizova', lineage_axis='experimental_origin',
+                 lineage_status='resolved', identity_ids=['origin:MSV000080527:721_221_hla_a_02_01']),
+            dict(claim_id='c3', arm_id='arm-other', lineage_axis='experimental_origin',
+                 lineage_status='resolved', identity_ids=['origin:MSV000099999:k562_hla_a_02_01']),
+        ]),
+        'arm_mhc_claim': pd.DataFrame([
+            dict(claim_id='m1', arm_id='arm-abelin', mhc_claim_role='monoallelic_host',
+                 evidence_basis='monoallelic', reported_mhc=A, cellular_mhc_genotype=[A],
+                 genotype_complete_loci=['HLA-A']),
+            dict(claim_id='m2', arm_id='arm-sarkizova', mhc_claim_role='monoallelic_host',
+                 evidence_basis='monoallelic', reported_mhc=A, cellular_mhc_genotype=[A],
+                 genotype_complete_loci=['HLA-A']),
+            dict(claim_id='m3', arm_id='arm-other', mhc_claim_role='monoallelic_host',
+                 evidence_basis='monoallelic', reported_mhc=A, cellular_mhc_genotype=[A],
+                 genotype_complete_loci=['HLA-A', 'HLA-B', 'HLA-C']),
+        ]),
+    }
+
+    fake_store = _FakeEvidenceStore(manifest, tables)
+    monkeypatch.setattr(ms_lookup, 'verified_evidence_store', lambda d, h: fake_store)
+
+    evidence = ms_lookup.capture_package(pkg, ['SIINFEKLA'], [A])
+    assert evidence['source_contract'] == 'verified_hitlist_evidence_store'
+    assert evidence['package_schema_version'] == 6
+    assert evidence['index_metadata_sha256']
+
+    rows = evidence['species_observations']['Homo sapiens']['rows']
+    assert len(rows) == 3
+    normalized = [ms_lookup.normalize_observation(r) for r in rows]
+
+    # Abelin + Sarkizova alone: repeated reanalysis of one origin counts ONCE in R and ONCE in J.
+    reanalysis_pair = [n for n in normalized if n['observation_id'] in ('obs-abelin-1', 'obs-sarkizova-reanalysis')]
+    feat_pair = support_features(reanalysis_pair, A)
+    assert feat_pair['resolved'] == 8.0
+    assert feat_pair['presence'] == 8.0
+    assert feat_pair['reference'] == pytest.approx(0.25 * 8.0)
+    assert len(feat_pair['units']) == 1
+    assert feat_pair['direct'] is True
+
+    # Adding the independent second origin counts separately in R (8 + 8 = 16).
+    feat_all = support_features(normalized, A)
+    assert feat_all['resolved'] == 16.0
+    assert len(feat_all['units']) == 2
+    assert feat_all['reference'] == pytest.approx(0.25 * 16.0)
+
+    # Coverage diagnostics preserve resolved unit counts and unavailable tables.
+    diag = evidence['coverage_diagnostics']
+    assert diag['total_observations'] == 3
+    assert diag['eligible_observations'] == 3
+    assert diag['resolved_engineered_origin_observations'] == 3
+    assert diag['unique_resolved_units'] == {'native_donor': 0, 'engineered_origin': 2}
+    assert 'arm_factor' in diag['unavailable_facets']
+    assert 'reviewed_lineage' in diag['available_tables']
+
+
+def test_evidence_store_keeps_unknown_and_ambiguous_lineage_unresolved_and_gates_perturbations(tmp_path, monkeypatch):
+    """#820: unresolved/pooled lineage never inflates R; perturbed arm factors are gated while control arms stay eligible."""
+    import json
+    import vaxrank.ms_lookup as ms_lookup
+
+    manifest = {'schema_version': 7, 'package_family': 'reference'}
+    pkg = _write_fake_store_dir(tmp_path, manifest)
+
+    tables = {
+        'mhc_positive_ms': pd.DataFrame([
+            # Unresolved native donor with two pooled donor IDs -> must stay unresolved (R=0)
+            dict(
+                observation_id='obs-pooled',
+                peptide_sequence='SIINFEKLA',
+                has_ptm=False,
+                is_non_peptide_ligand=False,
+                is_potential_contaminant=False,
+                source_dataset='hla_ligand_atlas',
+                source_pmid='33858848',
+                peptide_mhc_restriction=A,
+                restriction_evidence='predicted',
+            ),
+            # Resolved native donor in perturbed drug arm -> excluded from baseline boost
+            dict(
+                observation_id='obs-drug-arm',
+                peptide_sequence='SIINFEKLA',
+                has_ptm=False,
+                is_non_peptide_ligand=False,
+                is_potential_contaminant=False,
+                source_dataset='iedb',
+                source_pmid='44444444',
+                peptide_mhc_restriction=A,
+                restriction_evidence='experimental',
+            ),
+            # Resolved native donor in explicit control arm -> remains eligible and increments R
+            dict(
+                observation_id='obs-control-arm',
+                peptide_sequence='SIINFEKLA',
+                has_ptm=False,
+                is_non_peptide_ligand=False,
+                is_potential_contaminant=False,
+                source_dataset='iedb',
+                source_pmid='44444444',
+                peptide_mhc_restriction=A,
+                restriction_evidence='experimental',
+            ),
+        ]),
+        'assay_context': pd.DataFrame([
+            dict(observation_id='obs-pooled', arm_id='arm-pooled', condition_id='donor_pool',
+                 arm_link_status='linked', cell_type='PBMC'),
+            dict(observation_id='obs-drug-arm', arm_id='arm-drug', condition_id='fluclox_treated',
+                 arm_link_status='linked', cell_type='B-LCL'),
+            dict(observation_id='obs-control-arm', arm_id='arm-ctrl', condition_id='vehicle_ctrl',
+                 arm_link_status='linked', cell_type='B-LCL'),
+        ]),
+        'reviewed_lineage': pd.DataFrame([
+            dict(claim_id='l1', arm_id='arm-pooled', lineage_axis='donor',
+                 lineage_status='resolved', identity_ids=['donor:D1', 'donor:D2']),
+            dict(claim_id='l2', arm_id='arm-drug', lineage_axis='donor',
+                 lineage_status='resolved', identity_ids=['donor:D3']),
+            dict(claim_id='l3', arm_id='arm-ctrl', lineage_axis='donor',
+                 lineage_status='resolved', identity_ids=['donor:D4']),
+        ]),
+        'arm_mhc_claim': pd.DataFrame([
+            dict(claim_id='mc1', arm_id='arm-pooled', mhc_claim_role='genotype',
+                 evidence_basis='predicted', cellular_mhc_genotype=[A, B],
+                 genotype_complete_loci=['HLA-A', 'HLA-B']),
+            dict(claim_id='mc2', arm_id='arm-drug', mhc_claim_role='restriction',
+                 evidence_basis='experimental', cellular_mhc_genotype=[A],
+                 genotype_complete_loci=['HLA-A', 'HLA-B', 'HLA-C']),
+            dict(claim_id='mc3', arm_id='arm-ctrl', mhc_claim_role='restriction',
+                 evidence_basis='experimental', cellular_mhc_genotype=[A],
+                 genotype_complete_loci=['HLA-A', 'HLA-B', 'HLA-C']),
+        ]),
+        'arm_factor': pd.DataFrame([
+            dict(claim_id='f1', arm_id='arm-drug', factor_type='drug_treatment',
+                 factor_value='flucloxacillin', claim_status='present'),
+            dict(claim_id='f2', arm_id='arm-ctrl', factor_type='drug_treatment',
+                 factor_value='flucloxacillin', claim_status='present'),
+        ]),
+        'arm_control_link': pd.DataFrame([
+            dict(claim_id='cl1', control_arm_id='arm-ctrl', comparison_arm_id='arm-drug'),
+        ]),
+    }
+
+    fake_store = _FakeEvidenceStore(manifest, tables)
+    monkeypatch.setattr(ms_lookup, 'verified_evidence_store', lambda d, h: fake_store)
+
+    lookup = ms_lookup.MSLookup({'package': str(pkg), 'lookup': 'required'})
+    frame = pd.DataFrame([dict(peptide='SIINFEKLA', allele=A)])
+    lookup(frame)
+    records = json.loads(frame[ms_lookup.RECORDS_COLUMN].iloc[0])
+    by_id = {r['observation_id']: r for r in records}
+
+    # Pooled donors -> unresolved (no unit_id), genotype uncertainty='partial', restriction_basis='predicted'.
+    assert 'unit_id' not in by_id['obs-pooled']
+    assert by_id['obs-pooled']['restriction_basis'] == 'predicted'
+    assert by_id['obs-pooled']['genotype_uncertainty'] == 'partial'
+    assert by_id['obs-pooled']['eligible'] is True
+    assert support_features([by_id['obs-pooled']], A, prediction_qualifies=True)['resolved'] == 0.0
+    assert support_features([by_id['obs-pooled']], A, prediction_qualifies=True)['presence'] == 3.0
+
+    # Drug-treated arm is excluded; explicit control arm remains eligible with native_donor unit_id.
+    assert by_id['obs-drug-arm']['eligible'] is False
+    assert 'perturbed_condition' in by_id['obs-drug-arm']['exclusion_reasons']
+    assert by_id['obs-control-arm']['eligible'] is True
+    assert by_id['obs-control-arm']['unit_id'] == 'donor:D4'
+    assert by_id['obs-control-arm']['unit_kind'] == 'native_donor'
+
+    # Combined support: only the eligible control arm contributes to resolved R (experimental=6.0).
+    feat = support_features(records, A, prediction_qualifies=True)
+    assert feat['resolved'] == 6.0
+    assert feat['direct'] is True
+
+    # Replay query preserves package identity & coverage diagnostics.
+    assert len(lookup.queries) == 1
+    q = lookup.queries[0]
+    assert q['source_contract'] == 'verified_hitlist_evidence_store'
+    assert q['coverage_diagnostics']['excluded_observations'] == 1
+    assert q['coverage_diagnostics']['unresolved_lineage_observations'] == 1
+    assert q['coverage_diagnostics']['unique_resolved_units'] == {'native_donor': 2, 'engineered_origin': 0}
+
+
+def test_evidence_store_cross_species_and_missing_manifest_rejection(tmp_path, monkeypatch):
+    """#820: EvidenceStore lineage resolution works cross-species via mhcgnomes and rejects invalid packages."""
+    import vaxrank.ms_lookup as ms_lookup
+
+    with pytest.raises(ValueError, match='missing manifest.json'):
+        ms_lookup.capture_package(tmp_path / 'empty_dir', ['SIINFEKL'], ['H2-Kb'])
+
+    manifest = {'schema_version': 6, 'package_family': 'supporting'}
+    pkg = _write_fake_store_dir(tmp_path, manifest)
+    tables = {
+        'mhc_positive_ms': pd.DataFrame([
+            dict(
+                observation_id='obs-mouse-1',
+                peptide_sequence='SIINFEKL',
+                has_ptm=False,
+                is_non_peptide_ligand=False,
+                is_potential_contaminant=False,
+                source_dataset='iedb',
+                source_pmid='11111111',
+                peptide_mhc_restriction='H2-Kb',
+                restriction_evidence='experimental',
+            ),
+        ]),
+        'assay_context': pd.DataFrame([
+            dict(observation_id='obs-mouse-1', arm_id='arm-m1', condition_id='c57bl6_spleen',
+                 arm_link_status='linked', cell_type='splenocyte'),
+        ]),
+        'reviewed_lineage': pd.DataFrame([
+            dict(claim_id='lm1', arm_id='arm-m1', lineage_axis='donor',
+                 lineage_status='resolved', identity_ids=['donor:mouse-c57bl6-1']),
+        ]),
+    }
+    monkeypatch.setattr(ms_lookup, 'verified_evidence_store', lambda d, h: _FakeEvidenceStore(manifest, tables))
+
+    ev = ms_lookup.capture_package(pkg, ['SIINFEKL'], ['H2-Kb'])
+    rows = ev['species_observations']['Mus musculus']['rows']
+    assert len(rows) == 1
+    norm = ms_lookup.normalize_observation(rows[0])
+    assert norm['mhc_species'] == 'Mus musculus'
+    assert norm['mhc_class'] == 'I'
+    assert norm['unit_id'] == 'donor:mouse-c57bl6-1'
+    assert norm['unit_kind'] == 'native_donor'
+    feat = support_features([norm], 'H2-Kb')
+    assert feat['resolved'] == 6.0
+    assert feat['direct'] is True
