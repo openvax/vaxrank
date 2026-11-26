@@ -484,6 +484,7 @@ _ARG_GROUPS = (
     ("MHC", (
         'mhc_predictor', 'mhc_alleles', 'mhc_alleles_file',
         'mhc_epitope_lengths', 'mhc_allele_status', 'mhc_loh_alleles',
+        'clonality_input', 'cn_segments', 'tumor_purity', 'clonality_mode',
         'detect_apm_variants',
     )),
     ("Reference comparisons", (
@@ -1170,7 +1171,7 @@ def processing_annotation_available():
 # can name a snapshot rather than a path.
 _INPUT_FILE_FLAGS = (
     'vcf', 'maf', 'bam', 'json_variants', 'germline_vcf', 'genome_fasta', 'mhc_alleles_file',
-    'mhc_allele_status', 'selection_overrides',
+    'mhc_allele_status', 'selection_overrides', 'clonality_input', 'cn_segments',
     'prediction_cache', 'input_epitopes', 'input_pvacseq', 'input_lens', 'input_antigens',
     'input_isovar', 'input_manifest', 'input_cta_expression', 'input_topiary',
     'input_json_file', 'patient_background_pairs')
@@ -1833,6 +1834,47 @@ def _run_parsed_cli(args, args_list):
                 mhc_status_audit['affected_epitope_count'],
             )
 
+    # Multi-modality AntigenClonality integration (#4)
+    clonality_bundle = None
+    clonality_audit = None
+    clonality_inputs = getattr(args, 'clonality_input', None) or []
+    clonality_mode_override = getattr(args, 'clonality_mode', None)
+    if clonality_inputs or clonality_mode_override:
+        from ..clonality import (
+            ClonalityBundle,
+            ClonalityPolicy,
+            apply_clonality_to_ranked,
+            detect_and_load_clonality_file,
+            merge_clonality_records,
+        )
+        raw_clonality_cfg = dict(load_vaxrank_config(args).get('clonality') or {})
+        if clonality_mode_override:
+            raw_clonality_cfg['mode'] = clonality_mode_override
+        clonality_policy = ClonalityPolicy.from_dict(raw_clonality_cfg)
+        loaded_maps = [
+            detect_and_load_clonality_file(cpath, policy=clonality_policy)
+            for cpath in clonality_inputs
+        ]
+        merged_clonality_records = merge_clonality_records(loaded_maps, policy=clonality_policy)
+        clonality_bundle = ClonalityBundle(
+            policy=clonality_policy,
+            records=merged_clonality_records,
+        )
+        ranked_variants_with_vaccine_peptides, clonality_audit = apply_clonality_to_ranked(
+            ranked_variants_with_vaccine_peptides,
+            clonality_bundle,
+        )
+        data['variants'] = ranked_variants_with_vaccine_peptides
+        if dataset is not None:
+            dataset.selection['clonality'] = clonality_bundle.to_dict()
+            dataset.selection['clonality_audit'] = clonality_audit
+        logger.info(
+            "Applied AntigenClonality (%s mode, %d record(s), %d dropped).",
+            clonality_policy.mode,
+            len(merged_clonality_records),
+            len(clonality_audit.get('dropped', ())),
+        )
+
     # AI-ready tumor_board_dossier.json + audited --selection-overrides replay (#922, #932)
     tumor_board_dossier = None
     tumor_board_overrides_audit = None
@@ -1891,6 +1933,7 @@ def _run_parsed_cli(args, args_list):
             mhc_alleles=tb_alleles,
             mhc_allele_status=mhc_status_audit,
             dna_vaf_by_variant=data.get('dna_vaf_by_variant') or {},
+            clonality_bundle=clonality_bundle,
             policy=tb_cfg,
         )
         if overrides_path or saved_overrides_dict:
@@ -1939,6 +1982,7 @@ def _run_parsed_cli(args, args_list):
                 mhc_allele_status=mhc_status_audit,
                 dna_vaf_by_variant=data.get('dna_vaf_by_variant') or {},
                 products=products,
+                clonality_bundle=clonality_bundle,
                 policy=tb_cfg,
             )
         if dossier_path:

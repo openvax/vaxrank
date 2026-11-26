@@ -608,6 +608,35 @@ def add_output_args(arg_parser):
              "Deterministically validated against the current dossier and "
              "tumor_board policy (hard safety gates cannot be bypassed) "
              "before construct assembly.")
+    design_group.add_argument(
+        "--clonality-input",
+        action="append",
+        default=None,
+        metavar="PATH",
+        help="Repeatable path to upstream clonality file (PyClone-VI TSV, PURPLE "
+             "somatic VCF, FACETS/facets-suite MAF, PureCN CSV, or canonical "
+             "vaxrank multi-sample/longitudinal JSON/TSV). Configured via the "
+             "clonality: section in a per-trial YAML policy.")
+    design_group.add_argument(
+        "--cn-segments",
+        default=None,
+        metavar="PATH",
+        help="Optional allele-specific copy-number segments file (Sequenza "
+             "*_segments.txt or TSV) for direct cross-species Beta-Binomial DNA "
+             "CCF estimation when no upstream CCF caller is supplied.")
+    design_group.add_argument(
+        "--tumor-purity",
+        type=float,
+        default=None,
+        metavar="FLOAT",
+        help="Optional tumor purity in (0, 1] for direct DNA CCF estimation "
+             "from somatic variant allele depths (refuses diploid CCF on MT).")
+    design_group.add_argument(
+        "--clonality-mode",
+        choices=("annotate", "weight", "gate", "tier"),
+        default=None,
+        help="Override clonality.mode from YAML policy: annotate (default, "
+             "preserves rankings), weight, gate, or tier.")
 
 
 
