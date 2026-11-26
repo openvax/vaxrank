@@ -12,11 +12,13 @@
 
 
 
+from contextlib import contextmanager
 import logging
 import json
 import logging.config
 import os
 import sys
+import threading
 from importlib.resources import files
 
 
@@ -1411,6 +1413,73 @@ def confirm_output_dir_overwrite(args):
         sys.exit(1)
 
 
+_LOGGING_SCOPE_LOCAL = threading.local()
+
+
+def _iter_live_loggers():
+    root = logging.getLogger()
+    yield root
+    for candidate in list(logging.Logger.manager.loggerDict.values()):
+        if isinstance(candidate, logging.Logger):
+            yield candidate
+
+
+def _snapshot_logging_state():
+    snapshot = {}
+    existing_handler_ids = set()
+    for log_obj in _iter_live_loggers():
+        handlers = list(log_obj.handlers)
+        snapshot[log_obj] = (handlers, log_obj.level, log_obj.propagate, log_obj.disabled)
+        for handler in handlers:
+            existing_handler_ids.add(id(handler))
+    return snapshot, existing_handler_ids
+
+
+def _restore_logging_state(snapshot, existing_handler_ids):
+    added_handlers = {}
+    for log_obj in _iter_live_loggers():
+        for handler in list(log_obj.handlers):
+            if id(handler) not in existing_handler_ids:
+                added_handlers[id(handler)] = handler
+    for log_obj, (handlers, level, propagate, disabled) in snapshot.items():
+        log_obj.handlers[:] = handlers
+        log_obj.setLevel(level)
+        log_obj.propagate = propagate
+        log_obj.disabled = disabled
+    for log_obj in _iter_live_loggers():
+        if log_obj not in snapshot:
+            log_obj.handlers[:] = [
+                h for h in log_obj.handlers if id(h) in existing_handler_ids
+            ]
+    for handler in added_handlers.values():
+        try:
+            handler.flush()
+        except (OSError, ValueError):
+            pass
+        try:
+            handler.close()
+        except (OSError, ValueError):
+            pass
+
+
+@contextmanager
+def preserve_logging_state():
+    """Snapshot and restore stdlib logging handlers/levels around a CLI invocation.
+
+    ``configure_logging`` calls ``logging.config.fileConfig``, which binds
+    console ``StreamHandler`` instances to the active ``sys.stdout`` and opens
+    a ``FileHandler`` on ``args.log_path``. Restoring the prior logger state on
+    exit prevents captured test streams from outliving their capture context
+    and leaking ``ValueError: I/O operation on closed file`` into subsequent
+    operations (openvax/vaxrank#882).
+    """
+    snapshot, existing_handler_ids = _snapshot_logging_state()
+    try:
+        yield
+    finally:
+        _restore_logging_state(snapshot, existing_handler_ids)
+
+
 def configure_logging(args):
     logging.config.fileConfig(
         str(files('vaxrank').joinpath('logging.conf')),
@@ -1517,9 +1586,14 @@ def run_cli(args_list=None):
     if handled:
         return None
     args = parse_vaxrank_args(args_list)
-    result = _run_parsed_cli(args, args_list)
-    print_outputs_written(args)
-    return result
+    if getattr(_LOGGING_SCOPE_LOCAL, 'in_main', False):
+        result = _run_parsed_cli(args, args_list)
+        print_outputs_written(args)
+        return result
+    with preserve_logging_state():
+        result = _run_parsed_cli(args, args_list)
+        print_outputs_written(args)
+        return result
 
 
 def print_outputs_written(args):
@@ -1957,10 +2031,15 @@ def main(args_list=None):
     instead of ending in a traceback (openvax/vaxrank#457). ``run_cli`` above
     carries the usage documentation.
     """
-    try:
-        return run_cli(args_list)
-    except USER_ERRORS as error:
-        exit_with_user_error(error, args_list)
+    with preserve_logging_state():
+        previous = getattr(_LOGGING_SCOPE_LOCAL, 'in_main', False)
+        _LOGGING_SCOPE_LOCAL.in_main = True
+        try:
+            return run_cli(args_list)
+        except USER_ERRORS as error:
+            exit_with_user_error(error, args_list)
+        finally:
+            _LOGGING_SCOPE_LOCAL.in_main = previous
 
 
 def _dna_only_isovar_results(variants):
