@@ -363,6 +363,36 @@ class SCRNATumorConfigSchema(
     explicit_immune_clusters: Optional[list[str]] = None
 
 
+class ClonalityConfigSchema(
+    msgspec.Struct,
+    frozen=True,
+    kw_only=True,
+    forbid_unknown_fields=True,
+):
+    """Per-trial policy for multi-modality AntigenClonality estimation and integration (#4)."""
+    mode: Optional[str] = None
+    clonal_threshold: Optional[float] = None
+    subclonal_threshold: Optional[float] = None
+    min_clonal_probability: Optional[float] = None
+    min_clonality: Optional[float] = None
+    weight_exponent: Optional[float] = None
+    subclonal_floor: Optional[float] = None
+    unassessed_weight: Optional[float] = None
+    persistence_bonus: Optional[float] = None
+    caller_discordance_threshold: Optional[float] = None
+    caller_precedence: Optional[list[str]] = None
+    min_scrna_detection_power: Optional[float] = None
+    min_scrna_covered_cells: Optional[int] = None
+    min_subcluster_cells: Optional[int] = None
+    min_subcluster_ntpm: Optional[float] = None
+    min_subcluster_alt_reads: Optional[int] = None
+    min_latest_depth_for_loss: Optional[int] = None
+    gene_level_combination: Optional[str] = None
+    multi_region_aggregation: Optional[str] = None
+    require_measured: Optional[bool] = None
+    by_antigen_kind: Optional[dict[str, dict]] = None
+
+
 class TumorBoardConfigSchema(
     msgspec.Struct,
     frozen=True,
@@ -401,4 +431,5 @@ class VaxrankConfigSchema(
     apm_variants: Optional[APMVariantsConfigSchema] = None
     mhc_expression: Optional[MHCExpressionConfigSchema] = None
     scrna_tumor: Optional[SCRNATumorConfigSchema] = None
+    clonality: Optional[ClonalityConfigSchema] = None
     tumor_board: Optional[TumorBoardConfigSchema] = None

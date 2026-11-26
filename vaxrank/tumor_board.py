@@ -241,6 +241,7 @@ def build_tumor_board_dossier(
     mhc_allele_status: dict[str, Any] | None = None,
     dna_vaf_by_variant: dict | None = None,
     products: dict[str, list] | None = None,
+    clonality_bundle: Any = None,
     policy: TumorBoardPolicy | dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Assemble the machine-readable, 6-layer ``tumor_board_dossier.json``
@@ -415,6 +416,13 @@ def build_tumor_board_dossier(
             "all_restricting_mhc_lost_or_silenced": all_mhc_lost_or_silenced,
             "apm_disrupted_genes": apm_disrupted,
         }
+        clonality_rec = None
+        if clonality_bundle is not None:
+            clonality_rec = clonality_bundle.lookup(
+                antigen_id=base_id, variant=source, gene_name=gene_name,
+            )
+            if clonality_rec is not None:
+                tumor_evolution_and_mhc["clonality"] = clonality_rec.to_dict()
 
         # Layer 4: Immunogenicity & epitope geometry (scan all target epitopes;
         # prefer unmasked/retained alleles for best_rank/best_allele)
@@ -588,6 +596,34 @@ def build_tumor_board_dossier(
                 "detail": "One or more restricting MHC alleles have unresolvable expression status.",
                 "evidence_key": "tumor_evolution_and_mhc.mhc_allele_status",
             })
+        if clonality_rec is not None:
+            if clonality_rec.clonality_status == "lost":
+                review_flags.append({
+                    "flag": "lost_in_latest_timepoint",
+                    "detail": "Antigen was present in earlier timepoint(s) but absent in latest tumor sample.",
+                    "evidence_key": "tumor_evolution_and_mhc.clonality",
+                })
+            elif clonality_rec.clonality_status == "subclonal":
+                review_flags.append({
+                    "flag": "subclonal_antigen",
+                    "detail": (
+                        f"Effective clonality ({clonality_rec.effective_clonality}) indicates "
+                        "subclonal tumor representation."
+                    ),
+                    "evidence_key": "tumor_evolution_and_mhc.clonality",
+                })
+            if "transcriptional_silencing_or_nmd_suspected" in clonality_rec.divergences:
+                review_flags.append({
+                    "flag": "transcriptional_silencing_or_nmd_suspected",
+                    "detail": "Genomic DNA clonality exceeds scRNA expressional clonality.",
+                    "evidence_key": "tumor_evolution_and_mhc.clonality",
+                })
+            if "caller_discordance" in clonality_rec.divergences:
+                review_flags.append({
+                    "flag": "clonality_caller_discordance",
+                    "detail": "Multiple DNA clonality callers disagreed beyond policy threshold.",
+                    "evidence_key": "tumor_evolution_and_mhc.clonality",
+                })
 
         if hard_gates:
             hard_failed_count += 1

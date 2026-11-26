@@ -771,3 +771,69 @@ def analyze_scrna_tumor_clusters(
         mhc_allele_status_bundle=bundle,
         policy=pol,
     )
+
+
+def estimate_scrna_tumor_expressional_clonality(
+    gene_counts: SCRNACountMatrix | dict[str, dict[str, float]],
+    cluster_by_barcode: dict[str, str],
+    tumor_result: SCRNATumorAnalysisResult,
+    target_genes: list[str] | tuple[str, ...],
+    *,
+    assay_platform: str = "scrna_generic",
+    measurement_level: str = "gene",
+    clonality_policy: Any = None,
+) -> dict[str, Any]:
+    """Compute scRNA ``ExpressionalClonality`` for genes/CTAs/ERVs/viral transcripts
+    using the malignant tumor clusters identified by :func:`analyze_scrna_tumor_clusters`.
+
+    Accepts either a :class:`SCRNACountMatrix` (the same object passed into
+    :func:`analyze_scrna_tumor_clusters`) or a ``gene -> {barcode: umi}`` dict.
+    """
+    from .clonality import ClonalityPolicy, estimate_scrna_gene_expressional_clonality
+
+    pol = (
+        clonality_policy
+        if isinstance(clonality_policy, ClonalityPolicy)
+        else ClonalityPolicy.from_dict(clonality_policy)
+    )
+    tumor_cluster_set = set(tumor_result.tumor_cluster_ids)
+    cell_to_subcluster = {
+        bc: cid for bc, cid in cluster_by_barcode.items()
+        if cid in tumor_cluster_set
+    }
+    tumor_barcodes = set(cell_to_subcluster.keys())
+    cell_total_umis: dict[str, float] = {bc: 0.0 for bc in tumor_barcodes}
+    gene_lookup: dict[str, dict[str, float]] = {}
+
+    if isinstance(gene_counts, SCRNACountMatrix):
+        for bc in tumor_barcodes:
+            per_gene = gene_counts.counts_by_barcode.get(bc) or {}
+            for gname, val in per_gene.items():
+                fv = float(val)
+                cell_total_umis[bc] += fv
+                g_up = gname.upper()
+                gmap = gene_lookup.setdefault(g_up, {})
+                gmap[bc] = gmap.get(bc, 0.0) + fv
+    else:
+        for gname, bc_map in gene_counts.items():
+            g_up = gname.upper()
+            target_map = gene_lookup.setdefault(g_up, {})
+            for bc, val in bc_map.items():
+                if bc in tumor_barcodes:
+                    fv = float(val)
+                    cell_total_umis[bc] += fv
+                    target_map[bc] = target_map.get(bc, 0.0) + fv
+
+    results = {}
+    for gene in target_genes:
+        g_map = gene_lookup.get(str(gene).upper(), {})
+        per_cell = {bc: g_map.get(bc, 0.0) for bc in tumor_barcodes}
+        results[str(gene)] = estimate_scrna_gene_expressional_clonality(
+            per_cell,
+            cell_to_subcluster=cell_to_subcluster,
+            cell_total_umis=cell_total_umis,
+            assay_platform=assay_platform,
+            measurement_level=measurement_level,
+            policy=pol,
+        )
+    return results

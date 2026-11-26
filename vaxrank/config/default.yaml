@@ -446,6 +446,31 @@ scrna_tumor:
   explicit_immune_clusters: []
 
 
+# Per-trial policy for multi-modality AntigenClonality estimation and integration (#4).
+# mode: annotate (default, preserves rankings) | weight | gate | tier
+clonality:
+  mode: annotate
+  clonal_threshold: 0.85
+  subclonal_threshold: 0.50
+  min_clonal_probability: 0.50
+  min_clonality: 0.30
+  weight_exponent: 1.0
+  subclonal_floor: 0.10
+  unassessed_weight: 1.0
+  persistence_bonus: 0.0
+  caller_discordance_threshold: 0.25
+  min_scrna_detection_power: 0.50
+  min_scrna_covered_cells: 5
+  min_subcluster_cells: 5
+  min_subcluster_ntpm: 1.0
+  min_subcluster_alt_reads: 2
+  min_latest_depth_for_loss: 20
+  gene_level_combination: min
+  multi_region_aggregation: mean
+  require_measured: false
+  by_antigen_kind: {}
+
+
 # Per-trial policy for tumor_board_dossier.json hard gates, review flags, and --selection-overrides.
 tumor_board:
   forbid_override_exact_unsafe_self: true
