@@ -23,7 +23,7 @@ import tempfile
 import jinja2
 import pandas as pd
 from mhctools.pred import Prediction
-from varcode import Variant, load_vcf
+from varcode import Variant
 
 from .cancer_hotspots import get_hotspot_url
 from . import cells
@@ -214,7 +214,6 @@ class TemplateDataCreator(object):
             reviewers,
             args_for_report,
             input_json_file,
-            cosmic_vcf_filename=None,
             dna_vaf_by_variant=None,
             source_vaf_by_variant=None,
             processing_predictions_by_key=None,
@@ -330,15 +329,6 @@ class TemplateDataCreator(object):
                 else include_manufacturability),
             'include_wt_epitopes': args_for_report['wt_epitopes'],
         }
-
-        # map from peptide objects to their COSMIC IDs if they exist
-        if cosmic_vcf_filename and candidate_details:
-            logger.info('Loading COSMIC data...')
-            self.cosmic_variant_collection = load_vcf(
-                cosmic_vcf_filename, allow_extended_nucleotides=True, include_info=False)
-            logger.info('COSMIC data loaded.')
-        else:
-            self.cosmic_variant_collection = None
 
     def _patient_info(self):
         """
@@ -900,20 +890,6 @@ class TemplateDataCreator(object):
                 '%.2f' % proc if proc is not None else '—')
         return epitope_data
 
-    def _query_cosmic(self, variant):
-        if not self.cosmic_variant_collection:
-            return None
-        if variant in self.cosmic_variant_collection.metadata:
-            # IDs in the DB are of the form 'COSM725245'
-            cosmic_id = self.cosmic_variant_collection.metadata[variant]['id']
-            link_for_report = \
-                "http://cancer.sanger.ac.uk/cosmic/gene/analysis?ln=%s" % cosmic_id[4:]
-            logger.info("Link for report: %s", link_for_report)
-            return link_for_report
-
-        logger.info("Variant not in COSMIC")
-        return None
-
     def _query_cancer_hotspots(self, predicted_effect, gene_name):
         """
         Check if variant is a known cancer hotspot and return link if so.
@@ -935,11 +911,6 @@ class TemplateDataCreator(object):
         hotspot_link = self._query_cancer_hotspots(predicted_effect, gene_name)
         if hotspot_link:
             databases['Cancer Hotspots'] = hotspot_link
-
-        cosmic_link = self._query_cosmic(variant)
-        if cosmic_link:
-            databases['COSMIC'] = cosmic_link
-
         return databases
 
     @staticmethod

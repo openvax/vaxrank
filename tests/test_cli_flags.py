@@ -475,3 +475,26 @@ def test_console_and_report_share_run_provenance_classification():
         assert name not in console
         assert name not in report
         assert next(iter(value.values())) not in console
+
+
+def test_cosmic_vcf_filename_flag_removed_and_hotspots_retained():
+    """#838: dead/broken --cosmic-vcf-filename flag is removed; bundled hotspots remain."""
+    from types import SimpleNamespace
+    from vaxrank.report import TemplateDataCreator
+
+    parser = make_vaxrank_arg_parser()
+    option_strings = {
+        opt for action in parser._actions for opt in action.option_strings
+    }
+    assert "--cosmic-vcf-filename" not in option_strings
+    assert "--cosmic_vcf_filename" not in option_strings
+    assert not hasattr(TemplateDataCreator, "_query_cosmic")
+
+    creator = TemplateDataCreator.__new__(TemplateDataCreator)
+    databases = creator._databases(
+        variant=None,
+        predicted_effect=SimpleNamespace(short_description="p.V600E"),
+        gene_name="BRAF",
+    )
+    assert "Cancer Hotspots" in databases
+    assert "COSMIC" not in databases

@@ -1015,13 +1015,6 @@ def add_supplemental_report_args(arg_parser):
         help='Embed a self-contained, zero-server interactive Tumor Board review '
              'workspace in the HTML report (filter/sort, Accept/Review/Reject '
              'toggles, notes, and one-click export of tumor_board_overrides.json).')
-    # Primary option uses dashes; underscore version kept for backwards compatibility
-    report_args_group.add_argument(
-        "--cosmic-vcf-filename",
-        "--cosmic_vcf_filename",  # legacy fallback
-        dest="cosmic_vcf_filename",
-        default="",
-        help="Local path to COSMIC vcf")
 
 
 _PRIMARY_OUTPUT_FLAGS = (
@@ -1421,7 +1414,7 @@ def external_input_arg_parser():
     # Template reports (ASCII / HTML / PDF) work on this path too once
     # transcripts are resolved (#268). The supplemental + optional groups
     # contribute the namespace shape ``TemplateDataCreator`` expects
-    # (manufacturability / wt_epitopes / cosmic_vcf_filename).
+    # (manufacturability / wt_epitopes).
     add_hitlist_args(arg_parser)
     add_optional_output_args(arg_parser)
     add_supplemental_report_args(arg_parser)
