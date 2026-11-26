@@ -209,13 +209,50 @@ def test_unwritable_output_destinations_fail_before_the_pipeline(tmp_path, capsy
     monkeypatch.setattr("varcode.cli.variant_collection_from_args", must_not_run)
     blocker = tmp_path / "a_file"
     blocker.write_text("not a directory")
-    for flag in ("--output-dir", "--output-csv"):
-        target = blocker / "sub" if flag == "--output-dir" else blocker / "x.csv"
+    for flag in ("--output-dir", "--output-policy-dir", "--output-csv"):
+        target = blocker / "sub" if flag in ("--output-dir", "--output-policy-dir") else blocker / "x.csv"
         with pytest.raises(SystemExit) as exit_info:
             entry_point.main(_pipeline_args(tmp_path, flag, str(target)))
         assert exit_info.value.code == 1
         assert "vaxrank: error: %s: " % flag in capsys.readouterr().err
     assert not (tmp_path / "newdir").exists()
+
+
+def test_every_primary_output_flag_is_validated_by_validate_output_destinations(tmp_path):
+    """Every _PRIMARY_OUTPUT_FLAGS entry must be checked fail-fast (#781)."""
+    from vaxrank.cli.arg_parser import _PRIMARY_OUTPUT_FLAGS
+
+    blocker = tmp_path / "blocker_file"
+    blocker.write_text("not a directory")
+    for flag, attr, _ in _PRIMARY_OUTPUT_FLAGS:
+        is_dir = attr in entry_point._OUTPUT_DIRECTORY_FLAGS
+        target = str(blocker / "subdir") if is_dir else str(blocker / "out.dat")
+        args = type("Args", (), {attr: target})()
+        with pytest.raises(ValueError, match=flag):
+            entry_point.validate_output_destinations(args)
+
+
+def test_cta_admission_default_is_derived_before_destination_validation(tmp_path, monkeypatch):
+    """Derived --output-cta-admission default is populated before validation (#781)."""
+    seen = {}
+
+    def capture_validation(args):
+        seen["output_cta_admission"] = getattr(args, "output_cta_admission", None)
+        raise ValueError("stop-after-validation")
+
+    monkeypatch.setattr(entry_point, "validate_output_destinations", capture_validation)
+    cta_csv = tmp_path / "cta.csv"
+    cta_csv.write_text("gene,tpm\nMAGEA3,10.0\n")
+    out_dir = tmp_path / "out"
+    with pytest.raises(ValueError, match="stop-after-validation"):
+        entry_point.run_cli([
+            "--input-cta-expression", str(cta_csv),
+            "--mhc-predictor", "random",
+            "--mhc-alleles", "HLA-A*02:01",
+            "--output-dir", str(out_dir),
+            "--log-path", str(tmp_path / "cta.log"),
+        ])
+    assert seen["output_cta_admission"] == str(out_dir / "cta_admission.json")
 
 
 def test_a_new_nested_output_dir_is_still_accepted_and_not_created_early(tmp_path):

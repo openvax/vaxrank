@@ -41,7 +41,12 @@ from mhctools.cli import (
     mhc_binding_predictor_from_args,
 )
 
-from .arg_parser import parse_vaxrank_args, check_args, require_annotations_for_template_reports
+from .arg_parser import (
+    _PRIMARY_OUTPUT_FLAGS,
+    parse_vaxrank_args,
+    check_args,
+    require_annotations_for_template_reports,
+)
 from .epitope_config_args import epitope_config_from_args, has_epitope_config_overrides
 from .vaccine_config_args import (
     manufacturability_config_from_args, vaccine_config_from_args,
@@ -1035,13 +1040,17 @@ _AUTO_OUTPUT_FILENAMES = {
 }
 
 
-# Output flags whose value is a file; their parent directory must be writable.
-_OUTPUT_FILE_FLAGS = (
-    'output_csv', 'output_xlsx_report', 'output_ascii_report', 'output_html_report',
-    'output_pdf_report', 'output_neoepitope_report', 'output_tumor_board_dossier',
-    'output_json_file', 'output_passing_variants_csv', 'output_isovar_csv',
-    'output_epitopes', 'output_antigens', 'output_input_predictions',
-    'output_cta_admission')
+# Output flags whose value is a directory; the directory itself must be creatable.
+_OUTPUT_DIRECTORY_FLAGS = ('output_dir', 'output_policy_dir')
+
+# Derived from arg_parser._PRIMARY_OUTPUT_FLAGS so new --output-* flags cannot
+# drift out of fail-fast validation (openvax/vaxrank#781), plus secondary file
+# outputs that do not act as standalone run-gate flags.
+_SECONDARY_OUTPUT_FILE_FLAGS = ('output_cta_admission',)
+_OUTPUT_FILE_FLAGS = tuple(
+    attr for _, attr, _ in _PRIMARY_OUTPUT_FLAGS
+    if attr not in _OUTPUT_DIRECTORY_FLAGS
+) + _SECONDARY_OUTPUT_FILE_FLAGS
 
 
 def _require_creatable_directory(path, flag):
@@ -1064,9 +1073,11 @@ def _require_creatable_directory(path, flag):
 
 def validate_output_destinations(args):
     """Check every output destination is writable before any work starts."""
-    # The directory first: defaults filled in from it must not take the blame.
-    if getattr(args, 'output_dir', ''):
-        _require_creatable_directory(args.output_dir, '--output-dir')
+    # Directories first: defaults filled in from --output-dir must not take the blame.
+    for attr in _OUTPUT_DIRECTORY_FLAGS:
+        path = getattr(args, attr, None)
+        if path and isinstance(path, str):
+            _require_creatable_directory(path, '--' + attr.replace('_', '-'))
     for attr in _OUTPUT_FILE_FLAGS:
         path = getattr(args, attr, None)
         if path and isinstance(path, str):
@@ -1681,9 +1692,11 @@ def _run_parsed_cli(args, args_list):
     # JSON dump) without listing every flag. Explicit
     # ``--output-csv`` / ``--output-json-file`` paths win.
     populate_default_output_paths(args)
-    validate_output_destinations(args)
-    if getattr(args, 'input_cta_expression', None) and args.output_dir and not args.output_cta_admission:
+    if (getattr(args, 'input_cta_expression', None)
+            and getattr(args, 'output_dir', None)
+            and not getattr(args, 'output_cta_admission', None)):
         args.output_cta_admission = os.path.join(args.output_dir, 'cta_admission.json')
+    validate_output_destinations(args)
     log_args_summary(args)
 
     # Fail fast when no output path is set, *before* loading inputs or
