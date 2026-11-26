@@ -113,12 +113,8 @@ jobs:
           path: .ci-cache/osteosarc/osteosarc/bundles
           key: openvax-v1-${{ steps.openvax-v1.outputs.manifest }}
       - name: Install wkhtmltopdf
-        run: |
-          # The runner's package index goes stale; refresh it before any install.
-          sudo apt-get update
-          sudo apt-get install -y xfonts-base xfonts-75dpi
-          wget https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6-1/wkhtmltox_0.12.6-1.bionic_amd64.deb
-          sudo dpkg -i wkhtmltox_0.12.6-1.bionic_amd64.deb
+        timeout-minutes: 5
+        run: bash scripts/install_wkhtmltopdf.sh
       - name: Install weasyprint system dependencies
         run: |
           sudo apt-get install -y libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf2.0-0
