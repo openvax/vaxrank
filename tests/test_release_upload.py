@@ -105,6 +105,90 @@ def test_pypi_release_artifacts_treats_missing_release_as_empty(monkeypatch):
     assert pypi_release_artifacts("vaxrank", "3.1.28") == {}
 
 
+def test_pypi_release_artifacts_retries_truncated_response_then_succeeds(monkeypatch):
+    """#727: IncompleteRead during response-body read is retried with a fresh URL."""
+    import http.client
+
+    class TruncatedResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self, *args):
+            raise http.client.IncompleteRead(b'{"releases":', 128)
+
+    urls = []
+    tokens = iter(["attempt-1", "attempt-2"])
+    responses = iter([
+        TruncatedResponse(),
+        io.BytesIO(json.dumps({
+            "releases": {
+                "3.1.28": [{
+                    "filename": "vaxrank-3.1.28.tar.gz",
+                    "digests": {"sha256": "abc123"},
+                }],
+            },
+        }).encode("utf-8")),
+    ])
+
+    def open_url(url, *, timeout):
+        urls.append(url)
+        return next(responses)
+
+    monkeypatch.setattr(release_upload, "urlopen", open_url)
+    monkeypatch.setattr(release_upload, "token_hex", lambda length: next(tokens))
+
+    assert pypi_release_artifacts(
+        "vaxrank", "3.1.28", max_attempts=3, retry_delay_seconds=0,
+    ) == {"vaxrank-3.1.28.tar.gz": "abc123"}
+    assert urls == [
+        "https://pypi.org/pypi/vaxrank/json?cache_bust=attempt-1",
+        "https://pypi.org/pypi/vaxrank/json?cache_bust=attempt-2",
+    ]
+
+
+def test_pypi_release_artifacts_retries_truncated_json_then_succeeds(monkeypatch):
+    """#727: truncated JSON body (JSONDecodeError) is retried cleanly."""
+    responses = iter([
+        io.BytesIO(b'{"releases": {"3.1.28": ['),
+        io.BytesIO(b'{"releases": {}}'),
+    ])
+    monkeypatch.setattr(release_upload, "urlopen", lambda url, *, timeout: next(responses))
+    assert pypi_release_artifacts(
+        "vaxrank", "3.1.28", max_attempts=3, retry_delay_seconds=0,
+    ) == {}
+
+
+def test_pypi_release_artifacts_fails_closed_on_persistent_truncation(monkeypatch):
+    """#727: persistent truncation must raise ReleaseUploadError, never return {}."""
+    import http.client
+
+    class AlwaysTruncated:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self, *args):
+            raise http.client.IncompleteRead(b'{"releases":', 512)
+
+    attempts = []
+
+    def open_url(url, *, timeout):
+        attempts.append(url)
+        return AlwaysTruncated()
+
+    monkeypatch.setattr(release_upload, "urlopen", open_url)
+    with pytest.raises(ReleaseUploadError, match="after 3 attempt"):
+        pypi_release_artifacts(
+            "vaxrank", "3.1.28", max_attempts=3, retry_delay_seconds=0,
+        )
+    assert len(attempts) == 3
+
+
 def test_upload_distribution_is_bounded_and_disables_progress(monkeypatch):
     observed = {}
 
