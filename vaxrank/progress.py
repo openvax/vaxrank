@@ -11,10 +11,6 @@ import sys
 import time
 from contextlib import contextmanager
 
-from tqdm import tqdm
-from tqdm.contrib.logging import logging_redirect_tqdm
-
-
 def _in_jupyter_notebook() -> bool:
     """Return True when running inside an active Jupyter notebook kernel."""
     ipython = sys.modules.get("IPython")
@@ -34,6 +30,7 @@ def progress(iterable, desc, unit, **kwargs):
         from tqdm.auto import tqdm as auto_tqdm
         kwargs.setdefault("disable", False)
         return auto_tqdm(iterable, desc=desc, unit=unit, **kwargs)
+    from tqdm import tqdm
     kwargs.setdefault("file", sys.stderr)
     kwargs.setdefault("disable", None)
     return tqdm(iterable, desc=desc, unit=unit, **kwargs)
@@ -42,6 +39,7 @@ def progress(iterable, desc, unit, **kwargs):
 @contextmanager
 def redirect_logging_for_progress(loggers=None):
     """Route console log lines through ``tqdm.write`` so progress bars stay intact."""
+    from tqdm.contrib.logging import logging_redirect_tqdm
     with logging_redirect_tqdm(loggers=loggers):
         yield
 

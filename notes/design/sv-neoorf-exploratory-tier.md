@@ -54,7 +54,7 @@ are retained; no new viral or SV targets inferred", so this is unmeasured.
 
 ## RNA support must be comparable across kinds
 
-#757 shipped (#822, `docs/design/rna-feature-support.md`): a common
+#757 shipped (#822, `notes/design/rna-feature-support.md`): a common
 `RNAFeatureEvidence` record (reads, fragments, per-million, effective-length
 densities) and identical DSL bindings for every kind. An exploratory SV can sit
 in a mixed list only if its support is counted the same way as a mutation's.

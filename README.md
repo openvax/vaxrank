@@ -131,6 +131,22 @@ Companion command sharing the installed package:
 |---|---|---|
 | `vaxrank-test-data` | Download the shared Sid test data | [Test data](https://github.com/openvax/vaxrank/blob/main/TEST_DATA.md) |
 
+### Tab completion
+
+`vaxrank` (and `vaxrank-test-data`) support shell tab completion for commands,
+options, and choice values via `argcomplete`. Enable it once for every OpenVax
+command-line tool:
+
+```sh
+activate-global-python-argcomplete
+```
+
+Or enable it only for `vaxrank` in your shell startup file:
+
+```sh
+eval "$(register-python-argcomplete vaxrank)"
+```
+
 ## Documentation
 
 Full documentation: <https://openvax.github.io/vaxrank/>. In reading order:

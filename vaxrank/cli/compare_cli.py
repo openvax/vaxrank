@@ -18,12 +18,9 @@ import argparse
 import json
 import sys
 
-from ..compare import (
-    ComparePolicy,
-    compare_runs,
-    render_comparison_ascii,
-    write_comparison_outputs,
-)
+import argcomplete
+
+from .help import HelpArgumentParser
 
 
 def _parse_top_k(value: str) -> tuple[int, ...]:
@@ -42,7 +39,7 @@ def _parse_top_k(value: str) -> tuple[int, ...]:
 
 
 def _build_parser(prog: str = "vaxrank compare") -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = HelpArgumentParser(
         prog=prog,
         description=(
             "Compare two vaxrank runs (output directories, ranked_candidates.csv, "
@@ -86,7 +83,15 @@ def _build_parser(prog: str = "vaxrank compare") -> argparse.ArgumentParser:
 def run(argv: list[str] | None = None, prog: str = "vaxrank compare") -> int:
     """Execute ``vaxrank compare <run_a> <run_b> [options]``."""
     parser = _build_parser(prog=prog)
+    argcomplete.autocomplete(parser)
     args = parser.parse_args(argv)
+
+    from ..compare import (
+        ComparePolicy,
+        compare_runs,
+        render_comparison_ascii,
+        write_comparison_outputs,
+    )
 
     policy_dict: dict = {}
     if args.config:

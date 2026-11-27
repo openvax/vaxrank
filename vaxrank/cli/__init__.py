@@ -10,11 +10,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .arg_parser import make_vaxrank_arg_parser
-from .entry_point import main, run_vaxrank_from_parsed_args
+from importlib import import_module
 
-__all__ = [
-    "make_vaxrank_arg_parser",
-    "run_vaxrank_from_parsed_args",
-    "main",
-]
+_LAZY_EXPORTS = {
+    "make_vaxrank_arg_parser": (".arg_parser", "make_vaxrank_arg_parser"),
+    "run_vaxrank_from_parsed_args": (".entry_point", "run_vaxrank_from_parsed_args"),
+    "main": (".entry_point", "main"),
+}
+
+__all__ = list(_LAZY_EXPORTS)
+
+
+def __getattr__(name):
+    if name in _LAZY_EXPORTS:
+        module_name, attr_name = _LAZY_EXPORTS[name]
+        value = getattr(import_module(module_name, package=__name__), attr_name)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__():
+    return sorted(set(globals()) | set(__all__))

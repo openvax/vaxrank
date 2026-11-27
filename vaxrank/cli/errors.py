@@ -29,31 +29,50 @@ import logging
 import sys
 import traceback
 
-from mhcgnomes.errors import ParseError as AlleleParseError
-from msgspec import DecodeError
-from pyensembl.download_cache import MissingLocalFile
-
 
 logger = logging.getLogger(__name__)
 
-
-# Exception classes an ordinary mistake in the inputs can legitimately cause.
-#
-# Older supported msgspec releases do not derive DecodeError (and its
-# ValidationError subclass) from ValueError. Catch it explicitly across the
-# supported range so invalid configuration has the same CLI behavior.
-#
-# A bug inside vaxrank that raises one of these is reported the same way, which
-# is the cost of this approach and why the traceback stays recoverable. Anything
-# else — an AttributeError, a KeyError, a TypeError — still propagates as a
-# traceback, because those are ours to fix rather than the operator's.
-USER_ERRORS = (
-    OSError,
-    ValueError,
-    AlleleParseError,
-    DecodeError,
-    MissingLocalFile,
+_OPTIONAL_USER_ERROR_SPECS = (
+    ("mhcgnomes.errors", "ParseError"),
+    ("msgspec", "DecodeError"),
+    ("pyensembl.download_cache", "MissingLocalFile"),
 )
+
+
+def user_error_types():
+    """Return user-error exception classes from already-loaded modules.
+
+    Looking up optional exception classes from ``sys.modules`` keeps CLI startup
+    and tab completion import-light while still catching every domain error that
+    can actually be raised at runtime.
+    """
+    types = [OSError, ValueError]
+    for module_name, attr_name in _OPTIONAL_USER_ERROR_SPECS:
+        module = sys.modules.get(module_name)
+        if module is not None:
+            err_type = getattr(module, attr_name, None)
+            if isinstance(err_type, type) and issubclass(err_type, Exception):
+                types.append(err_type)
+    return tuple(types)
+
+
+def __getattr__(name):
+    """Lazily resolve ``USER_ERRORS`` for callers inspecting the full tuple."""
+    if name == "USER_ERRORS":
+        from mhcgnomes.errors import ParseError as AlleleParseError
+        from msgspec import DecodeError
+        from pyensembl.download_cache import MissingLocalFile
+
+        value = (
+            OSError,
+            ValueError,
+            AlleleParseError,
+            DecodeError,
+            MissingLocalFile,
+        )
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def _verbose(args_list):
@@ -88,12 +107,12 @@ def exit_with_user_error(error, args_list=None, prog="vaxrank", traceback_hint=T
 def run_reporting_user_errors(prog, function, *args, **kwargs):
     """Run a companion command's work, reporting an input mistake as one line.
 
-    Gives ``vaxrank-*-figure`` the manners ``vaxrank`` already has: a missing or
+    Gives companion commands the manners ``vaxrank`` already has: a missing or
     malformed input file is a message and exit status 1, not a traceback.
     """
     try:
         return function(*args, **kwargs)
-    except USER_ERRORS as error:
+    except user_error_types() as error:
         # Companion commands expose no verbosity option. Do not inherit a
         # caller's argv (for example pytest -v or an embedding application).
         exit_with_user_error(error, args_list=(), prog=prog, traceback_hint=False)

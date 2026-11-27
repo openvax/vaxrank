@@ -4,7 +4,11 @@ numpy>=2.0.0,<3.0.0
 # The 1.11.1 floor is what inspect_files/Cache.inspect need: download_test_data
 # reports a per-file status (available/missing/corrupt/inaccessible) instead of
 # only raising, and 1.11.1 is the release that shortens over-long cache names.
-datacache>=1.34.0,<2.0.0
+# 1.38.0 provides the shared stdlib-only datacache.cli_help module used by all
+# OpenVax CLI parsers (#794).
+datacache>=1.38.0,<2.0.0
+# Shell tab completion for console scripts (#794).
+argcomplete>=3
 # Public data acquisition and original-read extraction for the osteosarc corpus.
 # 0.15.6 coordinates runtime and distribution versions for evidence provenance.
 osteosarc>=0.15.6,<0.16

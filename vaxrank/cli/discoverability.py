@@ -16,10 +16,12 @@ Worked examples for ``--help``, a short screen for a bare ``vaxrank``, a
 "did you mean" for mistyped flags, and the closing list of what a run wrote.
 """
 
+import argparse
 import difflib
 import os
 import sys
-from argparse import HelpFormatter
+
+from .help import HelpFormatter, style_help
 
 _EXAMPLES_TEMPLATE = """\
 Examples:
@@ -93,7 +95,7 @@ class ExamplesHelpFormatter(HelpFormatter):
     def _fill_text(self, text, width, indent):
         if text.startswith("Examples:"):
             return text
-        return super()._fill_text(text, width, indent)
+        return argparse.HelpFormatter._fill_text(self, text, width, indent)
 
 
 def suggest_flag(flag, known_flags, cutoff=0.6):
@@ -139,7 +141,8 @@ SHORT_USAGE = (
 
 def print_short_help(stream=None):
     """The one-screen ``--help``: modes, activities and help topics."""
-    (stream or sys.stdout).write(SHORT_USAGE + BARE_SUMMARY)
+    out = stream or sys.stdout
+    out.write(style_help(SHORT_USAGE + BARE_SUMMARY, out))
 
 
 def _command_error(message):
@@ -213,7 +216,7 @@ def resolve_command_line(args_list):
             if not rest:
                 print_short_help()
             elif len(rest) == 1:
-                sys.stdout.write(topic_help(rest[0]))
+                sys.stdout.write(style_help(topic_help(rest[0]), sys.stdout))
             else:
                 _command_error("help takes one topic; choose from %s, all"
                                % ", ".join(HELP_TOPICS))

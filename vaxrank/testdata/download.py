@@ -1,3 +1,4 @@
+# PYTHON_ARGCOMPLETE_OK
 """Export of the Sid retrieval test cases.
 
 The default exports the 49 retrieval cases from the Sid test data, which is
@@ -12,9 +13,9 @@ caller can read a per-file status instead of parsing prose. From Python,
 raises on the first problem, and ``download_test_data`` exports.
 """
 
-import argparse
 import ctypes
 import errno
+from importlib import import_module
 import json
 import os
 from pathlib import Path
@@ -23,10 +24,35 @@ import sys
 import tempfile
 from urllib.parse import urlsplit
 
-from datacache import Cache, FileValidationError, get_cache_root, inspect_files
-from osteosarc import OsteosarcError
+import argcomplete
+from datacache.cli_help import HelpArgumentParser
 
 from ..file_digest import is_sha256_digest
+
+_UNSET = object()
+_LAZY_IMPORTS = {
+    "Cache": ("datacache", "Cache"),
+    "FileValidationError": ("datacache", "FileValidationError"),
+    "get_cache_root": ("datacache", "get_cache_root"),
+    "inspect_files": ("datacache", "inspect_files"),
+    "OsteosarcError": ("osteosarc", "OsteosarcError"),
+}
+
+
+def _lazy(name):
+    value = globals().get(name, _UNSET)
+    if value is not _UNSET:
+        return value
+    module_name, attr_name = _LAZY_IMPORTS[name]
+    value = getattr(import_module(module_name), attr_name)
+    globals()[name] = value
+    return value
+
+
+def __getattr__(name):
+    if name in _LAZY_IMPORTS:
+        return _lazy(name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 DEFAULT_MANIFEST = None
@@ -43,7 +69,7 @@ def cache_root_for(cache_root=None):
     """The shared OpenVax cache root, resolved as osteosarc resolves it."""
     if cache_root:
         return Path(cache_root)
-    return Path(get_cache_root(
+    return Path(_lazy("get_cache_root")(
         CACHE_NAMESPACE, OSTEOSARC_ENVIRONMENT, CACHE_ENVIRONMENT))
 
 
@@ -125,7 +151,7 @@ def _inspect_dataset(output, manifest):
         return report("symlink", "Dataset assets must not be symlinks: "
                       + ", ".join(symlinked)), None
 
-    inspection = inspect_files(str(output), {
+    inspection = _lazy("inspect_files")(str(output), {
         a["filename"]: dict(expected_sha256=a["sha256"], expected_size=a["size_bytes"])
         for a in manifest["assets"]})
     files = {name: dict(status=inspected.status, verified=inspected.verified)
@@ -229,7 +255,7 @@ def download_test_data(output=None, *, manifest_path=DEFAULT_MANIFEST,
         paths = {asset["filename"]: bundled / asset["filename"] for asset in manifest["assets"]}
     else:
         root = cache_root_for(cache_root)
-        cache = Cache(CACHE_NAMESPACE, cache_root=root / "objects" / "sha256")
+        cache = _lazy("Cache")(CACHE_NAMESPACE, cache_root=root / "objects" / "sha256")
         paths = {}
         for asset in manifest["assets"]:
             name = cache_filename(asset)
@@ -268,11 +294,14 @@ def download_test_data(output=None, *, manifest_path=DEFAULT_MANIFEST,
     return verify_dataset(output, manifest)
 
 
-def main(argv=None):
-    parser = argparse.ArgumentParser(
-        prog="vaxrank-test-data", description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter)
+def make_arg_parser():
+    """Build the ``vaxrank-test-data`` CLI parser without heavy imports."""
     from ..version import __version__
+
+    parser = HelpArgumentParser(
+        prog="vaxrank-test-data",
+        description=(__doc__ or "").replace("``", ""),
+    )
     parser.add_argument("--version", action="version", version="%(prog)s " + __version__)
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST,
                         help="Custom test-data manifest; omit for the Sid retrieval cases")
@@ -285,6 +314,12 @@ def main(argv=None):
     parser.add_argument("--progress", action="store_true", help="Show download progress for custom manifests")
     parser.add_argument("--timeout", type=float, default=60, help="Seconds allowed per request (default: 60)")
     parser.add_argument("--max-retries", type=int, default=2, help="Retries per failed request (default: 2)")
+    return parser
+
+
+def main(argv=None):
+    parser = make_arg_parser()
+    argcomplete.autocomplete(parser)
     args = parser.parse_args(argv)
     if args.verify_only and (args.output is None or args.repair_cache):
         parser.error("--verify-only requires --output and cannot repair the cache")
@@ -319,7 +354,7 @@ def main(argv=None):
             offline=args.offline, repair_cache=args.repair_cache,
             show_progress=args.progress, timeout=args.timeout,
             max_retries=args.max_retries)
-    except (OSError, ValueError, FileValidationError, OsteosarcError) as error:
+    except (OSError, ValueError, _lazy("FileValidationError"), _lazy("OsteosarcError")) as error:
         report["error"] = "Test data unavailable: %s" % error
         return emit(1)
     if args.output is None:

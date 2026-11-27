@@ -3,6 +3,7 @@ site_description: Selection of mutated protein fragments for therapeutic persona
 site_url: https://openvax.github.io/vaxrank
 repo_url: https://github.com/openvax/vaxrank
 repo_name: openvax/vaxrank
+strict: true
 
 theme:
   name: material
