@@ -26,10 +26,11 @@ pyensembl>=2.35.0,<3.0.0
 # 11.15.1 restores saved effects without eagerly opening the gene database.
 # 12.0.1 drops deprecated 11.x aliases, adds combine_cis_snvs / spanning-deletion
 # provenance, and keeps make_variants_parser --version opt-in (#759).
-# 13.0.2 collapses DNAHypothesis back onto EffectCandidate, unifies closed
+# 13.0.3 collapses DNAHypothesis back onto EffectCandidate, unifies closed
 # predictions and open rearrangement templates on MutantTranscript, and
-# preserves dna-annotator RNA refinement (openvax/vaxrank#945).
-varcode>=13.0.2,<14.0.0
+# preserves dna-annotator candidates across to_dict()/JSON round-trips
+# (openvax/varcode#778, openvax/vaxrank#945).
+varcode>=13.0.3,<14.0.0
 # 1.62.2 adds occurrence-scoped RNA support for exported SV ORF placements.
 # 1.61 adds reference-frame ncORF reconstruction. The Isovar input adapters
 # validate each supported result schema; producer evidence is retained losslessly.
