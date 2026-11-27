@@ -14,9 +14,15 @@ CHECKER = ROOT / "check_release_version.py"
 
 
 def git(repo, *args):
-    return subprocess.run(
-        ["git", "-C", str(repo), *args], check=True, capture_output=True,
-        text=True).stdout.strip()
+    cmd = ["git", "-C", str(repo), *args]
+    result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise AssertionError(
+            f"git command {cmd!r} exited {result.returncode}\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+    return result.stdout.strip()
 
 
 def commit_version(repo, version):
@@ -234,3 +240,8 @@ def test_workflow_skips_closed_event_payloads():
     workflow = yaml.safe_load(
         (ROOT / ".github/workflows/release-version.yml").read_text(encoding="utf-8"))
     assert workflow["jobs"]["check"]["if"] == "github.event.pull_request.state == 'open'"
+
+
+def test_git_helper_reports_captured_stderr_on_failure(tmp_path):
+    with pytest.raises(AssertionError, match="stderr:"):
+        git(tmp_path, "rev-parse", "--verify", "refs/heads/does-not-exist")

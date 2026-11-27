@@ -10,10 +10,11 @@ datacache>=1.34.0,<2.0.0
 osteosarc>=0.15.6,<0.16
 pandas>=3.0.0,<4.0.0
 # Hitlist's library is standard; its evidence datasets are installed separately.
-# 2.1.9 supplies the public read-only generation snapshot used by local queries.
-# Exclude 2.1.18-2.1.19: verify_evidence_bundle rejects archived pre-2.1.18 CTA
-# bundles due to assay_method in IDENTITY_COLUMNS (fixed in 2.1.20, pirl-unc/hitlist#935).
-hitlist>=2.1.9,!=2.1.18,!=2.1.19,<3
+# 2.3.0 supplies HLA Ligand Atlas single-allele predicted restriction provenance
+# (#855), Abelin 2019 MAPTAC Class II HLA-DM arms (#853), DLBCL supplements (#901),
+# flat intervention/elution condition columns (#902/#904/#905), and fetch()
+# preflight (#884), superseding the 2.1.18-2.1.19 exclusion.
+hitlist>=2.3.0,<3
 # Vaxrank directly reads captured Hitlist evidence with pandas.read_parquet.
 pyarrow
 # Metadata-only Transcript/Gene restore defers annotation DB access (#563).

@@ -14,8 +14,15 @@ from release_upload import ReleaseUploadError, file_sha256
 
 
 def git(repo, *args):
-    return subprocess.run(["git", "-C", str(repo), *args], check=True,
-                          capture_output=True, text=True).stdout.strip()
+    cmd = ["git", "-C", str(repo), *args]
+    result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise AssertionError(
+            f"git command {cmd!r} exited {result.returncode}\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+    return result.stdout.strip()
 
 
 @pytest.fixture
@@ -380,3 +387,8 @@ def test_cli_dry_run_drives_build_and_check_without_publication(releases, monkey
     assert "Dry run: ready to release v1.0.0" in capsys.readouterr().out
     assert len(commands) == 2
     assert (git(release.repo, "show-ref"), git(release.repo, "ls-remote", "origin")) == before
+
+
+def test_git_helper_reports_captured_stderr_on_failure(tmp_path):
+    with pytest.raises(AssertionError, match="stderr:"):
+        git(tmp_path, "rev-parse", "--verify", "refs/heads/does-not-exist")

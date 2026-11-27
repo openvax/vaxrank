@@ -270,6 +270,49 @@ def test_normalize_observation_gates_hitlist_perturbed_and_excluded_elutions():
     feat = support_features([drug, apm, excluded_elution], A)
     assert feat['resolved'] == 0 and feat['presence'] == 0 and feat['reference'] == 0 and feat['direct'] is False
 
+    # Hitlist 2.3+ flat intervention columns gate drug/APM/cytokine arms even
+    # when coarse condition_category is 'unperturbed' or is_control_arm is True.
+    flat_drug = normalize_observation(dict(
+        base,
+        condition_category='unperturbed',
+        condition_drugs='flucloxacillin',
+        elution_condition_id='elc-fluclox-1',
+    ))
+    assert flat_drug['eligible'] is False
+    assert 'perturbed_condition' in flat_drug['exclusion_reasons']
+    assert flat_drug['condition_drugs'] == 'flucloxacillin'
+    assert flat_drug['source_context']['elution_condition_id'] == 'elc-fluclox-1'
+
+    flat_apm = normalize_observation(dict(
+        base,
+        condition_category='unperturbed',
+        is_control_arm=True,
+        condition_overexpression_genes='HLA-DM',
+    ))
+    assert flat_apm['eligible'] is False
+    assert 'apm_perturbed' in flat_apm['exclusion_reasons']
+    assert 'perturbed_condition' in flat_apm['exclusion_reasons']
+    assert flat_apm['condition_overexpression_genes'] == 'HLA-DM'
+
+    flat_cytokine = normalize_observation(dict(
+        base,
+        perturbation_type='cytokine',
+        perturbation_agent='IFN-gamma',
+    ))
+    assert flat_cytokine['eligible'] is False
+    assert 'apm_perturbed' in flat_cytokine['exclusion_reasons']
+    assert 'perturbed_condition' in flat_cytokine['exclusion_reasons']
+
+    # Positive absence tokens ('none') in flat intervention columns stay eligible.
+    flat_none = normalize_observation(dict(
+        base,
+        condition_category='unperturbed',
+        condition_drugs='none',
+        condition_cytokines='none',
+    ))
+    assert flat_none['eligible'] is True
+    assert flat_none['exclusion_reasons'] == []
+
 
 class _FakeEvidenceStore:
     """Minimal verified EvidenceStore test double exercising the v2 typed contract."""
