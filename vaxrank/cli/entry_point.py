@@ -544,7 +544,7 @@ _ARG_GROUPS = (
         'output_final_review', 'pdf_backend', 'log_path',
     )),
     ("Reports", (
-        'manufacturability', 'wt_epitopes', 'cosmic_vcf_filename',
+        'manufacturability', 'wt_epitopes',
     )),
     ("Config", (
         'config', 'config_set_overrides', 'config_expr_overrides',
@@ -2056,7 +2056,6 @@ def _run_parsed_cli(args, args_list):
         reviewers=getattr(args, 'output_reviewed_by', '') or '',
         args_for_report=args_for_report,
         input_json_file=getattr(args, 'input_json_file', None),
-        cosmic_vcf_filename=getattr(args, 'cosmic_vcf_filename', ''),
         dna_vaf_by_variant=data.get('dna_vaf_by_variant') or {},
         processing_predictions_by_key=processing_predictions_by_key,
         products=products, product_files=product_files,
