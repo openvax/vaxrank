@@ -488,10 +488,11 @@ def add_output_args(arg_parser):
 
     output_args_group.add_argument(
         "--pdf-backend",
-        choices=["pdfkit", "weasyprint"],
-        default="pdfkit",
-        help="Library to use for PDF generation. 'weasyprint' is experimental "
-             "and does not require wkhtmltopdf (default: pdfkit)")
+        choices=["weasyprint", "pdfkit"],
+        default="weasyprint",
+        help="Library to use for PDF generation. 'weasyprint' (default) renders "
+             "HTML/CSS via Pango/Cairo without wkhtmltopdf; 'pdfkit' is the "
+             "legacy wkhtmltopdf backend.")
 
     output_args_group.add_argument(
         "--output-json-file",

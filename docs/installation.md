@@ -57,17 +57,15 @@ pyensembl install --release 75 --species human
 
 ## PDF reports
 
-PDF generation uses [wkhtmltopdf](https://wkhtmltopdf.org/downloads.html) by
-default. Install a compatible executable and make it available on `PATH`.
-
-Alternatively, pass `--pdf-backend=weasyprint` to use
-[WeasyPrint](https://doc.courtbouillon.org/weasyprint/stable/first_steps.html)
-(experimental). WeasyPrint is installed with Vaxrank but needs system
-libraries such as Pango:
+PDF generation uses [WeasyPrint](https://doc.courtbouillon.org/weasyprint/stable/first_steps.html)
+by default. WeasyPrint is installed with Vaxrank and needs system libraries
+such as Pango and Cairo:
 
 ```sh
 # macOS
 brew install pango
+# Debian / Ubuntu
+sudo apt-get install -y libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf2.0-0
 ```
 
 On Apple Silicon, WeasyPrint loads Pango through dyld, which does not search
@@ -76,6 +74,9 @@ Homebrew's `/opt/homebrew/lib` by default. Add this to your shell profile:
 ```sh
 export DYLD_FALLBACK_LIBRARY_PATH="/opt/homebrew/lib:$DYLD_FALLBACK_LIBRARY_PATH"
 ```
+
+The legacy [wkhtmltopdf](https://wkhtmltopdf.org/downloads.html) backend remains
+available via `--pdf-backend=pdfkit` if `wkhtmltopdf` is installed on `PATH`.
 
 Intel macOS already includes Homebrew's `/usr/local/lib` in dyld's default
 fallback path.
