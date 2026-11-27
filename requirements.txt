@@ -26,9 +26,10 @@ pyensembl>=2.35.0,<3.0.0
 # 11.15.1 restores saved effects without eagerly opening the gene database.
 # 12.0.1 drops deprecated 11.x aliases, adds combine_cis_snvs / spanning-deletion
 # provenance, and keeps make_variants_parser --version opt-in (#759).
-# Exclude 12.4.0: emits DNAHypothesis candidates rejected by topiary 5.121.0
-# (openvax/topiary#635, openvax/vaxrank#945) before 13.0.0 collapsed back to EffectCandidate.
-varcode>=12.0.1,!=12.4.0,<13.0.0
+# 13.0.2 collapses DNAHypothesis back onto EffectCandidate, unifies closed
+# predictions and open rearrangement templates on MutantTranscript, and
+# preserves dna-annotator RNA refinement (openvax/vaxrank#945).
+varcode>=13.0.2,<14.0.0
 # 1.62.2 adds occurrence-scoped RNA support for exported SV ORF placements.
 # 1.61 adds reference-frame ncORF reconstruction. The Isovar input adapters
 # validate each supported result schema; producer evidence is retained losslessly.
@@ -36,7 +37,8 @@ varcode>=12.0.1,!=12.4.0,<13.0.0
 # 1.78 retains Varcode 11 comparisons and filters by aggregate coding potential.
 # 1.90.9 uses shared IUPAC complementation for structural-variant RNA.
 # 1.91.2 lifts the varcode<12 cap to support varcode>=12.0.1.
-isovar>=1.91.2,<2.0.0
+# 1.97.0 adopts varcode>=13.0.2 with EffectCandidate + MutantTranscript support.
+isovar>=1.97.0,<2.0.0
 # 3.33.5 makes bundled YAML loading independent of the host locale.
 mhcgnomes>=3.64.4,<4.0.0
 # 4.8.1 accepts separate --mhc-alleles arguments through the shared parser.
@@ -74,7 +76,8 @@ mhctools>=4.8.1,<5.0.0
 # 5.113.0 exposes the representative-transcript rule shared by CTA and risk
 # protein resolution (vaxrank#836).
 # 5.113.6 lifts the varcode<12 cap to support varcode>=12.0.1.
-topiary>=5.113.6,<6.0.0
+# 5.122.0 adopts varcode>=13.0.2 EffectCandidate / MutantTranscript provenance.
+topiary>=5.122.0,<6.0.0
 jinja2>=3.1
 weasyprint>=62.0
 pdfkit  # legacy: needs wkhtmltopdf, use --pdf-backend=pdfkit to enable

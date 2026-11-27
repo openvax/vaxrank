@@ -269,9 +269,14 @@ def test_dna_fusion_selects_usable_alternative(fusion_candidates, primary_kind):
     assert selection["partner_transcript_id"] == partner.id
     assert selection["five_prime_transcript_id"] == transcript.id
     assert selection["three_prime_transcript_id"] == partner.id
-    assert selection["candidate_path"] == [dict(
-        source="selection-fixture", evidence={"junction": "synthetic", "rna_support": None}),
-        dict(source="varcode", evidence={"sv_type": "BND"})]
+    assert [
+        (item["source"], item["evidence"]) for item in selection["candidate_path"]
+    ] == [
+        ("selection-fixture", {"junction": "synthetic", "rna_support": None}),
+        ("varcode", {"sv_type": "BND"}),
+    ]
+    assert selection["candidate_path"][0]["baseline"]["protein_sequence"] == reference
+    assert selection["candidate_path"][0]["mutant"]["protein_sequence"] == changed
     assert fragment.sequence_source == "varcode_translation"
     assert fragment.rna_evidence_method == fragment.rna_evidence_subject == ""
     assert fragment.n_alt_reads == fragment.n_alt_reads_supporting_protein_sequence == 0

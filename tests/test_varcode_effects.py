@@ -196,12 +196,17 @@ def test_real_splice_outcomes_survive_dna_fallback_and_reporting(
     # Preserve the source products and hypotheses in existing native fragment
     # provenance. There is no reclassification of unknown outcomes as safe.
     path = fragment.dna_effect_selection["candidate_path"]
-    evidence = path[-1]["evidence"]
-    assert path[-1]["source"] == "varcode.transcript_model"
-    assert evidence["probability"] is None
-    assert evidence["outcomes"][0]["baseline"]["cdna_sequence"]
-    assert evidence["outcomes"][0]["mutant"]["protein_sequence"] == priority.mutant_protein_sequence
-    assert evidence["outcomes"][0]["hypothesis"]["splice_plan"]
+    last = path[-1]
+    assert last["source"] == "varcode.dna"
+    assert last["mechanisms"] == ["exon_skip"]
+    assert "splicing" in last["uncertainty"]
+    assert last["baseline"]["cdna_sequence"]
+    assert last["mutant"]["protein_sequence"] == priority.mutant_protein_sequence
+    assert last["mutant"]["evidence"]["splice_choices"]
+    assert last["mutant"]["evidence"]["exon_runs"]
+    assert "genomic_positions" not in last["mutant"]["evidence"]
+    assert last["mutant"]["evidence"]["genomic_positions_count"] > 0
+    assert last["mutant"]["evidence"]["genomic_positions_sha256"]
     restored = MutantProteinFragment.from_json(fragment.to_json())
     assert restored.dna_effect_selection == fragment.dna_effect_selection
     assert restored.predicted_effect().mutant_protein_sequence == priority.mutant_protein_sequence
@@ -256,4 +261,11 @@ def test_shared_candidate_paths_preserve_nested_provenance_and_unknown_cycles():
     assert [[c.source for c in path] for _effect, path in paths] == [
         ["outer", "first"], ["outer", "second"], ["outer", "cycle"]]
     assert varcode_candidate_provenance(paths[0][1][0]) == dict(
-        source="outer", evidence={"sample": "x"})
+        source="outer",
+        mechanisms=[],
+        phase=[],
+        uncertainty=[],
+        baseline={"cdna_sequence": None, "protein_sequence": None},
+        mutant={"cdna_sequence": None, "protein_sequence": None},
+        evidence={"sample": "x"},
+    )

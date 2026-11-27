@@ -803,7 +803,9 @@ def test_external_filter_excluding_every_group_produces_no_ranked_vaccine(
     monkeypatch.setattr(
         external_input,
         "resolve_external_transcripts",
-        lambda transcript_ids, _genome: [object()] if transcript_ids else [],
+        lambda transcript_ids, _genome: (
+            [SimpleNamespace(gene=None)] if transcript_ids else []
+        ),
     )
 
     lens_path = tmp_path / "fully-filtered.tsv"
@@ -961,7 +963,9 @@ def test_lens_input_summary_reduces_all_rows_before_construct_checks(
     monkeypatch.setattr(
         external_input,
         "resolve_external_transcripts",
-        lambda transcript_ids, _genome: [object()] if transcript_ids else [],
+        lambda transcript_ids, _genome: (
+            [SimpleNamespace(gene=None)] if transcript_ids else []
+        ),
     )
     lens_path = tmp_path / "all-row-summary.tsv"
     lens_path.write_text(
@@ -1087,7 +1091,9 @@ def test_pvacseq_input_summary_reduces_all_rows_before_selection(
     monkeypatch.setattr(
         external_input,
         "resolve_external_transcripts",
-        lambda transcript_ids, _genome: [object()] if transcript_ids else [],
+        lambda transcript_ids, _genome: (
+            [SimpleNamespace(gene=None)] if transcript_ids else []
+        ),
     )
     path = write_multi_peptide_pvacseq_fixture(
         tmp_path / "multi-row-summary-pvacseq.tsv")
