@@ -105,3 +105,5 @@ packaging>=21.0
 pyahocorasick>=2.0,<3
 # Protein alignments in the biological report (display only).
 biopython>=1.83,<2
+# Progress bars for slow CLI and reference-index steps (vaxrank/progress.py, #783).
+tqdm>=4.60.0

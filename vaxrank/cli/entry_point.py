@@ -1142,25 +1142,44 @@ def warn_if_no_vaccine_peptides(patient_info):
 
 
 def pepsickle_installed():
-    """Whether mhctools can run pepsickle: here, or in the interpreter it is pointed at.
+    """Single source of truth lives in ``vaxrank.processing`` (#783)."""
+    from ..processing import pepsickle_installed as _pepsickle_installed
+    return _pepsickle_installed()
 
-    mhctools runs inference in the interpreter named by ``PEPSICKLE_PYTHON`` (or
-    ``PEPSICKLE_GB_PYTHON`` for the gradient-boosted model) when either is set, so
-    the parent process need not be able to import it.
+
+def _explicit_processing_aware_requested(args_or_list):
+    """Return True when ``--processing-aware-annotation`` was explicitly enabled.
+
+    Accepts a parsed ``argparse.Namespace`` (preferred, using
+    ``_explicit_cli_args`` and the resolved boolean value so prefix
+    abbreviations like ``--processing-aware`` and trailing
+    ``--no-processing-aware-annotation`` overrides both work accurately, #783)
+    or a raw ``argv`` sequence for legacy callers.
     """
-    from importlib.util import find_spec
-    return (find_spec('pepsickle') is not None
-            or bool(os.environ.get('PEPSICKLE_PYTHON') or os.environ.get('PEPSICKLE_GB_PYTHON')))
+    if isinstance(args_or_list, (list, tuple)):
+        requested = False
+        for token in args_or_list:
+            if not isinstance(token, str) or not token.startswith('--'):
+                continue
+            if '--processing-aware-annotation'.startswith(token) and len(token) >= len('--processing'):
+                requested = True
+            elif '--no-processing-aware-annotation'.startswith(token) and len(token) >= len('--no-processing'):
+                requested = False
+        return requested
+    return (
+        'processing_aware_annotation' in getattr(args_or_list, '_explicit_cli_args', ())
+        and bool(getattr(args_or_list, 'processing_aware_annotation', False))
+    )
 
 
-def require_pepsickle_if_requested(args_list):
-    """Fail in the first second if ``--processing-aware-annotation`` was asked for by name
-    but pepsickle is not installed (openvax/vaxrank#770).
+def require_pepsickle_if_requested(args_or_list):
+    """Fail in the first second if ``--processing-aware-annotation`` was explicitly enabled
+    but pepsickle is not installed (openvax/vaxrank#770, #783).
 
     The flag defaults on, so a missing optional install must not fail by default;
     that case is handled, with one INFO line, where annotation would actually run.
     """
-    if '--processing-aware-annotation' in args_list and not pepsickle_installed():
+    if _explicit_processing_aware_requested(args_or_list) and not pepsickle_installed():
         raise ValueError(
             "--processing-aware-annotation: pepsickle is not installed. "
             "Install it with `pip install mhctools[pepsickle]` or drop the flag.")
@@ -1177,16 +1196,19 @@ def processing_annotation_available():
     return False
 
 
-# Input flags whose value is a local file, and those whose value is a directory.
+# Input flags whose value is a local file, a directory, or either.
 # ``--host-reference`` and ``--reference-context`` are left out on purpose: they
 # can name a snapshot rather than a path.
+# ``--prediction-cache`` accepts either a single file or a partitioned Parquet
+# dataset directory supported by topiary (#783).
 _INPUT_FILE_FLAGS = (
     'vcf', 'maf', 'bam', 'json_variants', 'germline_vcf', 'genome_fasta', 'mhc_alleles_file',
     'mhc_allele_status', 'selection_overrides', 'clonality_input', 'cn_segments',
-    'prediction_cache', 'input_epitopes', 'input_pvacseq', 'input_lens', 'input_antigens',
+    'input_epitopes', 'input_pvacseq', 'input_lens', 'input_antigens',
     'input_isovar', 'input_manifest', 'input_cta_expression', 'input_topiary',
     'input_json_file', 'patient_background_pairs')
 _INPUT_DIRECTORY_FLAGS = ('hitlist_evidence_bundle',)
+_INPUT_FILE_OR_DIRECTORY_FLAGS = ('prediction_cache',)
 
 
 def validate_input_paths(args):
@@ -1196,7 +1218,11 @@ def validate_input_paths(args):
     and Ensembl load, with no hint which flag it belonged to (openvax/vaxrank#769).
     Values containing ``://`` are remote and left to their reader.
     """
-    for attrs, want_directory in ((_INPUT_FILE_FLAGS, False), (_INPUT_DIRECTORY_FLAGS, True)):
+    for attrs, want_directory in (
+        (_INPUT_FILE_FLAGS, False),
+        (_INPUT_DIRECTORY_FLAGS, True),
+        (_INPUT_FILE_OR_DIRECTORY_FLAGS, None),
+    ):
         for attr in attrs:
             value = getattr(args, attr, None)
             for path in ([value] if isinstance(value, str) else value if isinstance(value, list) else []):
@@ -1204,8 +1230,12 @@ def validate_input_paths(args):
                     continue
                 flag = '--' + attr.replace('_', '-')
                 if not os.path.exists(path):
-                    raise ValueError("%s: no such %s: %r" % (flag, 'directory' if want_directory else 'file', path))
-                if os.path.isdir(path) != want_directory:
+                    expected_kind = (
+                        'file or directory' if want_directory is None
+                        else 'directory' if want_directory else 'file'
+                    )
+                    raise ValueError("%s: no such %s: %r" % (flag, expected_kind, path))
+                if want_directory is not None and os.path.isdir(path) != want_directory:
                     raise ValueError("%s: %r is a %s, expected a %s" % (
                         flag, path, 'directory' if os.path.isdir(path) else 'file',
                         'directory' if want_directory else 'file'))
@@ -1714,7 +1744,7 @@ def _run_parsed_cli(args, args_list):
         validate_allele_arguments(args)
     # Decide now, not after the pipeline, so an explicit request for a missing
     # optional install fails in the first second.
-    require_pepsickle_if_requested(args_list)
+    require_pepsickle_if_requested(args)
     confirm_output_dir_overwrite(args)
 
     # Every producer enters the same evidence scoring, selection and output
@@ -1730,7 +1760,7 @@ def _run_parsed_cli(args, args_list):
         ranked_variants_with_vaccine_peptides = data['variants']
         patient_info = data['patient_info']
         if (report_df.attrs.get('saved_evidence_input')
-                and '--processing-aware-annotation' not in args_list):
+                and not _explicit_processing_aware_requested(args)):
             args.processing_aware_annotation = False
         if not ranked_variants_with_vaccine_peptides:
             logger.warning(

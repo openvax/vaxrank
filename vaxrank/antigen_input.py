@@ -185,10 +185,15 @@ class AntigenDataset:
         missing = [name for name in ('patient_id', 'reference_assembly', 'mhc_alleles')
                    if getattr(scope, name) is None]
         if missing:
-            raise ValueError(
-                'Antigen prediction requires declared ' + ', '.join(missing) + '. Declare them in the '
-                "antigen input's scope or in an --input-manifest; --output-patient-id only "
-                'labels the report and does not declare it.')
+            message = (
+                'Antigen prediction requires declared ' + ', '.join(missing)
+                + ". Declare them in the antigen input's scope or in an --input-manifest"
+            )
+            if 'mhc_alleles' in missing:
+                message += ' (or pass --mhc-alleles for alleles)'
+            if 'patient_id' in missing:
+                message += '; --output-patient-id only labels the report and does not declare patient_id'
+            raise ValueError(message + '.')
         if genome is None and host_reference is None:
             raise ValueError('New antigen predictions require a host annotation for exact-self assessment')
         validate_input_scopes([InputProvenance('validation', 'antigens', '', '', scope)],

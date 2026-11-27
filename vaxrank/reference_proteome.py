@@ -741,8 +741,6 @@ class ReferenceProteome:
 
         if exclude_cta_genes:
             cta_gene_ids = cta_source_gene_ids_for_genome(genome)
-            logger.info(
-                "Excluding %d oncoref CTA source gene IDs", len(cta_gene_ids))
             all_exclude_ids.update(cta_gene_ids)
 
         # With no exclusions this is exactly the ordinary reference proteome;
@@ -754,22 +752,43 @@ class ReferenceProteome:
                 max_kmer_length=max_kmer_length,
             )
 
-        proteins = genome_protein_dict(
-            genome, exclude_gene_ids=all_exclude_ids)
+        frozen_exclude_ids = frozenset(all_exclude_ids)
+        identity_cache_key = None
         cache_key = None
         kmer_set = None
 
         if not exclude_fasta:
             from oncoref.gene_identity import GENE_IDENTITY_CONTRACT_VERSION
-            cache_key = (
-                GENE_IDENTITY_CONTRACT_VERSION,
-                _protein_content_digest(proteins),
-                frozenset(all_exclude_ids),
-                min_kmer_length,
-                max_kmer_length,
-            )
-            with _filtered_kmer_set_cache_lock:
-                kmer_set = _filtered_kmer_set_cache.get(cache_key)
+            genome_identity = ensembl_dataset_cache_identity(genome)
+            if genome_identity is not None:
+                identity_cache_key = (
+                    GENE_IDENTITY_CONTRACT_VERSION,
+                    "genome_identity",
+                    genome_identity,
+                    frozen_exclude_ids,
+                    min_kmer_length,
+                    max_kmer_length,
+                )
+                with _filtered_kmer_set_cache_lock:
+                    kmer_set = _filtered_kmer_set_cache.get(identity_cache_key)
+
+        if kmer_set is None:
+            if exclude_cta_genes:
+                logger.info(
+                    "Excluding %d oncoref CTA source gene IDs", len(cta_gene_ids))
+            proteins = genome_protein_dict(
+                genome, exclude_gene_ids=all_exclude_ids)
+            if not exclude_fasta:
+                from oncoref.gene_identity import GENE_IDENTITY_CONTRACT_VERSION
+                cache_key = (
+                    GENE_IDENTITY_CONTRACT_VERSION,
+                    _protein_content_digest(proteins),
+                    frozen_exclude_ids,
+                    min_kmer_length,
+                    max_kmer_length,
+                )
+                with _filtered_kmer_set_cache_lock:
+                    kmer_set = _filtered_kmer_set_cache.get(cache_key)
 
         if kmer_set is None:
             if exclude_fasta:
@@ -785,8 +804,12 @@ class ReferenceProteome:
 
             kmer_set = extract_kmers(
                 set(proteins.values()), min_kmer_length, max_kmer_length)
-            if not exclude_fasta:
-                with _filtered_kmer_set_cache_lock:
+
+        if not exclude_fasta:
+            with _filtered_kmer_set_cache_lock:
+                if identity_cache_key is not None:
+                    _filtered_kmer_set_cache[identity_cache_key] = kmer_set
+                if cache_key is not None:
                     _filtered_kmer_set_cache[cache_key] = kmer_set
 
         obj = cls.__new__(cls)
@@ -794,7 +817,7 @@ class ReferenceProteome:
         obj.min_kmer_length = min_kmer_length
         obj.max_kmer_length = max_kmer_length
         obj._kmer_set = kmer_set
-        obj.excluded_gene_ids = frozenset(all_exclude_ids)
+        obj.excluded_gene_ids = frozen_exclude_ids
         return obj
 
     def contains(self, peptide: str) -> bool:

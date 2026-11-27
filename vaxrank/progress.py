@@ -2,7 +2,8 @@
 
 Bars go to stderr and switch themselves off when stderr is not a terminal, so a
 redirected or CI log gets the INFO status lines but no carriage-return spam
-(openvax/vaxrank#460).
+(openvax/vaxrank#460). In Jupyter notebooks, ``tqdm.auto`` renders notebook
+progress bars even though ``sys.stderr.isatty()`` is ``False`` (#783).
 """
 
 import logging
@@ -11,11 +12,38 @@ import time
 from contextlib import contextmanager
 
 from tqdm import tqdm
+from tqdm.contrib.logging import logging_redirect_tqdm
+
+
+def _in_jupyter_notebook() -> bool:
+    """Return True when running inside an active Jupyter notebook kernel."""
+    ipython = sys.modules.get("IPython")
+    if ipython is None:
+        return False
+    get_ipython = getattr(ipython, "get_ipython", None)
+    if not callable(get_ipython):
+        return False
+    shell = get_ipython()
+    return shell is not None and type(shell).__name__ == "ZMQInteractiveShell"
 
 
 def progress(iterable, desc, unit, **kwargs):
-    """``tqdm`` with vaxrank's defaults: stderr only, auto-disabled off a terminal."""
-    return tqdm(iterable, desc=desc, unit=unit, file=sys.stderr, disable=None, **kwargs)
+    """``tqdm`` with vaxrank's defaults: stderr only, auto-disabled off a terminal,
+    and enabled in Jupyter notebooks."""
+    if _in_jupyter_notebook():
+        from tqdm.auto import tqdm as auto_tqdm
+        kwargs.setdefault("disable", False)
+        return auto_tqdm(iterable, desc=desc, unit=unit, **kwargs)
+    kwargs.setdefault("file", sys.stderr)
+    kwargs.setdefault("disable", None)
+    return tqdm(iterable, desc=desc, unit=unit, **kwargs)
+
+
+@contextmanager
+def redirect_logging_for_progress(loggers=None):
+    """Route console log lines through ``tqdm.write`` so progress bars stay intact."""
+    with logging_redirect_tqdm(loggers=loggers):
+        yield
 
 
 @contextmanager

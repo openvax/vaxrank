@@ -36,6 +36,7 @@ from .report_grouping import (group_report_evidence, prediction_origins, predict
                              window_measurements_key)
 from .prediction_input import finite_prediction_value
 from .processing import PEPSICKLE_PREDICTOR_NAME, resolve_peptide_offset
+from .progress import timed_step
 from .report_display import (
     compact_allele,
     compact_manufacturability,
@@ -1760,20 +1761,26 @@ def make_pdf_report(
         template_data,
         pdf_report_path,
         backend='pdfkit'):
+    if backend not in ('pdfkit', 'weasyprint'):
+        raise ValueError(
+            "Unknown PDF backend: %s (choose 'pdfkit' or 'weasyprint')" % backend)
     ensure_parent_dir(pdf_report_path)
-    logger.info('Rendering PDF report with %s (a few seconds to a minute for large reports)', backend)
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.html') as f:
-        pdf_template_data = dict(template_data, interactive_review_html=False)
-        render_report(pdf_template_data, f, 'templates/template.html')
-        f.flush()
+    with timed_step(
+        logger,
+        'Rendering PDF report with %s to %s (a few seconds to a minute for large reports)',
+        'Wrote PDF report with %s to %s in %.0fs',
+        backend,
+        pdf_report_path,
+    ):
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.html') as f:
+            pdf_template_data = dict(template_data, interactive_review_html=False)
+            render_report(pdf_template_data, f, 'templates/template.html')
+            f.flush()
 
-        if backend == 'pdfkit':
-            _pdf_via_pdfkit(f.name, pdf_report_path)
-        elif backend == 'weasyprint':
-            _pdf_via_weasyprint(f.name, pdf_report_path)
-        else:
-            raise ValueError("Unknown PDF backend: %s (choose 'pdfkit' or 'weasyprint')" % backend)
-    logger.info('Wrote PDF report to %s (backend=%s)', pdf_report_path, backend)
+            if backend == 'pdfkit':
+                _pdf_via_pdfkit(f.name, pdf_report_path)
+            else:
+                _pdf_via_weasyprint(f.name, pdf_report_path)
 
 def new_columns():
     """Stable candidate-window schema, including successful empty results."""
