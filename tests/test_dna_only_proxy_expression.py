@@ -71,13 +71,9 @@ def test_dna_effect_selection_compacts_genomic_positions(human_genome_grch37):
 
     keys = {k for k, _ in _walk_keys(selection)}
     assert "genomic_positions" not in keys
-    assert "genomic_positions_count" in keys
-    assert "genomic_positions_sha256" in keys
-    assert "exon_runs" in keys
 
     native_payload = to_native_json(fragment)
     assert '"genomic_positions"' not in native_payload
-    assert '"genomic_positions_sha256"' in native_payload
 
     # Exact deterministic round-trip matching still works after both JSON codecs
     for restored in (
@@ -88,6 +84,38 @@ def test_dna_effect_selection_compacts_genomic_positions(human_genome_grch37):
         eff = restored.predicted_effect()
         assert eff is not None
         assert eff.short_description == "p.V600E"
+
+    # Splice outcomes under default varcode.dna AND explicit transcript_model
+    # both omit raw per-base genomic_positions while retaining count + SHA-256
+    # + exon_runs.
+    splice_variant = varcode.Variant("7", 117171168, "G", "T", human_genome_grch37)
+    splice_fragment = MutantProteinFragment.from_variant_dna(
+        splice_variant,
+        protein_sequence_length=35,
+        effects=[splice_variant.effects().top_priority_effect()],
+    )
+    assert splice_fragment is not None
+    splice_keys = {k for k, _ in _walk_keys(splice_fragment.dna_effect_selection)}
+    assert "genomic_positions" not in splice_keys
+    assert "genomic_positions_count" in splice_keys
+    assert "genomic_positions_sha256" in splice_keys
+    assert "exon_runs" in splice_keys
+
+    with varcode.use_annotator("transcript_model"):
+        tm_fragment = MutantProteinFragment.from_variant_dna(
+            variant,
+            protein_sequence_length=35,
+            effects=[variant.effects().top_priority_effect()],
+        )
+    assert tm_fragment is not None
+    tm_keys = {k for k, _ in _walk_keys(tm_fragment.dna_effect_selection)}
+    assert "genomic_positions" not in tm_keys
+    assert "genomic_positions_count" in tm_keys
+    assert "genomic_positions_sha256" in tm_keys
+    assert "exon_runs" in tm_keys
+    tm_native = to_native_json(tm_fragment)
+    assert '"genomic_positions"' not in tm_native
+    assert '"genomic_positions_sha256"' in tm_native
 
 
 # ---------------------------------------------------------------------------

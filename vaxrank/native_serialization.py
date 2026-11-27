@@ -59,7 +59,14 @@ def _varcode_graph_classes():
         "ClassifiedOutcome EffectHypothesis RealizedEffectCandidate RealizedTranscriptProduct "
         "SpliceOption SplicePlan SpliceSiteKey SpliceAxis").split()]
     classes += [getattr(mutant_transcript, name) for name in (
-        "MutantTranscript ReferenceSegment TranscriptEdit _AssembledAllele").split()]
+        "MutantTranscript ReferenceSegment TranscriptEdit").split()]
+    assembled = getattr(
+        mutant_transcript,
+        "AssembledAllele",
+        getattr(mutant_transcript, "_AssembledAllele", None),
+    )
+    if assembled is not None:
+        classes.append(assembled)
     classes += [EffectCandidate, SpliceOutcomeSet, _EffectReference]
     return {(cls.__module__, cls.__name__): cls for cls in classes}
 

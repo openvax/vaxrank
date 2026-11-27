@@ -115,10 +115,25 @@ def _trim_three_prime_partner_suffix(protein, start, end, effect, *, min_match=5
     return end
 
 
+def _compact_product_evidence(product):
+    """Replace per-base genomic_positions arrays with count + SHA-256."""
+    if not isinstance(product, dict):
+        return
+    product_ev = product.get("evidence")
+    if not isinstance(product_ev, dict):
+        return
+    positions = product_ev.get("genomic_positions")
+    if isinstance(positions, (list, tuple)):
+        encoded = json.dumps(positions, separators=(",", ":")).encode("ascii")
+        product_ev.pop("genomic_positions")
+        product_ev["genomic_positions_count"] = len(positions)
+        product_ev["genomic_positions_sha256"] = hashlib.sha256(encoded).hexdigest()
+
+
 def _compact_candidate_provenance(candidate):
     """Retain candidate provenance without per-base genomic coordinate arrays.
 
-    Varcode's ``RealizedTranscriptProduct.evidence`` carries a per-base
+    Varcode's transcript-product ``evidence`` can carry a per-base
     ``genomic_positions`` list with one entry per cDNA nucleotide (e.g. >200k
     integers for ``TTN`` across baseline + mutant), while ``exon_runs`` already
     records the exact exon coordinate intervals. Replacing ``genomic_positions``
@@ -126,6 +141,11 @@ def _compact_candidate_provenance(candidate):
     avoiding multi-megabyte JSON bloat per variant (openvax/vaxrank#908).
     """
     record = varcode_candidate_provenance(candidate)
+    # Varcode 13+ EffectCandidate provenance puts baseline/mutant at top level.
+    for side in ("baseline", "mutant"):
+        _compact_product_evidence(record.get(side))
+    # Explicit transcript_model RealizedEffectCandidate provenance nests them
+    # under evidence.outcomes[*].
     evidence = record.get("evidence")
     outcomes = evidence.get("outcomes") if isinstance(evidence, dict) else None
     if isinstance(outcomes, list):
@@ -133,18 +153,7 @@ def _compact_candidate_provenance(candidate):
             if not isinstance(outcome, dict):
                 continue
             for side in ("baseline", "mutant"):
-                product = outcome.get(side)
-                if not isinstance(product, dict):
-                    continue
-                product_ev = product.get("evidence")
-                if not isinstance(product_ev, dict):
-                    continue
-                positions = product_ev.get("genomic_positions")
-                if isinstance(positions, (list, tuple)):
-                    encoded = json.dumps(positions, separators=(",", ":")).encode("ascii")
-                    product_ev.pop("genomic_positions")
-                    product_ev["genomic_positions_count"] = len(positions)
-                    product_ev["genomic_positions_sha256"] = hashlib.sha256(encoded).hexdigest()
+                _compact_product_evidence(outcome.get(side))
     return record
 
 
@@ -184,9 +193,15 @@ def _dna_protein_candidates(variant, effects=None):
             protein = getattr(effect, "mutant_protein_sequence", None)
             if protein is None and model is not None:
                 protein = model.mutant_protein_sequence
+            has_enumerated_outcome = any(
+                isinstance(c, RealizedEffectCandidate)
+                or bool(getattr(c, "mechanisms", None))
+                or bool(getattr(c, "uncertainty", None))
+                for c in path
+            )
             if (protein is None and not structural
                     and not isinstance(effect, SpliceMechanismEffect)
-                    and not any(isinstance(c, RealizedEffectCandidate) for c in path)):
+                    and not has_enumerated_outcome):
                 model = apply_variant_to_transcript(variant, transcript)
                 if model is not None:
                     protein = model.mutant_protein_sequence
