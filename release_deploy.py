@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 from secrets import token_hex
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -26,12 +27,39 @@ from release_upload import (
 )
 
 
+DEFAULT_GIT_TIMEOUT_SECONDS = 30.0
+_TERMINATE_GRACE_SECONDS = 2.0
+
+
+def _terminate_process_group(proc):
+    """Terminate and reap only the owned subprocess group spawned by ``git``."""
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError, OSError):
+        try:
+            proc.terminate()
+        except OSError:
+            pass
+    try:
+        return proc.communicate(timeout=_TERMINATE_GRACE_SECONDS)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError, OSError):
+            try:
+                proc.kill()
+            except OSError:
+                pass
+        return proc.communicate()
+
+
 @dataclass
 class Release:
     repo: Path
     project: str
     version: str
     verify_timeout_seconds: float = DEFAULT_VERIFY_TIMEOUT_SECONDS
+    git_timeout_seconds: float = DEFAULT_GIT_TIMEOUT_SECONDS
 
     @property
     def tag(self):
@@ -49,10 +77,25 @@ class Release:
     def filenames(self):
         return expected_release_filenames(self.project, self.version)
 
-    def git(self, *args, input=None, check=True):
-        result = subprocess.run(
-            ["git", "-C", str(self.repo), *args], input=input,
-            capture_output=True, text=True, check=False)
+    def git(self, *args, input=None, check=True, timeout_seconds=None):
+        cmd = ["git", "-C", str(self.repo), *args]
+        timeout = self.git_timeout_seconds if timeout_seconds is None else timeout_seconds
+        proc = subprocess.Popen(
+            cmd,
+            stdin=subprocess.PIPE if input is not None else subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+        )
+        try:
+            stdout, stderr = proc.communicate(input=input, timeout=timeout)
+            result = subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)
+        except subprocess.TimeoutExpired:
+            stdout, stderr = _terminate_process_group(proc)
+            timeout_note = "git %s timed out after %.1fs" % (" ".join(args), timeout)
+            combined_stderr = (stderr.strip() + "\n" + timeout_note).strip()
+            result = subprocess.CompletedProcess(cmd, 124, stdout or "", combined_stderr)
         if check and result.returncode:
             raise ReleaseUploadError(result.stderr.strip() or result.stdout.strip())
         return result
@@ -268,8 +311,13 @@ def main(argv=None):
     parser.add_argument("--version", required=True)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
-    release = Release(Path.cwd(), args.project, args.version,
-                      float(os.environ.get("VAXRANK_VERIFY_TIMEOUT_SECONDS", DEFAULT_VERIFY_TIMEOUT_SECONDS)))
+    release = Release(
+        Path.cwd(),
+        args.project,
+        args.version,
+        float(os.environ.get("VAXRANK_VERIFY_TIMEOUT_SECONDS", DEFAULT_VERIFY_TIMEOUT_SECONDS)),
+        float(os.environ.get("VAXRANK_GIT_TIMEOUT_SECONDS", DEFAULT_GIT_TIMEOUT_SECONDS)),
+    )
     upload_timeout = float(os.environ.get("VAXRANK_UPLOAD_TIMEOUT_SECONDS", DEFAULT_UPLOAD_TIMEOUT_SECONDS))
 
     def build_artifacts(output):

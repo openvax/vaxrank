@@ -392,3 +392,97 @@ def test_cli_dry_run_drives_build_and_check_without_publication(releases, monkey
 def test_git_helper_reports_captured_stderr_on_failure(tmp_path):
     with pytest.raises(AssertionError, match="stderr:"):
         git(tmp_path, "rev-parse", "--verify", "refs/heads/does-not-exist")
+
+
+def test_git_timeout_terminates_owned_subprocess_tree_and_reaps(releases, tmp_path):
+    """#744: a hung git subprocess and its child tree are terminated and reaped on timeout."""
+    import os
+    import time
+
+    release = releases[0]
+    child_pid_file = tmp_path / "child.pid"
+    hang_script = (
+        "python3 -c \""
+        "import subprocess, time, pathlib; "
+        "p = subprocess.Popen(['sleep', '60']); "
+        f"pathlib.Path({str(child_pid_file)!r}).write_text(str(p.pid)); "
+        "p.wait()\""
+    )
+    release.git_timeout_seconds = 0.4
+    result = release.git("-c", "alias.hang=!" + hang_script, "hang", check=False)
+    assert result.returncode == 124
+    assert "timed out after 0.4s" in result.stderr
+
+    # Wait briefly for OS reaping and confirm the child process is gone.
+    if child_pid_file.exists():
+        child_pid = int(child_pid_file.read_text().strip())
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline:
+            try:
+                os.kill(child_pid, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.05)
+        with pytest.raises(ProcessLookupError):
+            os.kill(child_pid, 0)
+
+
+def test_push_timeout_after_remote_accepted_reconciles_claim_and_release_tag(
+    releases, package_io, monkeypatch
+):
+    """#744: timed-out lock push and release-tag push still reconcile when remote accepted."""
+    io, published, builds, uploads = package_io
+    release = releases[0]
+    original_git = Release.git
+    timed_out_pushes = []
+
+    def push_times_out_after_remote_accepts(self, *args, **kwargs):
+        result = original_git(self, *args, **kwargs)
+        if "push" in args and (
+            any(str(a).startswith("--force-with-lease=" + self.lock_ref + ":") for a in args)
+            or self.tag_ref in args
+        ):
+            timed_out_pushes.append(args)
+            return subprocess.CompletedProcess(
+                ["git", *args], 124, "", "git push timed out after 0.5s"
+            )
+        return result
+
+    monkeypatch.setattr(Release, "git", push_times_out_after_remote_accepts)
+    deploy(release, **io)
+    # Claim push, release-tag push, and lock-deletion push all timed out after
+    # the remote accepted them and were reconciled cleanly.
+    assert len(timed_out_pushes) == 3
+    assert len(builds) == 1 and len(uploads) == 2
+    assert set(published) == release.filenames
+    assert release.remote_ref(release.lock_ref) is None
+    assert release.remote_ref(release.tag_ref) == release.local_tag()
+
+
+def test_push_timeout_with_unrelated_owner_never_steals_claim(
+    releases, package_io, monkeypatch
+):
+    """#744: a timed-out claim push must not steal ownership held by another deploy."""
+    io, _, builds, uploads = package_io
+    first, second = releases
+    head = first.preflight()
+    first_owner = first.acquire(head, io["fetch_artifacts"], wait_seconds=5, poll_seconds=0.05)
+    assert first_owner is not None
+
+    original_git = Release.git
+
+    def timed_out_claim(self, *args, **kwargs):
+        if self is second and "push" in args and any(
+            str(a).startswith("--force-with-lease=" + self.lock_ref + ":") for a in args
+        ):
+            return subprocess.CompletedProcess(
+                ["git", *args], 124, "", "git push timed out after 0.5s"
+            )
+        return original_git(self, *args, **kwargs)
+
+    monkeypatch.setattr(Release, "git", timed_out_claim)
+    with pytest.raises(ReleaseUploadError, match="Another deploy owns"):
+        deploy(second, **io, wait_seconds=0.05, poll_seconds=0.01)
+    assert not builds and not uploads
+    assert first.remote_ref(first.lock_ref) == first_owner
+    first.release_owner(first_owner)
