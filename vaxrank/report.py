@@ -1760,10 +1760,10 @@ def _pdf_via_weasyprint(html_path, pdf_report_path):
 def make_pdf_report(
         template_data,
         pdf_report_path,
-        backend='pdfkit'):
+        backend='weasyprint'):
     if backend not in ('pdfkit', 'weasyprint'):
         raise ValueError(
-            "Unknown PDF backend: %s (choose 'pdfkit' or 'weasyprint')" % backend)
+            "Unknown PDF backend: %s (choose 'weasyprint' or 'pdfkit')" % backend)
     ensure_parent_dir(pdf_report_path)
     with timed_step(
         logger,

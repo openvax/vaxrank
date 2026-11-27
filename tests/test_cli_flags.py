@@ -498,3 +498,15 @@ def test_cosmic_vcf_filename_flag_removed_and_hotspots_retained():
     )
     assert "Cancer Hotspots" in databases
     assert "COSMIC" not in databases
+
+
+def test_pdf_backend_defaults_to_weasyprint():
+    """#452: weasyprint is the default PDF backend; pdfkit remains opt-in."""
+    import inspect
+    from vaxrank.report import make_pdf_report
+
+    parser = make_vaxrank_arg_parser()
+    assert parser.get_default("pdf_backend") == "weasyprint"
+    assert inspect.signature(make_pdf_report).parameters["backend"].default == "weasyprint"
+    parsed_legacy = parser.parse_args(["--mhc-predictor", "random", "--pdf-backend", "pdfkit"])
+    assert parsed_legacy.pdf_backend == "pdfkit"

@@ -130,7 +130,7 @@ def _basic_args(**overrides):
         output_json_file='', output_passing_variants_csv='',
         output_isovar_csv='', output_epitopes='',
         output_patient_id='', output_reviewed_by='',
-        output_final_review='', pdf_backend='pdfkit',
+        output_final_review='', pdf_backend='weasyprint',
         log_path='python.log',
         manufacturability=None, wt_epitopes=True,
         max_sources=None,

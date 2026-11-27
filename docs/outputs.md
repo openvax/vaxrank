@@ -18,7 +18,7 @@ classification rule.
 |---|---|
 | `--output-ascii-report` | Plain-text summary |
 | `--output-html-report` | HTML report |
-| `--output-pdf-report` | PDF report (wkhtmltopdf or WeasyPrint backend) |
+| `--output-pdf-report` | PDF report (WeasyPrint default; legacy `--pdf-backend=pdfkit` opt-in) |
 | `--output-xlsx-report` | Ranked candidate windows: All sheet and one sheet per source |
 | `--output-csv` | The same ranked candidate rows and columns as the workbook |
 | `--output-json-file` | Explicit legacy ranked-object JSON export |
