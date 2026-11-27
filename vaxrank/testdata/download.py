@@ -272,8 +272,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="vaxrank-test-data", description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
-    from ..cli.companion import add_version_argument
-    add_version_argument(parser)
+    from ..version import __version__
+    parser.add_argument("--version", action="version", version="%(prog)s " + __version__)
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST,
                         help="Custom test-data manifest; omit for the Sid retrieval cases")
     parser.add_argument("--output", type=Path, help="New directory to export, or an existing identical dataset to verify")

@@ -71,8 +71,10 @@ launcher + subprocess module here; now it just sets the kwarg.
 Issue: openvax/vaxrank#249.
 """
 
+import importlib.util
 import logging
 import math
+import os
 
 from mhctools.processing_predictor import ProcessingPredictor
 
@@ -122,6 +124,19 @@ def processing_component_probabilities(seq_probs, start, length):
 # Pepsickle invocation (delegates to mhctools' built-in subprocess isolation)
 # ----------------------------------------------------------------------------
 
+def pepsickle_installed():
+    """Single source of truth for whether ``pepsickle`` is available to run.
+
+    ``mhctools.Pepsickle`` imports ``pepsickle`` lazily on first use, or shells
+    out to ``PEPSICKLE_PYTHON`` / ``PEPSICKLE_GB_PYTHON`` when configured
+    (openvax/vaxrank#783).
+    """
+    return (
+        importlib.util.find_spec('pepsickle') is not None
+        or bool(os.environ.get('PEPSICKLE_PYTHON') or os.environ.get('PEPSICKLE_GB_PYTHON'))
+    )
+
+
 def load_default_processing_predictor(human_only=False, threshold=0.5):
     """Construct an ``mhctools.Pepsickle`` with subprocess isolation
     on, or return ``None`` if mhctools / pepsickle isn't installed.
@@ -131,6 +146,12 @@ def load_default_processing_predictor(human_only=False, threshold=0.5):
     libomp doesn't clash with the parent's pandas / numpy / pyarrow
     libomp on macOS (issue #266).
     """
+    if not pepsickle_installed():
+        logger.info(
+            "pepsickle is not installed; skipping proteasome-cleavage "
+            "annotation. Install with `pip install mhctools[pepsickle]` or "
+            "pass --no-processing-aware-annotation.")
+        return None
     try:
         from mhctools import Pepsickle
     except ImportError as e:

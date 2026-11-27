@@ -350,6 +350,40 @@ def test_asking_for_pepsickle_by_name_fails_when_it_is_missing(monkeypatch):
         entry_point.require_pepsickle_if_requested(["--processing-aware-annotation"])
 
 
+def test_processing_aware_prefix_and_override_respect_parsed_value(tmp_path, monkeypatch, capsys):
+    """#783: --processing-aware prefix fails fast; trailing --no-processing-aware-annotation wins."""
+    _without_pepsickle(monkeypatch)
+
+    def must_not_run(args):
+        raise AssertionError("pipeline started before pepsickle availability was checked")
+
+    monkeypatch.setattr("varcode.cli.variant_collection_from_args", must_not_run)
+    with pytest.raises(SystemExit) as exit_info:
+        entry_point.main(_pipeline_args(
+            tmp_path, "--processing-aware", "--output-csv", str(tmp_path / "o.csv")))
+    assert exit_info.value.code == 1
+    assert "--processing-aware-annotation: pepsickle is not installed" in capsys.readouterr().err
+
+    # Passing --no-processing-aware-annotation afterward disables it; must not fail.
+    from vaxrank.cli.arg_parser import parse_vaxrank_args
+    parsed = parse_vaxrank_args(_pipeline_args(
+        tmp_path, "--processing-aware-annotation", "--no-processing-aware-annotation",
+        "--output-csv", str(tmp_path / "o.csv")))
+    entry_point.require_pepsickle_if_requested(parsed)
+
+
+def test_pepsickle_availability_single_source_of_truth_in_processing(monkeypatch):
+    """#783: processing.pepsickle_installed is the shared check for CLI and processing layer."""
+    from vaxrank import processing
+
+    _without_pepsickle(monkeypatch)
+    monkeypatch.delenv("PEPSICKLE_PYTHON", raising=False)
+    monkeypatch.delenv("PEPSICKLE_GB_PYTHON", raising=False)
+    assert processing.pepsickle_installed() is False
+    assert entry_point.pepsickle_installed() is False
+    assert processing.load_default_processing_predictor() is None
+
+
 def test_installed_pepsickle_runs_the_annotation_silently(monkeypatch, caplog):
     import importlib.util
     monkeypatch.setattr(importlib.util, "find_spec", lambda name, *a, **k: object())
@@ -392,6 +426,24 @@ def test_every_companion_command_answers_version_like_vaxrank(capsys):
         assert capsys.readouterr().out.strip() == "%s %s" % (prog, __version__)
 
 
+def test_vaxrank_test_data_version_does_not_import_cli_stack():
+    """#783: vaxrank-test-data --version only needs vaxrank.version, not vaxrank.cli."""
+    import subprocess
+    import sys
+
+    code = (
+        "import sys\n"
+        "from vaxrank.testdata import download\n"
+        "try:\n"
+        "    download.main(['--version'])\n"
+        "except SystemExit as exc:\n"
+        "    assert exc.code == 0\n"
+        "assert 'vaxrank.cli' not in sys.modules, 'vaxrank.cli was imported'\n"
+    )
+    proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
+    assert proc.returncode == 0, proc.stderr
+
+
 def test_missing_input_paths_name_the_flag_before_any_work(tmp_path, monkeypatch, capsys):
     def must_not_run(args):
         raise AssertionError("input loading started before the paths were checked")
@@ -400,7 +452,8 @@ def test_missing_input_paths_name_the_flag_before_any_work(tmp_path, monkeypatch
     out = ["--output-csv", str(tmp_path / "o.csv")]
     cases = [
         ("--bam", str(tmp_path / "nope.bam"), "--bam: no such file"),
-        ("--prediction-cache", str(tmp_path), "--prediction-cache: %r is a directory, expected a file" % str(tmp_path)),
+        ("--prediction-cache", str(tmp_path / "missing.parquet"),
+         "--prediction-cache: no such file or directory"),
         ("--mhc-alleles-file", str(tmp_path / "alleles.txt"), "--mhc-alleles-file: no such file"),
     ]
     for flag, value, expected in cases:
@@ -414,8 +467,14 @@ def test_remote_and_existing_inputs_pass_the_path_check(tmp_path):
     from types import SimpleNamespace
     present = tmp_path / "x.vcf"
     present.write_text("")
+    parquet_dir = tmp_path / "partitioned_cache"
+    parquet_dir.mkdir()
     entry_point.validate_input_paths(SimpleNamespace(
-        vcf=[str(present)], bam="https://example.org/sample.bam", hitlist_evidence_bundle=str(tmp_path)))
+        vcf=[str(present)],
+        bam="https://example.org/sample.bam",
+        hitlist_evidence_bundle=str(tmp_path),
+        prediction_cache=str(parquet_dir),
+    ))
 
 
 def test_a_missing_directory_input_names_the_flag(tmp_path):
@@ -439,6 +498,18 @@ def test_undeclared_antigen_scope_says_where_to_declare_it():
     assert "requires declared patient_id" in message
     assert "--input-manifest" in message
     assert "--output-patient-id only labels the report" in message
+    assert "--mhc-alleles" not in message
+
+    # #783: when only mhc_alleles is missing, mention --mhc-alleles and omit --output-patient-id.
+    missing_alleles = SimpleNamespace(
+        antigens={"a": object()}, source_evidence={},
+        scope=InputScope(patient_id="P1", reference_assembly="GRCh38", mhc_alleles=None))
+    with pytest.raises(ValueError) as alleles_error:
+        AntigenDataset.validate_for_prediction(missing_alleles, genome=object())
+    alleles_msg = str(alleles_error.value)
+    assert "requires declared mhc_alleles" in alleles_msg
+    assert "--mhc-alleles" in alleles_msg
+    assert "--output-patient-id" not in alleles_msg
 
 
 def test_predictor_with_an_input_that_reuses_predictions_explains_the_choice(tmp_path, capsys):

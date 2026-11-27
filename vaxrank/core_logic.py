@@ -26,7 +26,7 @@ from topiary import TopiaryPredictor
 from .epitope_config import EpitopeConfig
 from .vaccine_config import VaccineConfig
 from .manufacturability_config import ManufacturabilityConfig
-from .progress import progress
+from .progress import progress, redirect_logging_for_progress
 from .epitope_logic import slice_epitopes, predict_epitopes
 from .mutant_protein_fragment import MutantProteinFragment
 from .ranking import rank_constructs, SOURCE_AGNOSTIC_RANKING_RULES as SOURCE_AGNOSTIC_RANKING_RULES
@@ -205,34 +205,35 @@ def create_vaccine_peptides_dict(
         if vaccine_config is not None else True
     )
     vaccine_peptides_dict = {}
-    for isovar_result in progress(isovar_results, "Selecting vaccine peptides", "variant"):
-        variant = isovar_result.variant
-        vaccine_peptides = vaccine_peptides_for_variant(
-            isovar_result=isovar_result,
-            mhc_predictor=mhc_predictor,
-            vaccine_peptide_length=vaccine_peptide_length,
-            max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
-            num_target_epitopes_to_keep=num_target_epitopes_to_keep,
-            epitope_config=epitope_config,
-            vaccine_config=vaccine_config,
-            manufacturability_config=manufacturability_config,
-            allow_dna_only_fallback=allow_dna_only_fallback,
-            proxy_expression_lookup=proxy_expression_lookup,
-            epitope_dataset=epitope_dataset,
-            policy_evaluations=policy_evaluations,
-            defer_window_selection=defer_window_selection,
-            retained_protein_fragments=retained_protein_fragments,
-            **({"annotate": annotate} if annotate is not None else {}),
-            **({'patient_background': patient_background_contexts.get(id(isovar_result))}
-               if patient_background_contexts is not None else {}),
-        )
+    with redirect_logging_for_progress():
+        for isovar_result in progress(isovar_results, "Selecting vaccine peptides", "variant"):
+            variant = isovar_result.variant
+            vaccine_peptides = vaccine_peptides_for_variant(
+                isovar_result=isovar_result,
+                mhc_predictor=mhc_predictor,
+                vaccine_peptide_length=vaccine_peptide_length,
+                max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
+                num_target_epitopes_to_keep=num_target_epitopes_to_keep,
+                epitope_config=epitope_config,
+                vaccine_config=vaccine_config,
+                manufacturability_config=manufacturability_config,
+                allow_dna_only_fallback=allow_dna_only_fallback,
+                proxy_expression_lookup=proxy_expression_lookup,
+                epitope_dataset=epitope_dataset,
+                policy_evaluations=policy_evaluations,
+                defer_window_selection=defer_window_selection,
+                retained_protein_fragments=retained_protein_fragments,
+                **({"annotate": annotate} if annotate is not None else {}),
+                **({'patient_background': patient_background_contexts.get(id(isovar_result))}
+                   if patient_background_contexts is not None else {}),
+            )
 
-        if not vaccine_peptides:
-            continue
-        if require_target_epitopes and not any(
-                x.contains_target_epitopes() for x in vaccine_peptides):
-            continue
-        vaccine_peptides_dict[variant] = vaccine_peptides
+            if not vaccine_peptides:
+                continue
+            if require_target_epitopes and not any(
+                    x.contains_target_epitopes() for x in vaccine_peptides):
+                continue
+            vaccine_peptides_dict[variant] = vaccine_peptides
 
     return vaccine_peptides_dict
 

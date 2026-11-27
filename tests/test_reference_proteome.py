@@ -1121,3 +1121,36 @@ def test_reference_identity_handles_optional_genome_fasta(tmp_path):
     assert identity != ensembl_dataset_cache_identity(first)
     files[0].unlink()
     assert ensembl_dataset_cache_identity(first) is None
+
+
+def test_from_genome_caches_by_dataset_identity_without_rescanning_transcripts(tmp_path):
+    """#783: repeated ReferenceProteome.from_genome calls must not rescan transcripts."""
+    clear_reference_proteome_caches()
+    genome, files = _standard_release_with_local_sources(tmp_path / "reference")
+    genome.transcripts = MagicMock(return_value=[
+        create_mock_transcript("T1", "ACDEFGHIKL", gene_id="ENSG00000185686"),
+        create_mock_transcript("T2", "LMNPQRSTVW", gene_id="ENSG00000099999"),
+    ])
+
+    first = ReferenceProteome.from_genome(
+        genome, exclude_gene_ids={"ENSG00000185686"},
+        min_kmer_length=8, max_kmer_length=8)
+    second = ReferenceProteome.from_genome(
+        genome, exclude_gene_ids={"ENSG00000185686"},
+        min_kmer_length=8, max_kmer_length=8)
+
+    assert not first.contains("ACDEFGHI")
+    assert second.contains("LMNPQRST")
+    assert genome.transcripts.call_count == 1
+
+    # Modifying the underlying protein file invalidates the identity cache.
+    files[-1].write_text("changed-protein-content-v2")
+    genome.transcripts.return_value = [
+        create_mock_transcript("T3", "QRSTVWYACD", gene_id="ENSG00000099999"),
+    ]
+    refreshed = ReferenceProteome.from_genome(
+        genome, exclude_gene_ids={"ENSG00000185686"},
+        min_kmer_length=8, max_kmer_length=8)
+    assert refreshed.contains("QRSTVWYA")
+    assert not refreshed.contains("LMNPQRST")
+    assert genome.transcripts.call_count == 2

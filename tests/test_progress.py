@@ -42,3 +42,44 @@ def test_timed_step_logs_start_and_elapsed_time(caplog):
     assert messages[1].startswith("Did 4 things in ") and messages[1].endswith("s")
     # Reported from the caller's line, not from inside the helper.
     assert {record.funcName for record in caplog.records} == {"test_timed_step_logs_start_and_elapsed_time"}
+
+
+def test_bars_are_enabled_in_jupyter_even_when_stderr_is_not_a_tty(monkeypatch):
+    """#783: Jupyter notebooks have non-TTY stderr but should still enable bars."""
+    from types import SimpleNamespace
+    import tqdm.auto
+
+    class ZMQInteractiveShell:
+        pass
+
+    captured = {}
+
+    def fake_auto_tqdm(iterable, **kwargs):
+        captured.update(kwargs)
+        return list(iterable)
+
+    monkeypatch.setitem(sys.modules, "IPython", SimpleNamespace(get_ipython=lambda: ZMQInteractiveShell()))
+    monkeypatch.setattr(tqdm.auto, "tqdm", fake_auto_tqdm)
+    assert progress(range(3), "notebook bar", "item") == [0, 1, 2]
+    assert captured["disable"] is False
+    assert captured["desc"] == "notebook bar"
+
+
+def test_make_pdf_report_validates_backend_before_logging_and_reports_elapsed_time(tmp_path, caplog, monkeypatch):
+    """#783: invalid PDF backend fails before logging; valid backend logs elapsed time."""
+    import pytest
+    from vaxrank import report
+
+    pdf_path = tmp_path / "out.pdf"
+    with caplog.at_level(logging.INFO, logger=report.logger.name):
+        with pytest.raises(ValueError, match="Unknown PDF backend"):
+            report.make_pdf_report({}, str(pdf_path), backend="bogus")
+    assert not caplog.records
+
+    monkeypatch.setattr(report, "render_report", lambda data, f, tpl: f.write("<html></html>"))
+    monkeypatch.setattr(report, "_pdf_via_weasyprint", lambda html_path, out_path: None)
+    with caplog.at_level(logging.INFO, logger=report.logger.name):
+        report.make_pdf_report({}, str(pdf_path), backend="weasyprint")
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("Rendering PDF report with weasyprint" in m for m in messages)
+    assert any("Wrote PDF report with weasyprint" in m and m.endswith("s") for m in messages)
