@@ -11,11 +11,10 @@
 # limitations under the License.
 
 import argparse
+from typing import TYPE_CHECKING
 
-import msgspec
-
-from ..config.loader import extract_epitope_config_kwargs, load_vaxrank_config
-from ..epitope_config import EpitopeConfig
+if TYPE_CHECKING:
+    from ..epitope_config import EpitopeConfig
 
 
 def add_epitope_prediction_args(arg_parser : argparse.ArgumentParser):
@@ -112,7 +111,7 @@ def add_epitope_prediction_args(arg_parser : argparse.ArgumentParser):
              "references.")
 
 
-def epitope_config_from_args(args : argparse.Namespace, merged_config=None) -> EpitopeConfig:
+def epitope_config_from_args(args: argparse.Namespace, merged_config=None) -> "EpitopeConfig":
     """
     Extract config path and overrides from argument namespace.
 
@@ -124,6 +123,10 @@ def epitope_config_from_args(args : argparse.Namespace, merged_config=None) -> E
         not re-read, avoiding duplicate I/O when both epitope and
         vaccine configs are built from the same args.
     """
+    import msgspec
+    from ..config.loader import extract_epitope_config_kwargs, load_vaxrank_config
+    from ..epitope_config import EpitopeConfig
+
     if merged_config is None:
         merged_config = load_vaxrank_config(args)
     epitope_config_kwargs = extract_epitope_config_kwargs(merged_config)
@@ -179,6 +182,8 @@ def epitope_config_from_args(args : argparse.Namespace, merged_config=None) -> E
 
 def has_epitope_config_overrides(args, merged_config):
     """Distinguish an explicit scoring policy from a native reload default."""
+    from ..config.loader import extract_epitope_config_kwargs
+
     return (bool(getattr(args, 'ms_evidence', False) or getattr(args, 'ms_evidence_package', None))
             or bool(extract_epitope_config_kwargs(merged_config))) or any(
         getattr(args, name, None) is not None for name in (

@@ -29,31 +29,15 @@ import logging
 from pathlib import Path
 import sys
 
-from ..config.loader import load_vaxrank_config
-from ..mhc_allele_status import (
-    MHCAlleleStatusBundle,
-    load_mhc_allele_status,
-    merge_mhc_allele_status_bundles,
-)
-from ..mhc_expression import (
-    MHCExpressionPolicy,
-    estimate_bulk_mhc_ase_from_reads,
-    load_mhc_status_from_tool,
-)
-from ..scrna_tumor import (
-    SCRNATumorClusterPolicy,
-    analyze_scrna_tumor_clusters,
-    load_cluster_assignments,
-    load_scrna_counts,
-    load_scrna_mhc_allele_umis,
-    load_somatic_barcode_calls,
-)
+import argcomplete
+
+from .help import HelpArgumentParser
 
 logger = logging.getLogger(__name__)
 
 
 def _build_parser(prog: str = "vaxrank mhc-status") -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = HelpArgumentParser(
         prog=prog,
         description=(
             "Build a cross-species mhc_allele_status.json (and optional scRNA "
@@ -161,7 +145,28 @@ def _build_parser(prog: str = "vaxrank mhc-status") -> argparse.ArgumentParser:
 
 def run(argv: list[str] | None = None, prog: str = "vaxrank mhc-status") -> int:
     parser = _build_parser(prog=prog)
+    argcomplete.autocomplete(parser)
     args = parser.parse_args(argv)
+
+    from ..config.loader import load_vaxrank_config
+    from ..mhc_allele_status import (
+        MHCAlleleStatusBundle,
+        load_mhc_allele_status,
+        merge_mhc_allele_status_bundles,
+    )
+    from ..mhc_expression import (
+        MHCExpressionPolicy,
+        estimate_bulk_mhc_ase_from_reads,
+        load_mhc_status_from_tool,
+    )
+    from ..scrna_tumor import (
+        SCRNATumorClusterPolicy,
+        analyze_scrna_tumor_clusters,
+        load_cluster_assignments,
+        load_scrna_counts,
+        load_scrna_mhc_allele_umis,
+        load_somatic_barcode_calls,
+    )
 
     mhc_expr_cfg: dict = {}
     scrna_cfg: dict = {}

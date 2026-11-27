@@ -18,13 +18,16 @@ from functools import partial
 from argparse import SUPPRESS, Action, ArgumentParser, ArgumentTypeError
 from importlib.resources import files
 
+import argcomplete
 from isovar.cli import make_isovar_arg_parser
 from mhctools.cli import add_mhc_args
 
 
 from .discoverability import EXAMPLES, ExamplesHelpFormatter, check_unknown_flags
 from .epitope_config_args import add_epitope_prediction_args
+from .help import HelpArgumentParser
 from .vaccine_config_args import add_vaccine_peptide_args
+from ..config.defaults import PRIMARY_OUTPUT_FLAGS as _PRIMARY_OUTPUT_FLAGS
 from ..version import __version__
 
 
@@ -56,7 +59,7 @@ def _concise_error(parser, message):
                 % (parser.prog, message, note, parser.prog))
 
 
-class _ConciseErrorParser(ArgumentParser):
+class _ConciseErrorParser(HelpArgumentParser):
     def error(self, message):
         _concise_error(self, message)
 
@@ -1017,41 +1020,6 @@ def add_supplemental_report_args(arg_parser):
              'toggles, notes, and one-click export of tumor_board_overrides.json).')
 
 
-_PRIMARY_OUTPUT_FLAGS = (
-    # (CLI flag, args attribute, one-line purpose)
-    ("--output-csv",                    "output_csv",
-        "ranked candidate windows as CSV"),
-    ("--output-tumor-board-dossier",    "output_tumor_board_dossier",
-        "AI-ready tumor_board_dossier.json bundle"),
-    ("--output-xlsx-report",            "output_xlsx_report",
-        "ranked candidate windows as XLSX"),
-    ("--output-ascii-report",           "output_ascii_report",
-        "plain-text product and candidate report"),
-    ("--output-html-report",            "output_html_report",
-        "HTML summary report"),
-    ("--output-pdf-report",             "output_pdf_report",
-        "PDF summary report"),
-    ("--output-neoepitope-report",      "output_neoepitope_report",
-        "per-(peptide, allele) prediction table as CSV or XLSX"),
-    ("--output-json-file",              "output_json_file",
-        "legacy ranked-candidate JSON"),
-    ("--output-passing-variants-csv",   "output_passing_variants_csv",
-        "filter-passing variants as CSV"),
-    ("--output-isovar-csv",             "output_isovar_csv",
-        "Isovar transcript-assembly intermediate CSV"),
-    ("--output-epitopes",               "output_epitopes",
-        "native prediction dataset and replay evidence"),
-    ("--output-antigens",               "output_antigens",
-        "experimental resolved antigen sequences and admission evidence"),
-    ("--output-input-predictions",      "output_input_predictions",
-        "original external-table predictions"),
-    ("--output-policy-dir",             "output_policy_dir",
-        "resolved policy configuration and decision tables"),
-    ("--output-dir",                    "output_dir",
-        "directory for default analysis files and assembled products "
-        "(per-modality subdirs when --vaccine-type has 2+ entries)"),
-)
-
 
 def check_args(args):
     """Fail fast when no primary --output-* flag is set, or when
@@ -1503,6 +1471,7 @@ def choose_arg_parser(args_list):
 
 def parse_vaxrank_args(args_list):
     arg_parser = choose_arg_parser(args_list)
+    argcomplete.autocomplete(arg_parser)
     check_unknown_flags(arg_parser, args_list)
     parsed = arg_parser.parse_args(args_list)
     # Record supplied destinations, including values equal to defaults,

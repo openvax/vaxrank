@@ -19,6 +19,10 @@ import json
 import os
 from pathlib import Path
 
+import argcomplete
+
+from .help import HelpArgumentParser
+
 
 def _dir_stats(path: str | Path) -> tuple[bool, int, int]:
     root = Path(path)
@@ -38,7 +42,7 @@ def _dir_stats(path: str | Path) -> tuple[bool, int, int]:
 
 
 def _build_parser(prog: str = "vaxrank data") -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = HelpArgumentParser(
         prog=prog,
         description="Inspect and maintain Vaxrank's local reference-peptide and OpenVax caches.",
     )
@@ -104,6 +108,7 @@ def _kmer_index_files(cache_dir: str | Path) -> list[dict]:
 def run(argv: list[str] | None = None, prog: str = "vaxrank data") -> int:
     """Execute ``vaxrank data <dirs|status|path|prune>``."""
     parser = _build_parser(prog=prog)
+    argcomplete.autocomplete(parser)
     args = parser.parse_args(argv)
 
     import datacache

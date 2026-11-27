@@ -35,17 +35,15 @@ import json
 from isovar import union_rna_support
 from isovar.rna_evidence import content_identifier
 
+from .config.defaults import (
+    SHARED_SEQUENCE_RNA_POLICIES,
+    SHARED_SEQUENCE_RNA_POLICY_SOURCE,
+    SHARED_SEQUENCE_RNA_POLICY_UNION as SHARED_SEQUENCE_RNA_POLICY_UNION,
+)
 from .rna_support import applicable_rna_support
 
 
 SHARED_RNA_UNION_SCHEMA = "vaxrank.shared_sequence_rna_union.v1"
-
-SHARED_SEQUENCE_RNA_POLICY_SOURCE = "source"
-SHARED_SEQUENCE_RNA_POLICY_UNION = "within_library_union"
-SHARED_SEQUENCE_RNA_POLICIES = frozenset({
-    SHARED_SEQUENCE_RNA_POLICY_SOURCE,
-    SHARED_SEQUENCE_RNA_POLICY_UNION,
-})
 
 SHARED_RNA_AVAILABLE_UNITS = frozenset({
     "rna_shared_reads",

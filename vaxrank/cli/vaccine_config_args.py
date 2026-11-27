@@ -11,31 +11,29 @@
 # limitations under the License.
 
 import argparse
+from typing import TYPE_CHECKING
 
-import msgspec
-
-from ..config.loader import (
-    extract_manufacturability_config_kwargs,
-    extract_vaccine_config_kwargs,
-    load_vaxrank_config,
-)
-from ..manufacturability_config import ManufacturabilityConfig
-from ..shared_sequence_rna import SHARED_SEQUENCE_RNA_POLICIES
-from ..vaccine_config import (
+from ..config.defaults import (
+    ANTIGEN_SELECTION_CHOICES,
+    ANTIGEN_SELECTION_TYPES,
+    DEFAULT_MAX_VACCINE_PEPTIDES_PER_VARIANT,
+    DEFAULT_NUM_MUTANT_EPITOPES_TO_KEEP,
+    DEFAULT_PADDING_AROUND_MUTATION,
+    DEFAULT_PREFERRED_PEPTIDE_LENGTH,
     LENS_ANTIGEN_SOURCES,
-    PROXY_EXPRESSION_COMBINED_SCORE_EXPR,
-    SOURCE_AGNOSTIC_COMBINED_SCORE_EXPR,
-    VaccineConfig,
+    SHARED_SEQUENCE_RNA_POLICIES,
+    SV_TYPES,
+    VARIANT_TYPES,
+    normalize_selection_type,
 )
-from ..antigen_allocation import (
-    ANTIGEN_SELECTION_TYPES, ANTIGEN_SELECTION_CHOICES, normalize_selection_type, expand_selection_types,
-)
+
+if TYPE_CHECKING:
+    from ..manufacturability_config import ManufacturabilityConfig
+    from ..vaccine_config import VaccineConfig
 
 
 
 def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
-    default_vaccine_config = VaccineConfig()
-
     vaccine_peptide_group = arg_parser.add_argument_group("Vaccine peptide options")
     vaccine_peptide_group.add_argument(
         '--max-windows-per-antigen-source', type=int, default=None,
@@ -65,7 +63,6 @@ def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
              'Use variant for small and structural variants in any coding context. '
              'Historical mutation selects small variants outside recorded ncORFs. '
              'Source evidence remains available in reports.')
-    from ..antigen_origin import VARIANT_TYPES, SV_TYPES
     allocation_group.add_argument('--variant-types', nargs='+', type=str.upper, default=None,
         choices=sorted(VARIANT_TYPES | {'SV:' + kind for kind in SV_TYPES}),
         help='Restrict genomic variant sources by recorded type (case insensitive). '
@@ -88,7 +85,7 @@ def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
         type=int,
         help=(
             "Preferred number of amino acids in the vaccine peptides. "
-            f"(default: {default_vaccine_config.preferred_peptide_length})"
+            f"(default: {DEFAULT_PREFERRED_PEPTIDE_LENGTH})"
         ))
 
     vaccine_peptide_group.add_argument(
@@ -99,7 +96,7 @@ def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
             "Explicit legacy context request: vaccine peptide length + 2*padding. "
             "Without this option, RNA context adapts to peptide size via Isovar. "
             "--protein-sequence-length takes precedence for RNA. "
-            f"DNA-only fallback padding defaults to {default_vaccine_config.padding_around_mutation}."
+            f"DNA-only fallback padding defaults to {DEFAULT_PADDING_AROUND_MUTATION}."
         ))
 
     vaccine_peptide_group.add_argument(
@@ -111,7 +108,7 @@ def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
         help=(
             "Legacy overlapping candidate limit (saved designs with max_windows_per_antigen_source=null). "
             "For new designs use --max-windows-per-antigen-source. "
-            f"(default: {default_vaccine_config.max_vaccine_peptides_per_variant})"
+            f"(default: {DEFAULT_MAX_VACCINE_PEPTIDES_PER_VARIANT})"
         ))
 
     vaccine_peptide_group.add_argument(
@@ -121,7 +118,7 @@ def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
         help=(
             "Maximum number of mutant epitopes to consider when scoring "
             "each vaccine peptide. Set to 0 to keep all epitopes. "
-            f"(default: {default_vaccine_config.num_target_epitopes_to_keep})"
+            f"(default: {DEFAULT_NUM_MUTANT_EPITOPES_TO_KEEP})"
         ))
 
     allocation_group.add_argument(
@@ -184,7 +181,7 @@ def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
 
 
 
-def vaccine_config_from_args(args : argparse.Namespace, merged_config=None) -> VaccineConfig:
+def vaccine_config_from_args(args: argparse.Namespace, merged_config=None) -> "VaccineConfig":
     """
     Extract config path and overrides from argument namespace.
 
@@ -196,6 +193,14 @@ def vaccine_config_from_args(args : argparse.Namespace, merged_config=None) -> V
         not re-read, avoiding duplicate I/O when both epitope and
         vaccine configs are built from the same args.
     """
+    import msgspec
+    from ..config.loader import extract_vaccine_config_kwargs, load_vaxrank_config
+    from ..vaccine_config import (
+        PROXY_EXPRESSION_COMBINED_SCORE_EXPR,
+        SOURCE_AGNOSTIC_COMBINED_SCORE_EXPR,
+        VaccineConfig,
+    )
+
     if merged_config is None:
         merged_config = load_vaxrank_config(args)
     vaccine_config_kwargs = extract_vaccine_config_kwargs(merged_config)
@@ -255,7 +260,7 @@ def vaccine_config_from_args(args : argparse.Namespace, merged_config=None) -> V
 
 def antigen_allocation_from_args(args, configured=None):
     """Merge shared allocation CLI overrides with the resolved YAML/replay policy."""
-    from ..antigen_allocation import AntigenAllocation
+    from ..antigen_allocation import AntigenAllocation, expand_selection_types
     policy = AntigenAllocation.resolve(configured).to_dict()
     selected = getattr(args, 'antigen_types', None)
     if selected is not None:
@@ -284,12 +289,16 @@ def antigen_allocation_from_args(args, configured=None):
 
 
 def manufacturability_config_from_args(
-        args: argparse.Namespace, merged_config=None) -> ManufacturabilityConfig:
+        args: argparse.Namespace, merged_config=None) -> "ManufacturabilityConfig":
     """Build a ``ManufacturabilityConfig`` from the YAML
     ``peptide.manufacturability`` sub-section. Always returns a real
     config (``ManufacturabilityConfig()`` defaults if the YAML
     sub-section is absent) — the ranker treats it as the source of
     peptide-synthesis difficulty thresholds + rules."""
+    import msgspec
+    from ..config.loader import extract_manufacturability_config_kwargs, load_vaxrank_config
+    from ..manufacturability_config import ManufacturabilityConfig
+
     if merged_config is None:
         merged_config = load_vaxrank_config(args)
     kwargs = extract_manufacturability_config_kwargs(merged_config)

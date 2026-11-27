@@ -9,8 +9,7 @@ from dataclasses import asdict, dataclass
 from serializable import DataclassSerializable
 
 
-VARIANT_TYPES = frozenset({'SNV', 'MNV', 'INDEL', 'SV'})
-SV_TYPES = frozenset({'DEL', 'DUP', 'INV', 'INS', 'BND', 'CNV'})
+from .config.defaults import SV_TYPES as SV_TYPES, VARIANT_TYPES
 
 
 @dataclass(frozen=True)

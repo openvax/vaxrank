@@ -1,3 +1,4 @@
+# PYTHON_ARGCOMPLETE_OK
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -13,74 +14,92 @@
 
 
 from contextlib import contextmanager
-import logging
+from importlib import import_module
+from importlib.resources import files
 import json
+import logging
 import logging.config
 import os
 import sys
 import threading
-from importlib.resources import files
 
-
-import serializable
-
-
-from varcode import VariantCollection
-from varcode.cli import variant_collection_from_args
-from isovar import isovar_results_to_dataframe, run_isovar
-from isovar.cli import (
-    protein_sequence_creator_from_args,
-    read_collector_from_args,
-)
-from isovar.cli.rna_args import alignment_file_from_args
-from isovar.cli.filter_args import filter_threshold_dict_from_args
-from isovar.cli.validation import germline_variants_from_args
-from isovar.cli.main_args import phasing_parameters_from_args
-from mhctools.cli import (
-    mhc_alleles_from_args,
-    mhc_binding_predictor_from_args,
-)
-
-from .arg_parser import (
-    _PRIMARY_OUTPUT_FLAGS,
-    parse_vaxrank_args,
-    check_args,
-    require_annotations_for_template_reports,
+from ..config.defaults import PRIMARY_OUTPUT_FLAGS as _PRIMARY_OUTPUT_FLAGS
+from ..progress import timed_step
+from .discoverability import (
+    format_outputs_block,
+    print_bare_summary,
+    resolve_command_line,
+    written_outputs,
 )
 from .epitope_config_args import epitope_config_from_args, has_epitope_config_overrides
+from .errors import exit_with_user_error, user_error_types
 from .vaccine_config_args import (
-    manufacturability_config_from_args, vaccine_config_from_args,
+    manufacturability_config_from_args,
+    vaccine_config_from_args,
 )
-from ..config import load_vaxrank_config
-from .discoverability import (
-    format_outputs_block, print_bare_summary, resolve_command_line, written_outputs)
-from .errors import USER_ERRORS, exit_with_user_error
-from ..progress import timed_step
-from ..allele_validation import validate_allele_arguments
 
-from ..core_logic import run_vaxrank
-from ..epitope_io import (
-    ensure_parent_dir,
-    save_predictions,
-    write_neoepitope_report,
-)
-from ..report import (
-    make_ascii_report,
-    make_html_report,
-    make_pdf_report,
-    make_csv_report,
-    make_minimal_neoepitope_report,
-    TemplateDataCreator,
-)
-from ..report_display import run_provenance_arguments
-from ..mrna import RNAConstructConfig, assemble_mrna_constructs, write_mrna_outputs
-from ..peptide import (
-    PeptideConstructConfig,
-    assemble_peptide_constructs,
-    write_peptide_outputs,
-)
-from ..proteome import normalize_json_value
-from ..vaf import extract_dna_vaf_by_variant
+_UNSET = object()
+_LAZY_IMPORTS = {
+    "serializable": ("serializable", None),
+    "VariantCollection": ("varcode", "VariantCollection"),
+    "variant_collection_from_args": ("varcode.cli", "variant_collection_from_args"),
+    "isovar_results_to_dataframe": ("isovar", "isovar_results_to_dataframe"),
+    "run_isovar": ("isovar", "run_isovar"),
+    "protein_sequence_creator_from_args": ("isovar.cli", "protein_sequence_creator_from_args"),
+    "read_collector_from_args": ("isovar.cli", "read_collector_from_args"),
+    "alignment_file_from_args": ("isovar.cli.rna_args", "alignment_file_from_args"),
+    "filter_threshold_dict_from_args": ("isovar.cli.filter_args", "filter_threshold_dict_from_args"),
+    "germline_variants_from_args": ("isovar.cli.validation", "germline_variants_from_args"),
+    "phasing_parameters_from_args": ("isovar.cli.main_args", "phasing_parameters_from_args"),
+    "mhc_alleles_from_args": ("mhctools.cli", "mhc_alleles_from_args"),
+    "mhc_binding_predictor_from_args": ("mhctools.cli", "mhc_binding_predictor_from_args"),
+    "parse_vaxrank_args": (".arg_parser", "parse_vaxrank_args"),
+    "check_args": (".arg_parser", "check_args"),
+    "require_annotations_for_template_reports": (
+        ".arg_parser",
+        "require_annotations_for_template_reports",
+    ),
+    "USER_ERRORS": (".errors", "USER_ERRORS"),
+    "load_vaxrank_config": ("..config", "load_vaxrank_config"),
+    "validate_allele_arguments": ("..allele_validation", "validate_allele_arguments"),
+    "run_vaxrank": ("..core_logic", "run_vaxrank"),
+    "ensure_parent_dir": ("..epitope_io", "ensure_parent_dir"),
+    "save_predictions": ("..epitope_io", "save_predictions"),
+    "write_neoepitope_report": ("..epitope_io", "write_neoepitope_report"),
+    "make_ascii_report": ("..report", "make_ascii_report"),
+    "make_html_report": ("..report", "make_html_report"),
+    "make_pdf_report": ("..report", "make_pdf_report"),
+    "make_csv_report": ("..report", "make_csv_report"),
+    "make_minimal_neoepitope_report": ("..report", "make_minimal_neoepitope_report"),
+    "TemplateDataCreator": ("..report", "TemplateDataCreator"),
+    "run_provenance_arguments": ("..report_display", "run_provenance_arguments"),
+    "RNAConstructConfig": ("..mrna", "RNAConstructConfig"),
+    "assemble_mrna_constructs": ("..mrna", "assemble_mrna_constructs"),
+    "write_mrna_outputs": ("..mrna", "write_mrna_outputs"),
+    "PeptideConstructConfig": ("..peptide", "PeptideConstructConfig"),
+    "assemble_peptide_constructs": ("..peptide", "assemble_peptide_constructs"),
+    "write_peptide_outputs": ("..peptide", "write_peptide_outputs"),
+    "normalize_json_value": ("..proteome", "normalize_json_value"),
+    "extract_dna_vaf_by_variant": ("..vaf", "extract_dna_vaf_by_variant"),
+}
+
+
+def _lazy(name):
+    """Resolve a lazily imported symbol while respecting module-level monkeypatches."""
+    value = globals().get(name, _UNSET)
+    if value is not _UNSET:
+        return value
+    module_name, attr_name = _LAZY_IMPORTS[name]
+    mod = import_module(module_name, package=__package__)
+    value = mod if attr_name is None else getattr(mod, attr_name)
+    globals()[name] = value
+    return value
+
+
+def __getattr__(name):
+    if name in _LAZY_IMPORTS:
+        return _lazy(name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +110,7 @@ def serialize_json_nan_tolerant(obj):
     Producers should already coerce non-finite floats to None. This writer
     also normalizes them so one bad float cannot lose the report (#289).
     """
-    return json.dumps(normalize_json_value(obj), allow_nan=False)
+    return json.dumps(_lazy("normalize_json_value")(obj), allow_nan=False)
 
 
 def filter_unannotatable_variants(variants):
@@ -132,10 +151,11 @@ def filter_unannotatable_variants(variants):
             variants[0].genome.reference_name,
             ", ".join(sorted(skipped_contigs)),
         )
-        if isinstance(VariantCollection, type) and isinstance(variants, VariantCollection):
+        variant_collection_cls = _lazy("VariantCollection")
+        if isinstance(variant_collection_cls, type) and isinstance(variants, variant_collection_cls):
             valid_set = set(valid)
             return variants.filter(lambda v: v in valid_set)
-        return VariantCollection(valid)
+        return variant_collection_cls(valid)
     return variants
 
 
@@ -342,10 +362,10 @@ def emit_external_neoepitope_report(
     if design_dataset is not None and design_dataset is dataset:
         design_dataset.epitopes = tuple(epitopes)
     elif getattr(args, 'output_epitopes', ''):
-        save_predictions(epitopes, args.output_epitopes, dataset=dataset)
+        _lazy("save_predictions")(epitopes, args.output_epitopes, dataset=dataset)
     if report_df is None:
         return
-    write_neoepitope_report(
+    _lazy("write_neoepitope_report")(
         report_df=report_df,
         epitopes=epitopes,
         excel_report_path=(
@@ -420,7 +440,7 @@ def _peptide_construct_options(args):
     )
     if antigen_content is not None:
         config_kwargs['antigen_content'] = antigen_content
-    return PeptideConstructConfig(**config_kwargs)
+    return _lazy("PeptideConstructConfig")(**config_kwargs)
 
 
 def _emit_peptide_constructs(args, ranked, target_dir):
@@ -443,7 +463,7 @@ def _emit_peptide_constructs(args, ranked, target_dir):
     selection_audit = {}
     if constructs is None:
         dataset = getattr(args, '_design_dataset', None)
-        constructs = assemble_peptide_constructs(
+        constructs = _lazy("assemble_peptide_constructs")(
             ranked, options=peptide_options, target_alleles=target_alleles,
             source_evidence=dataset.selection.get('source_evidence') if dataset else None,
             **({'selection_audit': selection_audit} if dataset is not None else {}),
@@ -463,7 +483,7 @@ def _emit_peptide_constructs(args, ranked, target_dir):
     fasta_path = os.path.join(target_dir, 'vaccine.fasta')
     manifest_path = os.path.join(target_dir, 'manifest.json')
     order_form_path = os.path.join(target_dir, 'order_form.csv')
-    write_peptide_outputs(
+    _lazy("write_peptide_outputs")(
         constructs,
         fasta_path=fasta_path,
         manifest_path=manifest_path,
@@ -611,7 +631,7 @@ def log_args_summary(args):
     if other_rows:
         grouped['Other'] = other_rows
 
-    provenance_rows = sorted(run_provenance_arguments(vars(args)).items())
+    provenance_rows = sorted(_lazy("run_provenance_arguments")(vars(args)).items())
 
     lines = ["Vaxrank run configuration:"]
     for section, rows in grouped.items():
@@ -674,7 +694,7 @@ def resolve_target_alleles(args):
     _ARG_LOAD_ERRORS = (AttributeError, ValueError, KeyError)
     alleles = None
     try:
-        alleles = mhc_alleles_from_args(args)
+        alleles = _lazy("mhc_alleles_from_args")(args)
     except _ARG_LOAD_ERRORS:
         pass
     if not alleles:
@@ -742,11 +762,11 @@ def _linker_prediction_configuration(args, config_kwargs=None):
             return None, None
     declared = getattr(args, '_declared_mhc_alleles', None)
     if not external and not getattr(args, 'input_json_file', None):
-        declared = mhc_alleles_from_args(args)
+        declared = _lazy("mhc_alleles_from_args")(args)
     if query:
         prediction_args.mhc_alleles = query
         prediction_args.mhc_alleles_file = None
-        alleles = mhc_alleles_from_args(prediction_args)
+        alleles = _lazy("mhc_alleles_from_args")(prediction_args)
     elif declared:
         alleles = declared
     else:
@@ -763,7 +783,7 @@ def _linker_prediction_configuration(args, config_kwargs=None):
     validate_prediction_species(args, [getattr(args, 'genome', None)], alleles, 'Junction prediction')
     prediction_args.mhc_alleles = ','.join(alleles)
     prediction_args.mhc_alleles_file = None
-    prediction_args.mhc_peptide_lengths = list(RNAConstructConfig().junction_kmer_lengths)
+    prediction_args.mhc_peptide_lengths = list(_lazy("RNAConstructConfig")().junction_kmer_lengths)
     prediction_args.mhc_epitope_lengths = None
     return prediction_args, alleles
 
@@ -774,7 +794,7 @@ def resolve_mhc_for_linker_optimizer(args, config_kwargs=None):
     if prediction_args is None:
         return None, None
     try:
-        predictor = mhc_binding_predictor_from_args(prediction_args)
+        predictor = _lazy("mhc_binding_predictor_from_args")(prediction_args)
     except (KeyError, ValueError) as error:
         raise ValueError('Could not configure junction prediction. Select one '
                          '--mrna-junction-predictor: %s' % error) from error
@@ -844,7 +864,7 @@ def _emit_mrna_constructs(args, ranked, target_dir):
     if cli_cleavage is not None:
         junction_opt_dict['cleavage_scoring'] = cli_cleavage
     junction_optimization = junction_opt_dict or None
-    options = RNAConstructConfig(
+    options = _lazy("RNAConstructConfig")(
         signal_peptide=(cfg('mrna_signal_peptide', 'signal_peptide') or None),
         linker=cfg('mrna_linker', 'linker'),
         include_mitd=cfg('mrna_include_mitd', 'include_mitd'),
@@ -892,7 +912,7 @@ def _emit_mrna_constructs(args, ranked, target_dir):
     if constructs is None:
         mhc_predictor, mhc_alleles = resolve_mhc_for_linker_optimizer(args, yaml_kwargs)
         dataset = getattr(args, '_design_dataset', None)
-        constructs = assemble_mrna_constructs(
+        constructs = _lazy("assemble_mrna_constructs")(
             ranked, options=options,
             mhc_predictor=mhc_predictor, mhc_alleles=mhc_alleles,
             target_alleles=target_alleles,
@@ -915,7 +935,7 @@ def _emit_mrna_constructs(args, ranked, target_dir):
     # what the rows describe (per-element decomposition of each
     # mRNA construct).
     os.makedirs(target_dir, exist_ok=True)
-    write_mrna_outputs(
+    _lazy("write_mrna_outputs")(
         constructs,
         output_dir=target_dir,
         manifest_path=os.path.join(target_dir, 'manifest.json'),
@@ -958,14 +978,14 @@ def emit_outputs(args, ranked, source):
     vaccine_types = resolve_vaccine_types(args)
 
     if args.output_csv or args.output_xlsx_report:
-        make_csv_report(ranked, excel_report_path=args.output_xlsx_report,
+        _lazy("make_csv_report")(ranked, excel_report_path=args.output_xlsx_report,
                         csv_report_path=args.output_csv,
                         source_evidence=(getattr(args, '_design_dataset').selection.get('source_evidence', {})
                             if getattr(args, '_design_dataset', None) is not None else None))
 
     if args.output_neoepitope_report and source == 'pipeline':
         num_epitopes = getattr(args, 'num_epitopes_per_vaccine_peptide', None)
-        make_minimal_neoepitope_report(
+        _lazy("make_minimal_neoepitope_report")(
             ranked,
             num_epitopes_per_peptide=num_epitopes,
             excel_report_path=args.output_neoepitope_report)
@@ -1618,6 +1638,11 @@ def run_cli(args_list=None):
             --vaccine-type mrna \\
             --output-dir mrna_out/
     """
+    if args_list is None and "_ARGCOMPLETE" in os.environ:
+        from .completion import autocomplete_vaxrank
+
+        autocomplete_vaxrank()
+
     if args_list is None:
         args_list = sys.argv[1:]
 
@@ -1627,7 +1652,7 @@ def run_cli(args_list=None):
     handled, args_list = resolve_command_line(args_list)
     if handled:
         return None
-    args = parse_vaxrank_args(args_list)
+    args = _lazy("parse_vaxrank_args")(args_list)
     if getattr(_LOGGING_SCOPE_LOCAL, 'in_main', False):
         result = _run_parsed_cli(args, args_list)
         print_outputs_written(args)
@@ -1652,7 +1677,7 @@ def print_outputs_written(args):
 def _load_ranked_input_data(args):
     """Resolve one policy and rank all direct, imported or saved evidence."""
     from ..external_input import load_ranked_inputs
-    merged_config = load_vaxrank_config(args)
+    merged_config = _lazy("load_vaxrank_config")(args)
     epitope_config = epitope_config_from_args(
         args, merged_config=merged_config)
     if not has_epitope_config_overrides(args, merged_config):
@@ -1688,7 +1713,7 @@ def _load_ranked_input_data(args):
                 args={key: value for key, value in vars(args).items() if key != '_design_dataset'},
                 dna_vaf_by_variant=dna_vaf)
     if getattr(args, 'output_json_file', None):
-        ensure_parent_dir(args.output_json_file)
+        _lazy("ensure_parent_dir")(args.output_json_file)
         with open(args.output_json_file, 'w') as stream:
             stream.write(serialize_json_nan_tolerant(data))
         logger.info('Wrote JSON report data to %s', args.output_json_file)
@@ -1734,14 +1759,14 @@ def _run_parsed_cli(args, args_list):
     # produces nothing on disk (every output is opt-in via its own
     # --output-* flag, with no default destination). Applies to both
     # the VCF/BAM pipeline path and the external-input path.
-    check_args(args)
+    _lazy("check_args")(args)
     validate_input_paths(args)
     # Direct variant/RNA runs validate alleles up front; external-input runs
     # accept unparseable allele strings from legacy third-party tables.
     if getattr(args, 'bam', None) or any(
         getattr(args, name, None) for name in ('vcf', 'maf', 'variant', 'json_variants')
     ):
-        validate_allele_arguments(args)
+        _lazy("validate_allele_arguments")(args)
     # Decide now, not after the pipeline, so an explicit request for a missing
     # optional install fails in the first second.
     require_pepsickle_if_requested(args)
@@ -1769,7 +1794,7 @@ def _run_parsed_cli(args, args_list):
                 "report (if requested).")
         # Input flags do not describe annotation needs: native antigens carry
         # source provenance, and saved mutation fragments may retain transcripts.
-        require_annotations_for_template_reports(args, ranked_variants_with_vaccine_peptides)
+        _lazy("require_annotations_for_template_reports")(args, ranked_variants_with_vaccine_peptides)
         # Keep the declared genotype separate from report coverage. Only the
         # declaration can supply default alleles for new junction queries.
         if patient_info is not None:
@@ -1849,12 +1874,12 @@ def _run_parsed_cli(args, args_list):
             status_bundle = merge_mhc_allele_status_bundles(
                 detected_mhc_apm_bundle, user_bundle
             )
-            mhc_policy = load_vaxrank_config(args).get('mhc_allele_status')
+            mhc_policy = _lazy("load_vaxrank_config")(args).get('mhc_allele_status')
         else:
             status_bundle = bundle_from_dict(saved_mhc_bundle_dict)
             mhc_policy = (
                 dataset.selection.get('mhc_allele_status_policy')
-                or load_vaxrank_config(args).get('mhc_allele_status')
+                or _lazy("load_vaxrank_config")(args).get('mhc_allele_status')
             )
         if status_bundle is not None and not status_bundle.is_empty():
             ranked_variants_with_vaccine_peptides, mhc_status_audit = (
@@ -1890,7 +1915,7 @@ def _run_parsed_cli(args, args_list):
             detect_and_load_clonality_file,
             merge_clonality_records,
         )
-        raw_clonality_cfg = dict(load_vaxrank_config(args).get('clonality') or {})
+        raw_clonality_cfg = dict(_lazy("load_vaxrank_config")(args).get('clonality') or {})
         if clonality_mode_override:
             raw_clonality_cfg['mode'] = clonality_mode_override
         clonality_policy = ClonalityPolicy.from_dict(raw_clonality_cfg)
@@ -1951,11 +1976,11 @@ def _run_parsed_cli(args, args_list):
             write_tumor_board_dossier,
         )
         tb_cfg = (
-            load_vaxrank_config(args).get('tumor_board')
+            _lazy("load_vaxrank_config")(args).get('tumor_board')
             if overrides_path or not saved_overrides_dict
             else (
                 dataset.selection.get('tumor_board_policy')
-                or load_vaxrank_config(args).get('tumor_board')
+                or _lazy("load_vaxrank_config")(args).get('tumor_board')
             )
         )
         raw_tb_alleles = (
@@ -2079,7 +2104,7 @@ def _run_parsed_cli(args, args_list):
             names = ('vaccine.fasta', 'manifest.json', 'order_form.csv') if modality == 'peptide' else (
                 'full.fasta', 'cds.fasta', 'no_polyA.fasta', 'manifest.json', 'mrna-sequence-parts.csv')
             product_files[modality] = [os.path.relpath(os.path.join(directory, name), output_dir) for name in names]
-    template_data = TemplateDataCreator(
+    template_data = _lazy("TemplateDataCreator")(
         ranked_variants_with_vaccine_peptides=ranked_variants_with_vaccine_peptides,
         patient_info=patient_info,
         final_review=getattr(args, 'output_final_review', '') or '',
@@ -2101,11 +2126,11 @@ def _run_parsed_cli(args, args_list):
         interactive_review_html=interactive_review,
     ).compute_template_data()
     if args.output_ascii_report:
-        make_ascii_report(template_data=template_data, ascii_report_path=args.output_ascii_report)
+        _lazy("make_ascii_report")(template_data=template_data, ascii_report_path=args.output_ascii_report)
     if args.output_html_report:
-        make_html_report(template_data=template_data, html_report_path=args.output_html_report)
+        _lazy("make_html_report")(template_data=template_data, html_report_path=args.output_html_report)
     if args.output_pdf_report:
-        make_pdf_report(template_data=template_data, pdf_report_path=args.output_pdf_report,
+        _lazy("make_pdf_report")(template_data=template_data, pdf_report_path=args.output_pdf_report,
                         backend=args.pdf_backend)
 
 
@@ -2122,7 +2147,7 @@ def main(args_list=None):
         _LOGGING_SCOPE_LOCAL.in_main = True
         try:
             return run_cli(args_list)
-        except USER_ERRORS as error:
+        except user_error_types() as error:
             exit_with_user_error(error, args_list)
         finally:
             _LOGGING_SCOPE_LOCAL.in_main = previous
@@ -2159,7 +2184,7 @@ def _dna_only_isovar_results(variants):
 def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_override=None, loaded_variants=None):
     from .isovar_config_args import resolve_isovar_args
 
-    merged_config = load_vaxrank_config(args)
+    merged_config = _lazy("load_vaxrank_config")(args)
     epitope_config = epitope_config_override or epitope_config_from_args(args, merged_config=merged_config)
     from ..patient_background import direct_patient_background
     prepared_background = direct_patient_background(args, epitope_config)
@@ -2167,7 +2192,7 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
     # Resolve before syncing args: the built-in DNA fallback padding is not
     # an explicit RNA reconstruction request. Isovar owns context derivation.
     resolve_isovar_args(args, vaccine_config, merged_config)
-    protein_sequence_creator = protein_sequence_creator_from_args(args)
+    protein_sequence_creator = _lazy("protein_sequence_creator_from_args")(args)
     args.protein_sequence_length = protein_sequence_creator.protein_sequence_length
     logger.info(
         "RNA context target: %d aa for %d-aa peptides; selection=%s, "
@@ -2207,7 +2232,7 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
     # Resolve actual VCF references before models or RNA processing. An explicit
     # MHC repertoire permits HLA mice without changing the host reference.
     if loaded_variants is None:
-        loaded_variants = variant_collection_from_args(args)
+        loaded_variants = _lazy("variant_collection_from_args")(args)
     variants = filter_unannotatable_variants(loaded_variants)
     variants = maybe_combine_cis_snvs(variants, args)
     if getattr(args, 'host_reference', None):
@@ -2217,7 +2242,7 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
     if getattr(args, 'genome', None) is not None:
         references.append(args.genome)
     args._input_species_scope = scope_dict(validate_prediction_species(
-        args, references, mhc_alleles_from_args(args), 'Direct prediction'))
+        args, references, _lazy("mhc_alleles_from_args")(args), 'Direct prediction'))
     proxy_expression_lookup = None
     proxy_cancer = getattr(args, 'proxy_expression_cancer_type', None)
     if proxy_cancer:
@@ -2244,7 +2269,7 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
             proxy_expression_lookup.source_label,
         )
     from ..prediction_policy import configured_prediction_models
-    predictors_list = configured_prediction_models(args, mhc_alleles_from_args(args))
+    predictors_list = configured_prediction_models(args, _lazy("mhc_alleles_from_args")(args))
     args._candidate_prediction_mode = 'direct inference'
     if len(predictors_list) == 1:
         mhc_predictor = predictors_list[0]
@@ -2270,14 +2295,14 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
         with timed_step(
                 logger, "Collecting RNA reads and assembling protein sequences for %d variant(s)",
                 "Assembled RNA-supported sequences for %d variant(s) in %.0fs", len(variants)):
-            isovar_results = run_isovar(
+            isovar_results = _lazy("run_isovar")(
                 variants=variants,
-                germline_variants=germline_variants_from_args(args, variants),
-                alignment_file=alignment_file_from_args(args),
-                read_collector=read_collector_from_args(args),
+                germline_variants=_lazy("germline_variants_from_args")(args, variants),
+                alignment_file=_lazy("alignment_file_from_args")(args),
+                read_collector=_lazy("read_collector_from_args")(args),
                 protein_sequence_creator=protein_sequence_creator,
-                filter_thresholds=filter_threshold_dict_from_args(args),
-                **phasing_parameters_from_args(args, variants),
+                filter_thresholds=_lazy("filter_threshold_dict_from_args")(args),
+                **_lazy("phasing_parameters_from_args")(args, variants),
             )
     else:
         with timed_step(
@@ -2286,15 +2311,15 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
             isovar_results = _dna_only_isovar_results(variants)
 
     if args.output_isovar_csv:
-        df = isovar_results_to_dataframe(isovar_results)
-        ensure_parent_dir(args.output_isovar_csv)
+        df = _lazy("isovar_results_to_dataframe")(isovar_results)
+        _lazy("ensure_parent_dir")(args.output_isovar_csv)
         df.to_csv(args.output_isovar_csv, index=False)
 
     # Cross-species DNA somatic MHC & APM variant / LoF detection (#935)
     if getattr(args, 'detect_apm_variants', True):
         from ..apm_variants import detect_dna_mhc_and_apm_variants
-        apm_pol = load_vaxrank_config(args).get('apm_variants')
-        dna_vaf_map = extract_dna_vaf_by_variant(
+        apm_pol = _lazy("load_vaxrank_config")(args).get('apm_variants')
+        dna_vaf_map = _lazy("extract_dna_vaf_by_variant")(
             loaded_variants,
             tumor_sample_name=getattr(args, 'tumor_sample_name', None),
         )
@@ -2329,7 +2354,7 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
                                     score_expr='1.0', min_epitope_score=0, ms_evidence=None)
     policy_evaluations = []
     patient_background = prepared_background or direct_patient_background(args, epitope_config, isovar_results)
-    vaxrank_results = run_vaxrank(
+    vaxrank_results = _lazy("run_vaxrank")(
         isovar_results=isovar_results,
         mhc_predictor=mhc_predictor,
         vaccine_peptide_length=args.vaccine_peptide_length,
@@ -2353,7 +2378,7 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
         from ..input_coverage import record_direct_coverage
         record_direct_coverage(epitope_dataset, vaxrank_results, loaded_variants,
                                window_selection_performed=capture_native,
-                               filter_thresholds=filter_threshold_dict_from_args(args))
+                               filter_thresholds=_lazy("filter_threshold_dict_from_args")(args))
     if capture_native:
         from ..construct_replay import initialize_construct_replay, capture_direct_sources
         from ..epitope_dataset import EpitopeDataset
@@ -2365,7 +2390,7 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
             for provenance in epitope_dataset.provenance:
                 evidence.setdefault(provenance.input_id, {})['hitlist_local_queries'] = hitlist_lookup.queries
         capture_direct_sources(epitope_dataset, vaxrank_results,
-            dna_vaf_by_variant=extract_dna_vaf_by_variant(
+            dna_vaf_by_variant=_lazy("extract_dna_vaf_by_variant")(
                 loaded_variants, tumor_sample_name=getattr(args, 'tumor_sample_name', None)))
         epitope_dataset.policy_evaluations = policy_evaluations
         if run_policy is not None:
@@ -2393,7 +2418,7 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
     if getattr(args, 'input_json_file', None):
         with open(args.input_json_file) as f:
 
-            data = serializable.from_json(f.read())
+            data = _lazy("serializable").from_json(f.read())
             from ..allele_validation import validate_peptide_alleles
             for variant_index, (_, peptides) in enumerate(data["variants"], start=1):
                 for peptide_index, peptide in enumerate(peptides, start=1):

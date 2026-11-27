@@ -38,6 +38,7 @@ from .config.defaults import (
     DEFAULT_PADDING_AROUND_MUTATION,
     DEFAULT_PREFERRED_PEPTIDE_LENGTH,
     DEFAULT_VACCINE_PEPTIDE_SCORE_FRACTION_OF_BEST,
+    LENS_ANTIGEN_SOURCES,
 )
 from .ranking import RANKING_RULE_REGISTRY
 
@@ -55,9 +56,6 @@ SOURCE_AGNOSTIC_COMBINED_SCORE_EXPR = "target_epitope_score"
 # been clinically reviewed.  SPLICE likewise remains opt-in until the caller
 # supplies an exact translated junction rather than only a selected peptide.
 DEFAULT_INCLUDED_ANTIGEN_SOURCES = ("SNV", "INDEL", "FUSION")
-LENS_ANTIGEN_SOURCES = frozenset({
-    "SNV", "INDEL", "FUSION", "SPLICE", "CTA/SELF", "ERV",
-})
 
 
 class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):

@@ -5,14 +5,12 @@ from dataclasses import asdict, dataclass, field
 
 import msgspec
 
-from .vaccine_antigen import ANTIGEN_KINDS
-
-ANTIGEN_SELECTION_TYPES = ANTIGEN_KINDS | {'ncORF'}
-ANTIGEN_SELECTION_CHOICES = ANTIGEN_SELECTION_TYPES | {'variant'}
-
-
-def normalize_selection_type(value):
-    return next((kind for kind in ANTIGEN_SELECTION_CHOICES if kind.lower() == value.lower()), value)
+from .config.defaults import (
+    ANTIGEN_KINDS as ANTIGEN_KINDS,
+    ANTIGEN_SELECTION_CHOICES as ANTIGEN_SELECTION_CHOICES,
+    ANTIGEN_SELECTION_TYPES,
+    normalize_selection_type,
+)
 
 
 def expand_selection_types(values):
