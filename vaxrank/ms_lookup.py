@@ -30,6 +30,25 @@ _PERTURBATION_FACTOR_TYPES = frozenset({
     'genetic_perturbation', 'knockout', 'knockdown', 'crispr', 'sirna', 'shrna',
     'cytokine', 'cytokine_exposure', 'stimulus', 'treatment', 'apm_perturbation',
 })
+_INTERVENTION_CONDITION_COLUMNS = (
+    'condition_drugs',
+    'condition_cytokines',
+    'condition_knockout_genes',
+    'condition_knockdown_genes',
+    'condition_overexpression_genes',
+    'condition_genetic_variants',
+    'condition_transfection',
+    'condition_transduction',
+    'condition_infection',
+    'condition_stimulation',
+    'condition_antigen_exposure',
+)
+_EXPLICIT_PERTURBATION_COLUMNS = (
+    'perturbation_type',
+    'perturbation_agent',
+    'perturbation_target',
+    'drug_treatment',
+)
 
 
 def _is_truthy_flag(value):
@@ -149,7 +168,26 @@ def normalize_observation(row):
         p for p in (perturbation, gene_perturbation, cytokine_exposure)
         if p and p.lower() not in _UNPERTURBED_PERTURBATION_TEXTS
     ]
-    if not is_control_arm:
+    intervention_fields = {}
+    for col in _INTERVENTION_CONDITION_COLUMNS + _EXPLICIT_PERTURBATION_COLUMNS:
+        raw_val = text(row.get(col))
+        if not raw_val:
+            continue
+        tokens = [
+            tok.strip() for tok in raw_val.split(';')
+            if tok.strip() and tok.strip().lower() not in _UNPERTURBED_PERTURBATION_TEXTS
+        ]
+        if tokens:
+            intervention_fields[col] = '; '.join(tokens)
+    all_perturbation_texts = perturbation_texts + list(intervention_fields.values())
+    if intervention_fields:
+        if apm_perturbed or any(
+            any(kw in p.lower() for kw in _APM_PERTURBATION_KEYWORDS)
+            for p in all_perturbation_texts
+        ):
+            reasons.append('apm_perturbed')
+        reasons.append('perturbed_condition')
+    elif not is_control_arm:
         if apm_perturbed or any(
             any(kw in p.lower() for kw in _APM_PERTURBATION_KEYWORDS)
             for p in perturbation_texts
@@ -256,11 +294,16 @@ def normalize_observation(row):
         result['sample_attribution'] = sample_attribution
     if is_control_arm:
         result['is_control_arm'] = True
+    for col, val in intervention_fields.items():
+        result[col] = val
 
     # Preserve source context and genotype uncertainty metadata when provided.
     source_context = {
         key: text(row.get(key))
-        for key in ('arm_id', 'condition_id', 'cell_type', 'cell_line_name', 'arm_link_status')
+        for key in (
+            'arm_id', 'condition_id', 'elution_condition_id',
+            'cell_type', 'cell_line_name', 'arm_link_status',
+        )
         if text(row.get(key))
     }
     if source_context:
@@ -463,10 +506,11 @@ def _capture_evidence_store_package(directory, digest, peptides, species):
         if ctx:
             arm_id = text_or_empty(ctx.get('arm_id'))
             for key in (
-                'arm_id', 'condition_id', 'sample_attribution', 'arm_link_status',
+                'arm_id', 'condition_id', 'elution_condition_id',
+                'sample_attribution', 'arm_link_status',
                 'cell_type', 'cell_line_name', 'donor_status', 'specimen_status',
                 'acquisition_status',
-            ):
+            ) + _INTERVENTION_CONDITION_COLUMNS + _EXPLICIT_PERTURBATION_COLUMNS:
                 if ctx.get(key) is not None and not merged.get(key):
                     merged[key] = ctx[key]
             if ctx.get('experimental_origin_ids'):

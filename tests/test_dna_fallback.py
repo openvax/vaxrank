@@ -210,6 +210,27 @@ def test_dna_fallback_enabled_attempts_construction(genome):
     assert frag.gene_name == "BRAF"
 
 
+def _set_extra_candidates(effect, candidates):
+    """Replace extra candidates on ``effect`` across Varcode 13.0 and 13.1+."""
+    incoming = tuple(candidates)
+    if hasattr(effect, "add_candidates"):
+        effect.__dict__.pop("candidates", None)
+        effect.__dict__.pop("extra_candidates", None)
+        if incoming:
+            effect.add_candidates(incoming)
+    else:
+        effect._extra_candidates = incoming
+
+
+def _set_primary_effects(effect, effects):
+    """Replace primary effects on a StructuralVariantEffect across Varcode 13.0 and 13.1+."""
+    incoming = tuple(effects)
+    if "primary_effects" in effect.__dict__:
+        effect.primary_effects = incoming
+    else:
+        effect._primary_effects = incoming
+
+
 @pytest.fixture
 def fusion_candidates(genome, monkeypatch):
     """Real Varcode objects with synthetic proteins, not patient observations."""
@@ -234,9 +255,9 @@ def fusion_candidates(genome, monkeypatch):
 
         primary = outcome(primary_protein, partner)
         alternative = outcome(alternative_protein, alternative_partner)
-        primary._extra_candidates = (EffectCandidate(
+        _set_extra_candidates(primary, (EffectCandidate(
             alternative, source="selection-fixture",
-            evidence={"junction": "synthetic", "rna_support": None}),)
+            evidence={"junction": "synthetic", "rna_support": None}),))
         monkeypatch.setattr(StructuralVariant, "effects", lambda self: [primary])
         return variant, primary, alternative
 
@@ -360,7 +381,7 @@ def test_dna_fusion_selection_survives_json_and_subsequences(fusion_candidates):
         assert part.predicted_effect() is alternative
         assert part.global_start_pos() == restored.global_start_pos() + offset
     # A changed annotation must not attach a different effect to saved residues.
-    primary._extra_candidates = ()
+    _set_extra_candidates(primary, ())
     assert restored.predicted_effect() is None
 
 
@@ -371,8 +392,8 @@ def test_dna_fusion_ties_use_partner_identity_not_producer_order(fusion_candidat
     assert partner.id < other.id
     assert MutantProteinFragment.from_variant_dna(variant, 35).predicted_effect() is primary
     from varcode.effect_candidates import EffectCandidate
-    primary._primary_effects = (alternative,)
-    primary._extra_candidates = (EffectCandidate(primary),)
+    _set_primary_effects(primary, (alternative,))
+    _set_extra_candidates(primary, (EffectCandidate(primary),))
     assert MutantProteinFragment.from_variant_dna(variant, 35).predicted_effect() is primary
 
 
@@ -388,7 +409,7 @@ def test_dna_unresolved_high_priority_does_not_hide_usable_lower_priority(fusion
     build, reference, _changed, transcript, _partner = fusion_candidates
     variant, primary, _alternative = build(None, None)
     substitution = Substitution(variant, transcript, 40, reference[40], "W")
-    primary._extra_candidates = (EffectCandidate(substitution),)
+    _set_extra_candidates(primary, (EffectCandidate(substitution),))
     fragment = MutantProteinFragment.from_variant_dna(variant, 35)
     assert fragment is not None
     assert fragment.predicted_effect() is substitution
