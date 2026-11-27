@@ -94,3 +94,59 @@ def test_neoepitope_report_handles_missing_wt_ic50(tmp_path):
     # missing-value convention all three report paths now share via
     # neoepitope_core_row / _format_nm.
     assert pd.isna(df.iloc[0]["Predicted wildtype pMHC affinity"])
+
+
+def test_xlsx_reports_store_numeric_cells_with_explicit_number_formats(tmp_path):
+    """#459: Excel workbooks store scores and nM affinities as numeric cells with formats."""
+    import openpyxl
+    import pytest
+    from vaxrank.report import make_csv_report
+
+    e = _make_epitope("SIINFEKL", ic50=123.456, wt_ic50=5000.5)
+    vaccine_peptide = _dummy_vaccine_peptide([e])
+    variant = _dummy_variant()
+
+    neo_xlsx = tmp_path / "neoepitopes.xlsx"
+    make_minimal_neoepitope_report(
+        ranked_variants_with_vaccine_peptides=[(variant, [vaccine_peptide])],
+        num_epitopes_per_peptide=None,
+        excel_report_path=str(neo_xlsx),
+    )
+    neo_ws = openpyxl.load_workbook(neo_xlsx)["Neoepitopes"]
+    neo_headers = {cell.value: idx for idx, cell in enumerate(neo_ws[1], 1)}
+    mut_cell = neo_ws.cell(row=2, column=neo_headers["Predicted mutant pMHC affinity"])
+    wt_cell = neo_ws.cell(row=2, column=neo_headers["Predicted wildtype pMHC affinity"])
+    score_cell = neo_ws.cell(row=2, column=neo_headers["Score"])
+    assert mut_cell.data_type == "n"
+    assert mut_cell.value == pytest.approx(123.46, abs=0.01)
+    assert mut_cell.number_format == '0.00" nM"'
+    assert wt_cell.data_type == "n"
+    assert wt_cell.value == pytest.approx(5000.5, abs=0.01)
+    assert wt_cell.number_format == '0.00" nM"'
+    assert score_cell.data_type == "n"
+    assert score_cell.number_format == "0.0000"
+
+    from vaxrank.vaccine_peptide import VaccinePeptide
+    from .test_assembly_antigens import candidate
+
+    antigen, _ = candidate(0, sequence="SIINFEKL")
+    real_vp = VaccinePeptide(antigen=antigen, epitopes=[e])
+    ranked_xlsx = tmp_path / "ranked.xlsx"
+    make_csv_report(
+        ranked_variants_with_vaccine_peptides=[(antigen, [real_vp])],
+        excel_report_path=str(ranked_xlsx),
+    )
+    all_ws = openpyxl.load_workbook(ranked_xlsx)["All"]
+    all_headers = [cell.value for cell in all_ws[1]]
+    assert all_headers[0] == "source_rank"
+    assert None not in all_headers
+    col_map = {name: idx for idx, name in enumerate(all_headers, 1)}
+    comb_cell = all_ws.cell(row=2, column=col_map["combined_score"])
+    gravy_cell = all_ws.cell(row=2, column=col_map["max_7mer_gravy_score"])
+    cys_cell = all_ws.cell(row=2, column=col_map["cysteine_count"])
+    assert comb_cell.data_type == "n"
+    assert comb_cell.number_format == "0.0000"
+    assert gravy_cell.data_type == "n"
+    assert gravy_cell.number_format == "0.00"
+    assert cys_cell.data_type == "n"
+    assert cys_cell.number_format == "0"
