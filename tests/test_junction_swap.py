@@ -343,18 +343,26 @@ def test_optimize_includes_mitd_junction_when_provided():
 
 
 def test_optimize_default_linker_burden_tracked_in_sweep():
-    # When default_linker_name is supplied, the result must expose
-    # default_strong_burden and default_burden so the caller can
-    # decide whether to swap without a second sweep.
+    # #495: When default_linker_name is supplied, default_strong_burden and
+    # default_burden must carry the actual computed burdens for that linker so
+    # callers can decide whether to swap without a second sweep.
     antigens = ["KLQGH", "MNNVD"]
-    predictor = StubPredictor()
+    default_kmers = junction_kmers(antigens[0], "GGGGSGGGGS", antigens[1], k_lengths=(9,))
+    assert len(default_kmers) >= 2
+    predictor = StubPredictor(rank_table={
+        (default_kmers[0], "HLA-A*02:01"): 0.1,  # strong (< 0.5%)
+        (default_kmers[1], "HLA-A*02:01"): 1.0,  # mild (0.5% - 2.0%)
+    })
     result = optimize_linkers(
         antigens, alleles=["HLA-A*02:01"], predictor=predictor,
         candidate_names=("(G4S)2", "AAA"),
         k_lengths=(9,),
         default_linker_name="(G4S)2")
-    assert hasattr(result, 'default_strong_burden')
-    assert hasattr(result, 'default_burden')
+    assert result.default_strong_burden == 1
+    assert result.default_burden == 2
+    assert result.strong_burden == 0
+    assert result.burden == 0
+    assert [c.name for c in result.chosen_linker_per_junction] == ["AAA"]
 
 
 # ---- review-fix coverage -----------------------------------------------------

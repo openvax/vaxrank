@@ -846,17 +846,20 @@ def test_csv_lean_mode_omits_full_rows(tmp_path):
 
 
 def test_dropped_dead_linker_name_param():
-    """build_protein_with_segments no longer takes a linker_name arg.
-    Pin the signature so a future regression that re-adds the dead
-    parameter is caught immediately."""
-    import inspect
-    sig = inspect.signature(build_protein_with_segments)
-    assert 'linker_name' not in sig.parameters, (
-        "linker_name was a dead parameter and should remain removed; "
-        "got params %s" % list(sig.parameters))
-    # signal_peptide_name and mitd_name are *used* and must stay.
-    assert 'signal_peptide_name' in sig.parameters
-    assert 'mitd_name' in sig.parameters
+    """#495: build_protein_with_segments rejects the removed linker_name kwarg."""
+    from vaxrank.vaccine_library import get_linker
+
+    with pytest.raises(TypeError, match="linker_name"):
+        build_protein_with_segments(
+            antigen_aas=["KLQGH"],
+            antigen_names=["A"],
+            signal_peptide_aa="",
+            signal_peptide_name=None,
+            linker=get_linker("G4S"),
+            mitd_aa="",
+            mitd_name=None,
+            linker_name="G4S",
+        )
 
 
 def test_start_codon_segment_has_named_kind():
