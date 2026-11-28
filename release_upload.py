@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import http.client
 import json
 import os
 from secrets import token_hex
@@ -12,7 +13,7 @@ import sys
 import time
 from pathlib import Path
 from typing import Callable, Iterable, Mapping
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import urlopen
 
@@ -21,6 +22,9 @@ PYPI_JSON_BASE_URL = "https://pypi.org/pypi"
 DEFAULT_UPLOAD_TIMEOUT_SECONDS = 60.0
 DEFAULT_VERIFY_TIMEOUT_SECONDS = 30.0
 DEFAULT_VERIFY_POLL_SECONDS = 1.0
+DEFAULT_METADATA_MAX_ATTEMPTS = 3
+DEFAULT_METADATA_RETRY_DELAY_SECONDS = 1.0
+_RETRYABLE_HTTP_STATUS_CODES = frozenset({408, 429, 500, 502, 503, 504})
 
 
 class ReleaseUploadError(RuntimeError):
@@ -42,25 +46,60 @@ def pypi_release_artifacts(
     *,
     json_base_url: str = PYPI_JSON_BASE_URL,
     request_timeout_seconds: float = 10.0,
+    max_attempts: int = DEFAULT_METADATA_MAX_ATTEMPTS,
+    retry_delay_seconds: float = DEFAULT_METADATA_RETRY_DELAY_SECONDS,
 ) -> dict[str, str]:
-    """Return one release's filename-to-SHA-256 map from PyPI metadata."""
-    url = "%s/%s/json?cache_bust=%s" % (
+    """Return one release's filename-to-SHA-256 map from PyPI metadata.
+
+    Transient transport errors and truncated response bodies
+    (``http.client.IncompleteRead``, truncated JSON, 5xx) are retried up to
+    ``max_attempts`` times with a fresh cache-bust token. Exhausted retries
+    fail closed by raising :class:`ReleaseUploadError` — never returning an
+    empty artifact map (openvax/vaxrank#727).
+    """
+    if max_attempts < 1:
+        raise ValueError("max_attempts must be >= 1")
+    base_url = "%s/%s/json" % (
         json_base_url.rstrip("/"),
         quote(project, safe=""),
-        token_hex(8),
     )
-    try:
-        with urlopen(url, timeout=request_timeout_seconds) as response:
-            payload = json.load(response)
-    except HTTPError as error:
-        if error.code == 404:
-            return {}
-        raise
-    releases = payload.get("releases", {})
-    return {
-        item["filename"]: item.get("digests", {}).get("sha256", "")
-        for item in releases.get(version, ())
-    }
+    last_error: Exception | None = None
+    for attempt in range(1, max_attempts + 1):
+        url = "%s?cache_bust=%s" % (base_url, token_hex(8))
+        try:
+            with urlopen(url, timeout=request_timeout_seconds) as response:
+                payload = json.load(response)
+            releases = payload.get("releases", {})
+            return {
+                item["filename"]: item.get("digests", {}).get("sha256", "")
+                for item in releases.get(version, ())
+            }
+        except HTTPError as error:
+            if error.code == 404:
+                return {}
+            last_error = error
+            if error.code not in _RETRYABLE_HTTP_STATUS_CODES or attempt >= max_attempts:
+                raise
+        except (
+            http.client.IncompleteRead,
+            http.client.HTTPException,
+            URLError,
+            TimeoutError,
+            OSError,
+            json.JSONDecodeError,
+        ) as error:
+            last_error = error
+            if attempt >= max_attempts:
+                raise ReleaseUploadError(
+                    f"Failed to read PyPI metadata for {project} {version} "
+                    f"after {max_attempts} attempt(s): {error}"
+                ) from error
+        if retry_delay_seconds > 0:
+            time.sleep(retry_delay_seconds)
+    raise ReleaseUploadError(
+        f"Failed to read PyPI metadata for {project} {version} "
+        f"after {max_attempts} attempt(s): {last_error}"
+    )
 
 
 def file_sha256(path: str | Path) -> str:
