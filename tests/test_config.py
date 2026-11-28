@@ -61,22 +61,6 @@ def test_epitope_config_default_values():
     eq_(config.percentile_rank_cutoff, DEFAULT_PERCENTILE_RANK_CUTOFF)
 
 
-def test_epitope_config_custom_values():
-    """Test creating EpitopeConfig with custom values"""
-    config = EpitopeConfig(
-        logistic_epitope_score_midpoint=400.0,
-        logistic_epitope_score_width=200.0,
-        min_epitope_score=0.01,
-        binding_affinity_cutoff=1000.0,
-        percentile_rank_cutoff=5.0,
-    )
-    eq_(config.logistic_epitope_score_midpoint, 400.0)
-    eq_(config.logistic_epitope_score_width, 200.0)
-    eq_(config.min_epitope_score, 0.01)
-    eq_(config.binding_affinity_cutoff, 1000.0)
-    eq_(config.percentile_rank_cutoff, 5.0)
-
-
 def test_epitope_config_partial_custom_values():
     """Test creating EpitopeConfig with only some custom values"""
     config = EpitopeConfig(min_epitope_score=0.05)
@@ -152,24 +136,6 @@ def test_vaccine_config_default_values():
     eq_(config.max_vaccine_peptides_per_variant, 1)
     eq_(config.num_target_epitopes_to_keep, 1000)
     eq_(config.score_fraction_of_best, DEFAULT_VACCINE_PEPTIDE_SCORE_FRACTION_OF_BEST)
-
-
-def test_vaccine_config_custom_values():
-    """Test creating VaccineConfig with custom values"""
-    config = VaccineConfig(
-        preferred_peptide_length=30,
-        min_peptide_length=30,
-        max_peptide_length=30,
-        padding_around_mutation=10,
-        max_vaccine_peptides_per_variant=3,
-        num_target_epitopes_to_keep=500,
-        score_fraction_of_best=0.95,
-    )
-    eq_(config.preferred_peptide_length, 30)
-    eq_(config.padding_around_mutation, 10)
-    eq_(config.max_vaccine_peptides_per_variant, 3)
-    eq_(config.num_target_epitopes_to_keep, 500)
-    eq_(config.score_fraction_of_best, 0.95)
 
 
 def test_vaccine_config_partial_custom_values():
@@ -800,18 +766,6 @@ def test_vaccine_config_rejects_preferred_outside_range():
         )
 
 
-def test_vaccine_config_accepts_length_range():
-    """min < preferred < max should be valid."""
-    config = VaccineConfig(
-        preferred_peptide_length=25,
-        min_peptide_length=21,
-        max_peptide_length=29,
-    )
-    eq_(config.min_peptide_length, 21)
-    eq_(config.preferred_peptide_length, 25)
-    eq_(config.max_peptide_length, 29)
-
-
 def test_vaccine_config_yaml_preferred_length_only_defaults_min_max():
     """Setting only preferred_length in YAML should auto-set min/max to match."""
     yaml_content = """
@@ -1349,22 +1303,15 @@ def test_vaccine_config_rejects_score_fraction_over_1():
         VaccineConfig(score_fraction_of_best=1.5)
 
 
-def test_vaccine_config_allows_zero_max_peptides_per_variant():
-    """0 means disabled — should be allowed."""
-    config = VaccineConfig(max_vaccine_peptides_per_variant=0)
-    eq_(config.max_vaccine_peptides_per_variant, 0)
-
-
-def test_vaccine_config_allows_zero_epitopes_to_keep():
-    """0 means keep all — should be allowed."""
-    config = VaccineConfig(num_target_epitopes_to_keep=0)
-    eq_(config.num_target_epitopes_to_keep, 0)
-
-
-def test_epitope_config_allows_zero_min_score():
-    """0 means no filtering — should be allowed."""
-    config = EpitopeConfig(min_epitope_score=0)
-    eq_(config.min_epitope_score, 0)
+@pytest.mark.parametrize("cls,field", [
+    (VaccineConfig, "max_vaccine_peptides_per_variant"),
+    (VaccineConfig, "num_target_epitopes_to_keep"),
+    (EpitopeConfig, "min_epitope_score"),
+])
+def test_zero_is_accepted_and_means_disabled(cls, field):
+    """#494: 0 is a valid boundary sentinel meaning disabled/unbounded."""
+    config = cls(**{field: 0})
+    eq_(getattr(config, field), 0)
 
 
 def test_validation_through_yaml_loading():

@@ -65,8 +65,11 @@ def test_ascii_report():
         ascii_args = cli_args_for_b16_seqdata + ["--output-ascii-report", f.name]
         run_shell_script(ascii_args)
         contents = f.read()
-        lines = contents.split("\n")
-        assert len(lines) > 0
+        assert contents.strip(), "ASCII report is empty"
+        assert "Vaccine Design Report" in contents
+        assert "H2-Kb" in contents and "H2-Db" in contents
+        assert "Package versions" in contents
+        assert "No variants with sufficient ranked antigens" not in contents
 
 
 @requires_netmhcpan
@@ -87,21 +90,28 @@ def test_ascii_report_real_netmhc_predictor():
             "--output-ascii-report", f.name]
         run_shell_script(ascii_args)
         contents = f.read()
-        lines = contents.split("\n")
-        # Verify that the report was generated with some content
-        assert len(lines) > 0, "ASCII report should have at least one line"
-        # Verify the report contains expected header/structure elements
-        # (these should be present even if no variants pass the filter)
-        assert len(contents) > 0, "ASCII report should not be empty"
+        assert contents.strip(), "ASCII report should not be empty"
+        assert "Vaccine Design Report" in contents
 
 
 def test_json_report():
+    import json
+
     with NamedTemporaryFile(mode="r") as f:
         json_args = cli_args_for_b16_seqdata + ["--output-json-file", f.name]
         run_shell_script(json_args)
-        contents = f.read()
-        lines = contents.split("\n")
-        assert len(lines) > 0
+        parsed = json.loads(f.read())
+        assert set(parsed) >= {"variants", "patient_info", "args", "dna_vaf_by_variant"}
+        assert len(parsed["variants"]) >= 1
+
+
+def test_json_report_serializes_nan_as_null():
+    """#494 / #289: JSON report writer serializes NaN/Inf as null instead of invalid JSON."""
+    import json
+    from vaxrank.cli.entry_point import serialize_json_nan_tolerant
+
+    rendered = serialize_json_nan_tolerant({"score": float("nan"), "ok": 1.5})
+    assert json.loads(rendered) == {"score": None, "ok": 1.5}
 
 
 def test_csv_report():

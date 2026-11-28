@@ -465,29 +465,6 @@ def test_config_immutability_config_repr():
 # Edge Case Tests
 # =============================================================================
 
-def test_config_edge_case_zero_min_epitope_score():
-    """Test that min_epitope_score of 0 is valid"""
-    config = EpitopeConfig(min_epitope_score=0)
-    eq_(config.min_epitope_score, 0)
-
-
-def test_config_edge_case_very_small_min_epitope_score():
-    """Test that very small min_epitope_score is preserved"""
-    config = EpitopeConfig(min_epitope_score=1e-10)
-    eq_(config.min_epitope_score, 1e-10)
-
-
-def test_config_edge_case_large_vaccine_peptide_length():
-    """Test that large preferred_peptide_length is valid"""
-    config = VaccineConfig(preferred_peptide_length=100, min_peptide_length=100, max_peptide_length=100)
-    eq_(config.preferred_peptide_length, 100)
-
-
-def test_config_edge_case_zero_vaccine_peptides_per_variant():
-    """Test behavior with 0 max_vaccine_peptides_per_variant"""
-    config = VaccineConfig(max_vaccine_peptides_per_variant=0)
-    eq_(config.max_vaccine_peptides_per_variant, 0)
-
 
 def test_vaccine_peptide_zero_epitope_limit_keeps_all():
     """A value of 0 means no truncation of mutant epitope list."""

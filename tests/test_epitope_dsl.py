@@ -592,19 +592,33 @@ def test_external_readers_leave_kind_support_unset():
     assert epitope.per_allele_scores
 
 
-def test_canonical_method_preference_is_topiary_s_not_a_local_copy():
-    """vaxrank must not carry its own idea of which model is canonical.
+def test_canonical_method_preference_matches_topiary():
+    """#495: vaxrank's default method resolution must agree with topiary's
+    canonical ordering (e.g. netmhcpan_ba beats netmhcstabpan)."""
+    import pandas as pd
+    from topiary.ranking import (
+        CANONICAL_METHOD_PREFERENCE,
+        resolve_default_methods as topiary_resolve,
+    )
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import resolve_default_methods
 
-    It used to, and the two had already drifted: vaxrank ordered
-    ``netmhcstabpan`` ahead of ``netmhcpan_el`` / ``netmhcpan_ba`` where
-    topiary orders it last. The same frame could therefore resolve to
-    different models depending on which table was consulted — exactly the
-    disagreement topiary's own docstring warns consumers about.
-    """
-    import vaxrank.epitope_dsl as dsl
+    def _row(method):
+        return {
+            "prediction_id": "p", "source_sequence_name": "ctx",
+            "peptide": "SIINFEKL", "peptide_offset": 0, "peptide_length": 8,
+            "allele": "HLA-A*02:01", "n_flank": "", "c_flank": "",
+            "prediction_method_name": method, "predictor_version": "1",
+            "kind": "pMHC_affinity", "value": 50.0, "affinity": 50.0,
+            "percentile_rank": 0.5, "score": 0.5,
+        }
 
-    assert not hasattr(dsl, "_CANONICAL_METHOD_PREFERENCE")
-    assert not hasattr(dsl, "_auto_pick_canonical_method")
+    # Include netmhcstabpan alongside netmhcpan_ba — the historical drift case.
+    df = pd.DataFrame([_row("netmhcstabpan"), _row("netmhcpan_ba")])
+    expected = topiary_resolve(df)
+    assert resolve_default_methods(EpitopeConfig(), df) == expected
+    assert expected["pMHC_affinity"] == "netmhcpan_ba"
+    assert CANONICAL_METHOD_PREFERENCE.index("netmhcpan_ba") < CANONICAL_METHOD_PREFERENCE.index("netmhcstabpan")
 
 
 def test_default_methods_resolution_delegates_but_keeps_the_user_s_choice():
