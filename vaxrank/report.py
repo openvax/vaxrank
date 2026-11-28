@@ -1891,6 +1891,29 @@ def make_minimal_neoepitope_report(
         write_neoepitope_table(pd.DataFrame(rows, columns=columns), excel_report_path)
 
 
+_XLSX_NUMBER_FORMATS = {
+    'source_rank': '0',
+    'window_rank': '0',
+    'pos': '0',
+    'mutation_start': '0',
+    'mutation_end': '0',
+    'source_protein_start': '0',
+    'source_protein_end': '0',
+    'combined_score': '0.0000',
+    'expression_score': '0.0000',
+    'target_epitope_score': '0.0000',
+    'cterm_7mer_gravy_score': '0.00',
+    'max_7mer_gravy_score': '0.00',
+    'difficult_n_terminal_residue': '0',
+    'c_terminal_cysteine': '0',
+    'c_terminal_proline': '0',
+    'cysteine_count': '0',
+    'n_terminal_asparagine': '0',
+    'asparagine_proline_bond_count': '0',
+    'aspartate_proline_bond_count': '0',
+}
+
+
 def make_csv_report(
         ranked_variants_with_vaccine_peptides,
         excel_report_path=None,
@@ -1970,7 +1993,14 @@ def make_csv_report(
                 worksheet = writer.sheets[sheet]
                 worksheet.freeze_panes = 'A2'
                 worksheet.auto_filter.ref = worksheet.dimensions
-                for cell in worksheet[1]:
+                for col_idx, cell in enumerate(worksheet[1], 1):
                     worksheet.column_dimensions[cell.column_letter].width = (
                         40 if cell.value in ('amino_acids', 'source_identifier') else 20)
+                    number_format = _XLSX_NUMBER_FORMATS.get(cell.value)
+                    if number_format:
+                        for row_idx in range(2, worksheet.max_row + 1):
+                            data_cell = worksheet.cell(row=row_idx, column=col_idx)
+                            if (isinstance(data_cell.value, (int, float))
+                                    and not isinstance(data_cell.value, bool)):
+                                data_cell.number_format = number_format
         logger.info('Wrote ranked candidate workbook to %s (%d windows)', excel_report_path, len(combined))

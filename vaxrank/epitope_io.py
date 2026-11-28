@@ -1481,18 +1481,60 @@ def ensure_parent_dir(path):
         logger.info("Created output directory %s", parent)
 
 
+def _parse_nm_cell(value):
+    """Parse a formatted ``'123.45 nM'`` affinity string or numeric value into a float."""
+    if value is None or value == '':
+        return None
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return None if pd.isna(value) else float(value)
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.endswith(' nM'):
+        text = text[:-3].strip()
+    return cells.number(text)
+
+
+def _neoepitope_column_number_format(column_name):
+    """Return an explicit openpyxl number format for numeric neoepitope columns (#459)."""
+    name = str(column_name or '')
+    if 'pMHC affinity' in name or name.endswith('value (nM)'):
+        return '0.00" nM"'
+    if name in ('Score', 'vaxrank_score') or name.endswith(' score'):
+        return '0.0000'
+    if name == 'RNA VAF':
+        return '0.000'
+    if name == 'Variant allele RNA read count' or name.endswith(' rank'):
+        return '0'
+    if '%ile' in name or 'percentile' in name.lower():
+        return '0.00'
+    return None
+
+
 def write_neoepitope_table(frame, path):
     """Write a prediction table, including its empty schema, by file extension."""
     ensure_parent_dir(path)
     if str(path).lower().endswith('.csv'):
         frame.to_csv(path, index=False)
     else:
+        excel_frame = frame.copy()
+        for col in excel_frame.columns:
+            if 'pMHC affinity' in str(col):
+                excel_frame[col] = excel_frame[col].map(_parse_nm_cell)
         with pd.ExcelWriter(path, engine='openpyxl') as writer:
-            frame.to_excel(writer, sheet_name='Neoepitopes', index=False)
+            excel_frame.to_excel(writer, sheet_name='Neoepitopes', index=False)
             worksheet = writer.sheets['Neoepitopes']
             worksheet.freeze_panes = 'A2'
-            for cell in worksheet[1]:
+            worksheet.auto_filter.ref = worksheet.dimensions
+            for col_idx, cell in enumerate(worksheet[1], 1):
                 worksheet.column_dimensions[cell.column_letter].width = 24
+                number_format = _neoepitope_column_number_format(cell.value)
+                if number_format:
+                    for row_idx in range(2, worksheet.max_row + 1):
+                        data_cell = worksheet.cell(row=row_idx, column=col_idx)
+                        if (isinstance(data_cell.value, (int, float))
+                                and not isinstance(data_cell.value, bool)):
+                            data_cell.number_format = number_format
     logger.info('Wrote neoepitope table to %s (%d rows)', path, len(frame))
 
 

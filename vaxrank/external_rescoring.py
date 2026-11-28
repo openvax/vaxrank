@@ -1237,7 +1237,7 @@ def load_unified_external(args, epitope_config, options, genome):
             [from_native_json(source['variant'], (Variant, StructuralVariant)) for source in dataset.direct_sources],
             ranked)
         Path(passing_path).parent.mkdir(parents=True, exist_ok=True)
-        pd.DataFrame(rows).to_csv(passing_path, index=False)
+        pd.DataFrame(rows).to_csv(passing_path, index=False, float_format='%.6g')
     summary = ExternalInputSummary(
         num_somatic_variants=len(observations),
         num_coding_effect_variants=sum(any(e.resolved_protein_context for e in es)
